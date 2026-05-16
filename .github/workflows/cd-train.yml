@@ -1,0 +1,30 @@
+name: CD - Model Training (Self-Hosted GPU)
+
+on:
+  workflow_dispatch:        # 手动触发
+  push:
+    paths:
+      - "backend/ai_models/**"   # 模型代码变更时自动触发
+      - "backend/config.py"
+
+jobs:
+  train:
+    runs-on: self-hosted    # 需要在本机装 Runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Train Transformer + PPO
+        run: |
+          pip install -r backend/requirements.txt
+          python -c "
+          import sys; sys.path.insert(0,'.')
+          from backend.ai_models.trainer import ModelTrainer
+          t = ModelTrainer()
+          t.train_all()
+          "
+
+      - name: Save trained models
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-models
+          path: backend/ai_models/models/

@@ -1,0 +1,38 @@
+name: CI - Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Lint with ruff
+        run: pip install ruff && ruff check backend/
+
+      - name: Quick import test
+        run: python -c "import sys; sys.path.insert(0,'.'); from backend.config import *"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
