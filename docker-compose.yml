@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      target: production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./backend/ai_models/models:/app/backend/ai_models/models
+      - ./logs:/app/logs
+      - cache:/app/cache
+    environment:
+      - TORCH_HOME=/app/cache/torch
+      - HF_HOME=/app/cache/huggingface
+    restart: unless-stopped
+
+  trainer:
+    build:
+      context: .
+      target: trainer
+    profiles:
+      - train
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./backend/ai_models/models:/app/backend/ai_models/models
+      - cache:/app/cache
+    environment:
+      - TORCH_HOME=/app/cache/torch
+      - HF_HOME=/app/cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  cache:

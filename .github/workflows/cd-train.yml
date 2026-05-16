@@ -1,30 +1,87 @@
-name: CD - Model Training (Self-Hosted GPU)
+name: CD - Auto Train & Deploy (GPU Self-Hosted)
 
 on:
-  workflow_dispatch:        # 手动触发
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Tickers to train on (comma-separated)"
+        required: false
+        default: "AAPL,MSFT,GOOGL,AMZN,NVDA"
+      epochs:
+        description: "Transformer epochs"
+        required: false
+        default: "20"
   push:
     paths:
-      - "backend/ai_models/**"   # 模型代码变更时自动触发
+      - "backend/ai_models/**"
       - "backend/config.py"
+      - "backend/data_engine/**"
+      - "requirements.txt"
+
+env:
+  TORCH_HOME: G:\workbuddyspace\quant-ai-trader\cache\torch
+  HF_HOME: G:\workbuddyspace\quant-ai-trader\cache\huggingface
 
 jobs:
   train:
-    runs-on: self-hosted    # 需要在本机装 Runner
+    runs-on: [self-hosted, gpu, windows]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: G:\workbuddyspace\quant-ai-trader
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install torch --index-url https://download.pytorch.org/whl/cu126
+
+      - name: Verify GPU
+        run: python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"none\"}')"
 
       - name: Train Transformer + PPO
         run: |
-          pip install -r backend/requirements.txt
           python -c "
           import sys; sys.path.insert(0,'.')
           from backend.ai_models.trainer import ModelTrainer
+          from backend.config import model_config
+          import os
+          tickers = os.environ.get('TICKERS', 'AAPL,MSFT,GOOGL,AMZN,NVDA').split(',')
           t = ModelTrainer()
-          t.train_all()
+          t.train_all(tickers=tickers)
           "
+        env:
+          TICKERS: ${{ github.event.inputs.tickers || 'AAPL,MSFT,GOOGL,AMZN,NVDA' }}
 
-      - name: Save trained models
-        uses: actions/upload-artifact@v4
-        with:
-          name: trained-models
-          path: backend/ai_models/models/
+      - name: Verify models saved
+        run: dir backend\ai_models\models\
+
+      - name: Commit trained models
+        run: |
+          git config user.name "quant-trader-bot"
+          git config user.email "bot@quant-trader.local"
+          git add backend/ai_models/models/ -f
+          git diff --cached --quiet || git commit -m "chore: auto-update trained models [skip ci]"
+          git push
+
+  deploy-backend:
+    needs: train
+    runs-on: [self-hosted, gpu, windows]
+    steps:
+      - name: Stop current server
+        run: |
+          taskkill /F /FI "WINDOWTITLE eq QuantTrader-Backend" 2>nul || echo "Not running"
+
+      - name: Start updated server
+        run: |
+          start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --app-dir G:\workbuddyspace\quant-ai-trader
+
+      - name: Verify deployment
+        run: |
+          timeout /t 15 /nobreak
+          curl -s http://localhost:8000/api/models/status
