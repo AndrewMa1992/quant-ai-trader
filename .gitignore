@@ -52,6 +52,9 @@ backend/data/market_data/
 backups/
 *.bak
 *.tmp
+
+# === GitHub Runner Work Dir ===
+.github/runner-work/
 __azurite_db_*__.json
 
 # === OS ===
