@@ -6,13 +6,13 @@ import asyncio
 import json
 from datetime import datetime
 from contextlib import asynccontextmanager
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from backend.config import api_config, data_config, trading_config
+from backend.config import api_config, data_config
 from backend.data_engine import MarketDataEngine, DataPipeline
 from backend.data_engine.realtime import RealtimeEngine
 from backend.data_engine.historical_store import HistoricalStore
@@ -24,7 +24,7 @@ from backend.trading_engine import (
     PortfolioManager, RiskManager, PaperExecutor,
     TradingStrategy, Backtester,
 )
-from backend.data_engine.tiger_client import TigerClient, tiger_client
+from backend.data_engine.tiger_client import tiger_client
 from backend.api import (
     routes_data, routes_trade, routes_analysis, routes_models
 )

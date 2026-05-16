@@ -6,11 +6,9 @@
 import requests
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict, List
 from datetime import datetime, timedelta
-import asyncio
-import aiohttp
-from backend.config import global_config, DEVICE
+from backend.config import global_config
 
 
 class GlobalMarketDataSource:

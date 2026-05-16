@@ -1,10 +1,10 @@
 """手动恢复之前的 AAPL 持仓到数据库"""
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import sqlite3
 from backend.config import DB_PATH
-from datetime import datetime
 
 conn = sqlite3.connect(str(DB_PATH))
 
@@ -50,7 +50,7 @@ p = conn.execute("SELECT * FROM portfolio_positions").fetchall()
 a = conn.execute("SELECT * FROM portfolio_account").fetchall()
 conn.close()
 
-print(f"✅ 持仓已写入数据库:")
+print("✅ 持仓已写入数据库:")
 print(f"   Positions: {p}")
 print(f"   Account: {a}")
 print(f"   AAPL: {aapl_shares} 股 @ ${aapl_avg_cost:.2f}, 剩余现金: ${remaining_cash:.2f}")

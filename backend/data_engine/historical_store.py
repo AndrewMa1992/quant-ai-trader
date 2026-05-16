@@ -7,7 +7,6 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Optional
 import pandas as pd
-import numpy as np
 from loguru import logger
 
 from backend.config import DB_PATH, DATA_DIR

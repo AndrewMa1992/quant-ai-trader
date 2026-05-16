@@ -163,7 +163,6 @@ class TradingStrategy:
 
         # 使用 rsi 指标（假设 rsi 在特征中的某列）
         # 简化版：取最近几天的收盘价判断趋势
-        close_col = 0  # 假设第0列是close相关
         recent_close = features[-5:, 0] if features.shape[1] > 0 else []
 
         if len(recent_close) >= 2:

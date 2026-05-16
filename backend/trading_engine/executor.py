@@ -3,11 +3,9 @@
 当前为纯模拟模式，预留 Tiger Brokers 实盘接口
 """
 from typing import Dict, List, Optional, Callable
-from datetime import datetime
 from loguru import logger
 
-from backend.config import trading_config
-from backend.trading_engine.risk_manager import RiskManager, RiskReport
+from backend.trading_engine.risk_manager import RiskManager
 from backend.trading_engine.portfolio import PortfolioManager
 
 

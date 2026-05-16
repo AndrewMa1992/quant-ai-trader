@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from datetime import datetime
 from loguru import logger
-from backend.config import model_config, MODELS_DIR
+from backend.config import model_config
 from backend.data_engine import MarketDataEngine, DataPipeline
 from backend.ai_models import TransformerPredictor, TradingRLAgent
 
@@ -33,7 +33,9 @@ class ModelTrainer:
         processed_dict = {}
         features_list = []
         for ticker, df in data_dict.items():
-            if df.empty: continue
+            if df.empty:
+
+                continue
             processed = pipeline.process(df)
             processed_dict[ticker] = processed
             fcols = [c for c in pipeline.FEATURE_COLUMNS if c in processed.columns]
@@ -43,7 +45,8 @@ class ModelTrainer:
             logger.info(f"  {ticker}: {features.shape[0]} 行, {features.shape[1]} 特征")
 
         if not features_list:
-            logger.error("特征工程失败"); return
+            logger.error("特征工程失败")
+            return
 
         min_length = min(features_list)
 
@@ -78,14 +81,17 @@ class ModelTrainer:
         all_X, all_y = [], []
         for ticker in tickers:
             key = f"{ticker}_features"
-            if key not in processed_dict: continue
+            if key not in processed_dict:
+
+                continue
             data = processed_dict[key][:min_length]
             close = processed_dict[ticker]["close"].values[:min_length]
             for i in range(lookback, len(data) - pred_len):
                 all_X.append(data[i - lookback:i])
                 all_y.append(close[i:i + pred_len])
         if len(all_X) < 100:
-            logger.warning(f"样本不足 ({len(all_X)})"); return
+            logger.warning(f"样本不足 ({len(all_X)})")
+            return
         X, y = np.array(all_X), np.array(all_y)
         from sklearn.model_selection import train_test_split
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
@@ -97,14 +103,18 @@ class ModelTrainer:
         close_dict = {}
         for ticker in tickers:
             key = f"{ticker}_features"
-            if key not in processed_dict: continue
+            if key not in processed_dict:
+
+                continue
             data = processed_dict[key][:min_length]
             data = np.nan_to_num(data, nan=0.0, posinf=1.0, neginf=-1.0)
             df_dict[ticker] = data
             # 保存收盘价
             close_dict[ticker] = processed_dict[ticker]["close"].values[:min_length]
-        if not df_dict: return
-        env = self.rl_agent.create_env(df_dict, close_dict=close_dict,
+        if not df_dict:
+
+            return
+        self.rl_agent.create_env(df_dict, close_dict=close_dict,
                                        feature_dim=min(40, list(df_dict.values())[0].shape[1]))
         self.rl_agent.train(total_timesteps=30000)
         self.rl_agent.save()

@@ -1,7 +1,6 @@
 """
 模型管理接口路由
 """
-from typing import List, Optional
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/models", tags=["models"])

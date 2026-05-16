@@ -3,14 +3,13 @@
 作为真实市场数据的模拟层 + WebSocket 推流源
 """
 import asyncio
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Callable, Dict, List, Optional
 import pandas as pd
 import numpy as np
 from loguru import logger
 
-from backend.config import data_config, model_config
+from backend.config import data_config
 from backend.data_engine.market_data import MarketDataEngine
 from backend.data_engine.data_pipeline import DataPipeline
 

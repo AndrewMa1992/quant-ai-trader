@@ -2,11 +2,10 @@
 老虎证券 OpenAPI 客户端
 模拟/实盘双模式集成
 """
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
-import numpy as np
 from loguru import logger
 
 from backend.config import trading_config

@@ -1,7 +1,7 @@
 """
 FinBERT 市场情绪分析
 """
-from typing import Dict, List
+from typing import Dict
 import numpy as np
 from loguru import logger
 from backend.config import model_config
@@ -56,9 +56,12 @@ class SentimentAnalyzer:
         neg = sum(1 for w in negative_words if w in text_lower)
         total = pos + neg + 1
         score = (pos - neg) / total
-        if score > 0.2: label = "positive"
-        elif score < -0.2: label = "negative"
-        else: label = "neutral"
+        if score > 0.2:
+            label = "positive"
+        elif score < -0.2:
+            label = "negative"
+        else:
+            label = "neutral"
         return {"label": label, "positive": max(0, score), "negative": max(0, -score),
                 "neutral": 1 - abs(score), "score": score}
 

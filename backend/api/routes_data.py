@@ -1,7 +1,7 @@
 """
 数据接口路由
 """
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 

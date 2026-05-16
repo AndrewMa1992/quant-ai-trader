@@ -1,5 +1,6 @@
 """验证双市场功能"""
-import sys, json, urllib.request
+import json
+import urllib.request
 
 BASE = "http://localhost:8000"
 

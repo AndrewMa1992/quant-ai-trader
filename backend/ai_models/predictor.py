@@ -3,7 +3,6 @@ Transformer / PatchTST 价格预测器
 基于 PyTorch 的时间序列 Transformer
 """
 import math
-from typing import Dict, List, Optional
 import numpy as np
 import torch
 import torch.nn as nn

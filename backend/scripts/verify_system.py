@@ -1,5 +1,8 @@
 """完整系统验证脚本"""
-import sys, os, json, urllib.request
+import sys
+import os
+import json
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 PROJ_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
@@ -65,7 +68,7 @@ if portfolio:
     print(f"   持仓数: {m['num_positions']}")
     print(f"   总交易: {m['total_trades']}")
     if m['num_positions'] > 0:
-        print(f"   ✅ 持仓已恢复")
+        print("   ✅ 持仓已恢复")
 else:
     errors.append("portfolio: no response")
 

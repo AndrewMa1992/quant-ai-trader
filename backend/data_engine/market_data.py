@@ -3,10 +3,9 @@
 当前使用 yfinance（免费），预留 Tiger Brokers SDK 集成
 """
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional
 import pandas as pd
-import numpy as np
 import yfinance as yf
 from loguru import logger
 

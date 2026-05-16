@@ -1,5 +1,6 @@
 """检查数据库表结构"""
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import sqlite3
 from backend.config import DB_PATH

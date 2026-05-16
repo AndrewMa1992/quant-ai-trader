@@ -1,9 +1,8 @@
 """
 交易接口路由
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/trade", tags=["trading"])
 

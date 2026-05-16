@@ -5,13 +5,12 @@
 - 性能分析报告
 - Walk-Forward 验证
 """
-from typing import Dict, List, Optional, Tuple, Callable
-from datetime import datetime, timedelta
+from typing import Dict, List, Callable
 import numpy as np
 import pandas as pd
 from loguru import logger
 
-from backend.config import trading_config, model_config
+from backend.config import trading_config
 from backend.trading_engine.portfolio import PortfolioManager
 from backend.trading_engine.risk_manager import RiskManager
 
@@ -50,7 +49,6 @@ class Backtester:
             回测结果报告
         """
         capital = initial_capital or trading_config.INITIAL_CAPITAL
-        comm = commission or trading_config.COMMISSION_RATE
 
         portfolio = PortfolioManager(capital)
         risk_mgr = RiskManager()
@@ -71,7 +69,7 @@ class Backtester:
 
         # 逐日回测
         for step in range(total_days):
-            date = aligned.index[step]
+            aligned.index[step]
 
             # 获取当日价格
             prices = {}

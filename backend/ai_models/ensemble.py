@@ -3,7 +3,6 @@
 """
 from typing import Dict, List
 import numpy as np
-from loguru import logger
 from backend.config import model_config
 
 
@@ -76,7 +75,9 @@ class SignalEnsemble:
                 self.weights[name] /= ws
 
     def _kelly_position(self, score, confidence):
-        if score <= 0: return 0.0
+        if score <= 0:
+
+            return 0.0
         win_prob = (1 + score * confidence) / 2
         kelly = max(0, (win_prob * 1.0 - (1 - win_prob)) / 1.0)
         return min(kelly * 0.5, model_config.RL_MAX_TRADE_PERCENT)

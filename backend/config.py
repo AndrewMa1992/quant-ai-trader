@@ -5,7 +5,7 @@ Quant AI Trader - 全局配置
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 
 # ============================================================

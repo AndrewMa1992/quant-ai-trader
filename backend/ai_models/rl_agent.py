@@ -2,7 +2,6 @@
 PPO 强化学习交易智能体
 基于 Stable-Baselines3
 """
-from typing import Dict, List, Tuple, Any
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -85,11 +84,15 @@ class TradingEnv(gym.Env):
     def _execute_trades(self, actions, prices):
         for i, t in enumerate(self.tickers):
             price = prices[t]
-            if price <= 0: continue
+            if price <= 0:
+
+                continue
             target = np.clip(actions[i], -self.max_position, self.max_position)
             current = self.positions[t] * price
             trade = target * self.portfolio_value - current
-            if abs(trade) < 10: continue
+            if abs(trade) < 10:
+
+                continue
             cost = abs(trade) * (self.commission + 0.0005)
             if trade > 0 and cost + trade <= self.balance:
                 self.balance -= trade + cost
@@ -140,7 +143,7 @@ class TradingRLAgent:
         if self.model is None:
             return
         self.model.save(str(MODELS_DIR / name))
-        logger.info(f"PPO 已保存")
+        logger.info("PPO 已保存")
 
     def load(self, name="ppo_trader.zip"):
         from stable_baselines3 import PPO

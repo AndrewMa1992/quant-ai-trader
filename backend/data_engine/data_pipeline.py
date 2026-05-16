@@ -4,8 +4,7 @@
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
-from loguru import logger
+from typing import List, Optional, Tuple
 
 
 class DataPipeline:

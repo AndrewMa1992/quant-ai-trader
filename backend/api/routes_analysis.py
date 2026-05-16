@@ -1,9 +1,7 @@
 """
 分析接口路由
 """
-from typing import List, Optional
-from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 

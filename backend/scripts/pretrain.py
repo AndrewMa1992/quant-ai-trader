@@ -30,7 +30,7 @@ def main():
     logger.info(f"   PPO Agent:   {'就绪' if trainer.rl_agent.is_ready() else '失败'}")
 
     summary = trainer.get_training_summary()
-    logger.info(f"\n📊 模型文件:")
+    logger.info("\n📊 模型文件:")
     for k, v in summary.items():
         logger.info(f"   {k}: {v}")
     logger.info("=" * 60)
