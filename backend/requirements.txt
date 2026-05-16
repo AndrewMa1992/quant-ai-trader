@@ -1,0 +1,34 @@
+# Quant AI Trader - Python 依赖
+# ============================================================
+# 核心框架（PyTorch 为主，TensorFlow 可选）
+torch>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+
+# 数据获取
+yfinance>=0.2.30
+
+# 机器学习
+scikit-learn>=1.2.0
+stable-baselines3>=2.0.0
+gymnasium>=0.28.0
+transformers>=4.30.0
+
+# 后端 API
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+websockets>=11.0
+pydantic>=2.0.0
+
+# 工具
+python-dotenv>=1.0.0
+loguru>=0.7.0
+tqdm>=4.65.0
+
+# 老虎证券 OpenAPI SDK
+# 申请地址：https://developer.itigerup.com/profile
+tigeropen>=2.0.0
+
+# TensorFlow（可选，Python 3.14 暂不支持）
+# tensorflow>=2.12.0

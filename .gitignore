@@ -1,0 +1,58 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.env
+venv/
+.venv/
+
+# === Node / Frontend ===
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Quant AI Trader - Cache & Logs ===
+cache/
+logs/
+!cache/.gitkeep
+!logs/.gitkeep
+
+# === Model files (large binary) ===
+backend/ai_models/models/*.pt
+backend/ai_models/models/*.zip
+# uncomment below to track model files:
+# !backend/ai_models/models/.gitkeep
+
+# === Data files ===
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/data/parquet/
+backend/data/features/
+backend/data/market_data/
+# uncomment below to track data:
+# !backend/data/.gitkeep
+
+# === Backup / Temp ===
+backups/
+*.bak
+*.tmp
+__azurite_db_*__.json
+
+# === OS ===
+*.log
