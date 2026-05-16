@@ -14,6 +14,7 @@ from loguru import logger
 
 from backend.config import api_config, data_config
 from backend.data_engine import MarketDataEngine, DataPipeline
+from backend.services.signal_history import SignalHistory
 from backend.data_engine.realtime import RealtimeEngine
 from backend.data_engine.historical_store import HistoricalStore
 from backend.ai_models import (
@@ -64,6 +65,10 @@ active_connections: Set[WebSocket] = set()
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     logger.info("Quant AI Trader 启动中...")
+
+    # 初始化信号历史存储
+    signal_history_store = SignalHistory()
+    routes_analysis.init_signal_history(signal_history_store)
 
     # 初始化路由
     routes_trade.init(executor, portfolio, risk_manager, store)

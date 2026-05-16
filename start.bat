@@ -45,12 +45,12 @@ echo   系统已启动！所有数据保存在项目内
 echo ============================================
 echo   后端API:    http://localhost:8000
 echo   API文档:    http://localhost:8000/docs
-echo   前端界面:   http://localhost:5173
+echo   前端界面:   http://localhost:5180
 echo   数据缓存:   %CD%\cache\
 echo   日志文件:   %CD%\logs\
 echo   数据库:     %CD%\backend\data\
 echo   模型文件:   %CD%\backend\ai_models\models\
 echo ============================================
 echo.
-start http://localhost:5173
+start http://localhost:5180
 pause

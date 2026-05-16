@@ -61,22 +61,15 @@
         <div class="card-header">
           <span class="card-title">交易信号</span>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <div v-for="(signal, ticker) in signals" :key="ticker" class="signal-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <strong style="font-size: 14px;">{{ ticker }}</strong>
-              <span class="badge" :class="'badge-' + signal.decision">{{ signal.decision?.toUpperCase() }}</span>
-            </div>
-            <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px; color: var(--text-secondary);">
-              <span>强度: {{ (signal.strength * 100)?.toFixed(0) }}%</span>
-              <span>置信: {{ (signal.confidence * 100)?.toFixed(0) }}%</span>
-              <span>仓位: {{ (signal.position_size * 100)?.toFixed(0) }}%</span>
-            </div>
-          </div>
-          <div v-if="Object.keys(signals).length === 0" style="color: var(--text-muted); text-align: center; padding: 40px 0;">
-            等待信号生成...
-          </div>
-        </div>
+        <SignalPanel
+          :signals="signals"
+          :signal-history="portfolioStore.signalHistory"
+          :loading="portfolioStore.analysisLoading"
+          :last-updated="formatLastUpdated"
+          :auto-refresh="signalAutoRefresh"
+          @run-analysis="handleRunAnalysis"
+          @toggle-autorefresh="handleToggleRefresh"
+        />
       </div>
     </div>
 
@@ -162,10 +155,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { useMarketStore } from '../stores/market'
 import { usePortfolioStore } from '../stores/portfolio'
+import SignalPanel from '../components/SignalPanel.vue'
 
 const marketStore = useMarketStore()
 const portfolioStore = usePortfolioStore()
@@ -182,9 +176,36 @@ const trades = computed(() => portfolioStore.trades)
 const positions = computed(() => portfolioStore.positionDetails)
 const recentTrades = computed(() => trades.value.slice(0, 10))
 
+const formatLastUpdated = computed(() => {
+  if (!portfolioStore.lastAnalysisTime) return ''
+  return portfolioStore.lastAnalysisTime.slice(11, 19)
+})
+
+const signalAutoRefresh = ref(false)
+let refreshTimer = null
+
 function formatTime(ts) {
   if (!ts) return ''
   return ts.slice(5, 19).replace('T', ' ')
+}
+
+async function handleRunAnalysis() {
+  await portfolioStore.runAnalysis()
+}
+
+function handleToggleRefresh(checked) {
+  signalAutoRefresh.value = checked
+  if (checked) {
+    refreshTimer = setInterval(async () => {
+      await portfolioStore.fetchLatestSignals()
+      await portfolioStore.fetchSignalHistory()
+    }, 30000)
+  } else {
+    if (refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  }
 }
 
 function initChart() {
@@ -292,6 +313,13 @@ onMounted(async () => {
     window.addEventListener('resize', () => chart?.resize())
   })
 })
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -302,11 +330,5 @@ onMounted(async () => {
   background: var(--accent-blue);
   color: white;
   border-color: var(--accent-blue);
-}
-.signal-card {
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 12px;
 }
 </style>

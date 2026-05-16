@@ -16,8 +16,11 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   })
 
   const signals = reactive({})
+  const signalHistory = reactive({})
   const trades = ref([])
   const positionDetails = ref([])
+  const analysisLoading = ref(false)
+  const lastAnalysisTime = ref('')
 
   async function fetchPortfolio() {
     try {
@@ -52,14 +55,69 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     }
   }
 
+  async function runAnalysis(tickers = null) {
+    analysisLoading.value = true
+    try {
+      const res = await axios.post('/api/analysis/run-analysis', { tickers })
+      if (res.data.signals) {
+        updateSignals(res.data.signals)
+      }
+      if (res.data.timestamp) {
+        lastAnalysisTime.value = res.data.timestamp
+      }
+      // 同步获取历史
+      await fetchSignalHistory()
+      return res.data
+    } catch (e) {
+      console.error('Failed to run analysis:', e)
+      return null
+    } finally {
+      analysisLoading.value = false
+    }
+  }
+
+  async function fetchLatestSignals() {
+    try {
+      const res = await axios.get('/api/analysis/latest-signals')
+      if (res.data.signals) {
+        updateSignals(res.data.signals)
+      }
+    } catch (e) {
+      console.error('Failed to fetch latest signals:', e)
+    }
+  }
+
+  async function fetchSignalHistory(ticker = null) {
+    try {
+      const params = {}
+      if (ticker) params.ticker = ticker
+      const res = await axios.get('/api/analysis/signal-history', { params })
+      if (ticker) {
+        signalHistory[ticker] = res.data.history || []
+      } else if (typeof res.data === 'object') {
+        // 返回的是 { ticker: [entries] } 格式
+        Object.keys(res.data).forEach(k => delete signalHistory[k])
+        Object.assign(signalHistory, res.data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch signal history:', e)
+    }
+  }
+
   return {
     metrics,
     signals,
+    signalHistory,
     trades,
     positionDetails,
+    analysisLoading,
+    lastAnalysisTime,
     fetchPortfolio,
     updateMetrics,
     updateSignals,
     fetchTrades,
+    runAnalysis,
+    fetchLatestSignals,
+    fetchSignalHistory,
   }
 })

@@ -26,6 +26,6 @@ echo ============================================
 echo   Quant AI Trader - 已启动
 echo ============================================
 echo   后端API:  http://localhost:8000
-echo   前端界面: http://localhost:5173
+echo   前端界面: http://localhost:5180
 echo   数据目录: G:\workbuddyspace\quant-ai-trader\cache\
 echo ============================================
