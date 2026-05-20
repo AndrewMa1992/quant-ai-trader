@@ -2,7 +2,7 @@
 分析接口路由 - 实时交易信号
 """
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -125,7 +125,7 @@ async def run_analysis(req: RunAnalysisRequest = None):
 
     # 执行分析
     try:
-        result = strategy.analyze_and_trade(tickers, data_dict, prices)
+        strategy.analyze_and_trade(tickers, data_dict, prices)
     except Exception as e:
         return {
             "status": "error", "message": f"分析失败: {str(e)}",

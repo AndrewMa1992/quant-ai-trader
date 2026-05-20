@@ -1,31 +1,33 @@
 @echo off
 chcp 65001 >nul
-title Quant AI Trader
-cd /d "G:\workbuddyspace\quant-ai-trader"
+title Quant AI Trader - Full Stack
 
-:: 重定向所有缓存到项目目录（数据不流失到系统盘）
 set TORCH_HOME=G:\workbuddyspace\quant-ai-trader\cache\torch
 set HF_HOME=G:\workbuddyspace\quant-ai-trader\cache\huggingface
-set YFINANCE_CACHE_DIR=G:\workbuddyspace\quant-ai-trader\cache\yfinance
 
-:: 1. 启动后端
+echo Starting Quant AI Trader...
+echo.
+
+echo [1/3] Backend :8000
 start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --app-dir "G:\workbuddyspace\quant-ai-trader"
 
-:: 等待后端就绪
 :wait_backend
 timeout /t 3 /nobreak >nul
 curl -s http://localhost:8000/ >nul 2>&1
 if errorlevel 1 goto wait_backend
 
-:: 2. 启动前端
-cd frontend
+echo [2/3] Frontend :5180
+cd /d G:\workbuddyspace\quant-ai-trader\frontend
 start "QuantTrader-Frontend" /MIN npm run dev
-cd ..
 
+echo [3/3] GitHub Runner
+cd /d G:\workbuddyspace\actions-runner
+start "QuantTrader-Runner" /MIN run.cmd
+
+echo.
 echo ============================================
-echo   Quant AI Trader - 已启动
-echo ============================================
-echo   后端API:  http://localhost:8000
-echo   前端界面: http://localhost:5180
-echo   数据目录: G:\workbuddyspace\quant-ai-trader\cache\
+echo   Quant AI Trader - Running
+echo   Backend:  http://localhost:8000
+echo   Frontend: http://localhost:5180
+echo   Docs:     http://localhost:8000/docs
 echo ============================================

@@ -1,6 +1,5 @@
-"""
-Quant AI Trader - FastAPI 主入口
-WebSocket 实时推送 + REST API + 定时任务
+﻿"""
+Quant AI Trader - FastAPI 涓诲叆鍙?WebSocket 瀹炴椂鎺ㄩ€?+ REST API + 瀹氭椂浠诲姟
 """
 import asyncio
 import json
@@ -32,7 +31,7 @@ from backend.api import (
 
 
 # ================================================================
-# 全局组件
+# 鍏ㄥ眬缁勪欢
 # ================================================================
 
 market_data = MarketDataEngine()
@@ -53,84 +52,79 @@ trainer = ModelTrainer()
 
 realtime = RealtimeEngine(market_data, data_pipeline)
 
-# WebSocket 连接管理
+# WebSocket 杩炴帴绠＄悊
 active_connections: Set[WebSocket] = set()
 
 
 # ================================================================
-# 生命周期
+# 鐢熷懡鍛ㄦ湡
 # ================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    logger.info("Quant AI Trader 启动中...")
+    """搴旂敤鐢熷懡鍛ㄦ湡绠＄悊"""
+    logger.info("Quant AI Trader 鍚姩涓?..")
 
-    # 初始化信号历史存储
-    signal_history_store = SignalHistory()
+    # 鍒濆鍖栦俊鍙峰巻鍙插瓨鍌?    signal_history_store = SignalHistory()
     routes_analysis.init_signal_history(signal_history_store)
 
-    # 初始化路由
-    routes_trade.init(executor, portfolio, risk_manager, store)
+    # 鍒濆鍖栬矾鐢?    routes_trade.init(executor, portfolio, risk_manager, store)
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
 
-    # 尝试加载模型（使用 trainer 做统一加载）
-    trans_ready, rl_ready = trainer.load_or_retrain()
-    logger.info(f"模型加载: Transformer={'就绪' if trans_ready else '未训练'}, RL={'就绪' if rl_ready else '未训练'}")
+    # 灏濊瘯鍔犺浇妯″瀷锛堜娇鐢?trainer 鍋氱粺涓€鍔犺浇锛?    trans_ready, rl_ready = trainer.load_or_retrain()
+    logger.info(f"妯″瀷鍔犺浇: Transformer={'灏辩华' if trans_ready else '鏈缁?}, RL={'灏辩华' if rl_ready else '鏈缁?}")
     if not trans_ready or not rl_ready:
-        logger.info("模型未训练，后台启动训练...")
+        logger.info("妯″瀷鏈缁冿紝鍚庡彴鍚姩璁粌...")
         import threading
         t = threading.Thread(target=trainer.train_all, daemon=True)
         t.start()
 
-    # 尝试连接老虎证券 API
-    logger.info("尝试连接老虎证券 API...")
+    # 灏濊瘯杩炴帴鑰佽檸璇佸埜 API
+    logger.info("灏濊瘯杩炴帴鑰佽檸璇佸埜 API...")
     tiger_connected = tiger_client.connect()
     if tiger_connected:
         tiger_status = tiger_client.get_status()
-        logger.info(f"老虎API 连接成功! 模拟账号: {tiger_status['simulation_account']}")
+        logger.info(f"鑰佽檸API 杩炴帴鎴愬姛! 妯℃嫙璐﹀彿: {tiger_status['simulation_account']}")
     else:
-        logger.info("老虎API 未配置，使用模拟模式 (yfinance)")
+        logger.info("鑰佽檸API 鏈厤缃紝浣跨敤妯℃嫙妯″紡 (yfinance)")
 
-    # 从数据库恢复组合状态
-    state_loaded = portfolio.load_state()
+    # 浠庢暟鎹簱鎭㈠缁勫悎鐘舵€?    state_loaded = portfolio.load_state()
     if state_loaded:
-        logger.info("✅ 组合状态已从数据库恢复")
+        logger.info("鉁?缁勫悎鐘舵€佸凡浠庢暟鎹簱鎭㈠")
     else:
-        logger.info("🆕 无历史状态，使用默认初始资金")
+        logger.info("馃啎 鏃犲巻鍙茬姸鎬侊紝浣跨敤榛樿鍒濆璧勯噾")
 
-    # 注册执行回调 - 每次交易后保存状态
-    executor.on_order_filled(lambda trade: portfolio.save_state())
+    # 娉ㄥ唽鎵ц鍥炶皟 - 姣忔浜ゆ槗鍚庝繚瀛樼姸鎬?    executor.on_order_filled(lambda trade: portfolio.save_state())
 
-    # 启动实时引擎
+    # 鍚姩瀹炴椂寮曟搸
     realtime_task = asyncio.create_task(realtime.start())
 
-    # 注册实时更新回调
+    # 娉ㄥ唽瀹炴椂鏇存柊鍥炶皟
     realtime.on_tick(handle_market_tick)
     strategy_engine.on_analysis(handle_analysis_result)
 
-    logger.info("Quant AI Trader 启动完成！")
-    logger.info(f"模型状态: Transformer={'就绪' if trans_ready else '未训练'}, RL={'就绪' if rl_ready else '未训练'}")
-    logger.info(f"美股: {len(data_config.US_TICKERS)} 只, 港股: {len(data_config.HK_TICKERS)} 只")
+    logger.info("Quant AI Trader 鍚姩瀹屾垚锛?)
+    logger.info(f"妯″瀷鐘舵€? Transformer={'灏辩华' if trans_ready else '鏈缁?}, RL={'灏辩华' if rl_ready else '鏈缁?}")
+    logger.info(f"缇庤偂: {len(data_config.US_TICKERS)} 鍙? 娓偂: {len(data_config.HK_TICKERS)} 鍙?)
     logger.info(f"Web UI: http://localhost:{api_config.PORT}")
     logger.info(f"API:    http://localhost:{api_config.PORT}/docs")
 
     yield
 
-    # 关闭
+    # 鍏抽棴
     realtime.stop()
     realtime_task.cancel()
-    logger.info("Quant AI Trader 已关闭")
+    logger.info("Quant AI Trader 宸插叧闂?)
 
 
 # ================================================================
-# FastAPI 应用
+# FastAPI 搴旂敤
 # ================================================================
 
 app = FastAPI(
     title="Quant AI Trader",
-    description="最前沿科技打造的量化AI美股交易系统",
+    description="鏈€鍓嶆部绉戞妧鎵撻€犵殑閲忓寲AI缇庤偂浜ゆ槗绯荤粺",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -143,7 +137,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册路由
+# 娉ㄥ唽璺敱
 app.include_router(routes_data.router)
 app.include_router(routes_trade.router)
 app.include_router(routes_analysis.router)
@@ -156,10 +150,10 @@ app.include_router(routes_models.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    """WebSocket 实时数据推送"""
+    """WebSocket 瀹炴椂鏁版嵁鎺ㄩ€?""
     await ws.accept()
     active_connections.add(ws)
-    logger.info(f"WebSocket 客户端连接 (当前: {len(active_connections)})")
+    logger.info(f"WebSocket 瀹㈡埛绔繛鎺?(褰撳墠: {len(active_connections)})")
 
     try:
         while True:
@@ -178,18 +172,18 @@ async def websocket_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         active_connections.discard(ws)
-        logger.info(f"WebSocket 客户端断开 (当前: {len(active_connections)})")
+        logger.info(f"WebSocket 瀹㈡埛绔柇寮€ (褰撳墠: {len(active_connections)})")
     except Exception as e:
-        logger.error(f"WebSocket 错误: {e}")
+        logger.error(f"WebSocket 閿欒: {e}")
         active_connections.discard(ws)
 
 
 # ================================================================
-# 回调处理
+# 鍥炶皟澶勭悊
 # ================================================================
 
 async def handle_market_tick(ticks: List[Dict]):
-    """处理市场 tick 更新，支持多市场"""
+    """澶勭悊甯傚満 tick 鏇存柊锛屾敮鎸佸甯傚満"""
     if not active_connections:
         return
 
@@ -215,7 +209,7 @@ async def handle_market_tick(ticks: List[Dict]):
 
 
 async def handle_analysis_result(results: Dict):
-    """处理分析结果"""
+    """澶勭悊鍒嗘瀽缁撴灉"""
     if not active_connections:
         return
     message = json.dumps({"type": "analysis_result", "data": results})
@@ -223,7 +217,7 @@ async def handle_analysis_result(results: Dict):
 
 
 async def broadcast(message: str):
-    """广播消息到所有WebSocket客户端"""
+    """骞挎挱娑堟伅鍒版墍鏈塛ebSocket瀹㈡埛绔?""
     if not active_connections:
         return
     dead_connections = set()
@@ -237,7 +231,7 @@ async def broadcast(message: str):
 
 
 async def build_data_dict(tickers: List[str]) -> Dict:
-    """构建模型输入数据"""
+    """鏋勫缓妯″瀷杈撳叆鏁版嵁"""
     data_dict = {}
     for ticker in tickers:
         df = market_data.get_historical_data(ticker, period="3mo", interval="1d")
@@ -250,12 +244,12 @@ async def build_data_dict(tickers: List[str]) -> Dict:
 
 
 # ================================================================
-# 健康检查 & 首页
+# 鍋ュ悍妫€鏌?& 棣栭〉
 # ================================================================
 
 @app.get("/health")
 async def health():
-    """健康检查"""
+    """鍋ュ悍妫€鏌?""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -270,11 +264,12 @@ async def health():
 
 @app.get("/")
 async def root():
-    """返回系统信息"""
+    """杩斿洖绯荤粺淇℃伅"""
     return {
         "name": "Quant AI Trader",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
-        "frontend": "http://localhost:5173",
+        "frontend": "http://localhost:5180",
     }
+

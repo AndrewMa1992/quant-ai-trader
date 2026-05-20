@@ -154,7 +154,7 @@ class APIConfig:
     PORT: int = 8001
     RELOAD: bool = True
     CORS_ORIGINS: List[str] = field(default_factory=lambda: [
-        "http://localhost:5173", "http://localhost:3000",
+        "http://localhost:5180", "http://localhost:3000",
     ])
 
 

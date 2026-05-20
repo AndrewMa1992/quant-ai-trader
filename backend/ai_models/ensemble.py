@@ -76,7 +76,6 @@ class SignalEnsemble:
 
     def _kelly_position(self, score, confidence):
         if score <= 0:
-
             return 0.0
         win_prob = (1 + score * confidence) / 2
         kelly = max(0, (win_prob * 1.0 - (1 - win_prob)) / 1.0)
