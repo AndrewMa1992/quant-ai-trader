@@ -7,6 +7,14 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
 
+# 加载 .env 文件（优先，不提交到 Git）
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).parent.parent / ".env"
+    load_dotenv(_env_path)
+except ImportError:
+    pass
+
 
 # ============================================================
 # 项目路径 — 所有数据保存在项目内
@@ -65,15 +73,19 @@ class DataConfig:
 
     @property
     def ALL_TICKERS(self):
-        return self.US_TICKERS + [f"{t}.HK" for t in self.HK_TICKERS]
+        _hk_map = {"00700":"0700","09988":"9988","03690":"3690","09999":"9999",
+                   "01810":"1810","00941":"0941","00883":"0883","01299":"1299"}
+        return self.US_TICKERS + [f"{_hk_map.get(t,t)}.HK" for t in self.HK_TICKERS]
 
     @property
     def TICKER_INFO(self):
+        _hk_map = {"00700":"0700","09988":"9988","03690":"3690","09999":"9999",
+                   "01810":"1810","00941":"0941","00883":"0883","01299":"1299"}
         result = []
         for t in self.US_TICKERS:
             result.append({"symbol": t, "name": t, "market": "US", "currency": "USD"})
         for t in self.HK_TICKERS:
-            result.append({"symbol": f"{t}.HK", "name": t, "market": "HK", "currency": "HKD"})
+            result.append({"symbol": f"{_hk_map.get(t,t)}.HK", "name": t, "market": "HK", "currency": "HKD"})
         return result
 
     BENCHMARK: str = "SPY"
@@ -138,11 +150,11 @@ class TradingConfig:
     COMMISSION_RATE: float = 0.001
     SLIPPAGE: float = 0.0005
 
-    TIGER_ID: str = ""
-    TIGER_PRIVATE_KEY: str = ""
-    TIGER_ACCOUNT: str = ""
-    TIGER_PAPER_TRADING: bool = True
-    TIGER_CONFIG_DIR: str = "~/.tigeropen"
+    TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))
+    TIGER_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY", ""))
+    TIGER_ACCOUNT: str = field(default_factory=lambda: os.getenv("TIGER_ACCOUNT", ""))
+    TIGER_PAPER_TRADING: bool = field(default_factory=lambda: os.getenv("TIGER_PAPER_TRADING", "true").lower() == "true")
+    TIGER_CONFIG_DIR: str = field(default_factory=lambda: os.getenv("TIGER_CONFIG_DIR", "~/.tigeropen"))
 
 
 # ============================================================

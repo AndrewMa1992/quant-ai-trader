@@ -20,9 +20,13 @@ echo [2/3] Frontend :5180
 cd /d G:\workbuddyspace\quant-ai-trader\frontend
 start "QuantTrader-Frontend" /MIN npm run dev
 
-echo [3/3] GitHub Runner
+echo [3/4] GitHub Runner
 cd /d G:\workbuddyspace\actions-runner
 start "QuantTrader-Runner" /MIN run.cmd
+
+echo [4/4] Auto Trader (30min cycle)
+cd /d G:\workbuddyspace\quant-ai-trader
+start "QuantTrader-Auto" /MIN python auto_trader.py --interval 1800
 
 echo.
 echo ============================================
