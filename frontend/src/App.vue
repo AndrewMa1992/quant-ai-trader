@@ -37,6 +37,24 @@
     <main class="main">
       <header class="header">
         <h1 class="page-title">{{ currentPageTitle }}</h1>
+        <div class="header-metrics">
+          <div class="metric-chip">
+            <span class="metric-label">Sharpe</span>
+            <span class="metric-value" :class="metricColor('sharpe')">{{ formatMetric(portfolioStore.metrics.sharpe_ratio, 2) }}</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">回撤</span>
+            <span class="metric-value down">{{ formatPct(portfolioStore.metrics.max_drawdown_pct) }}</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">胜率</span>
+            <span class="metric-value" :class="metricColor('winrate')">{{ formatPct(portfolioStore.metrics.win_rate) }}</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">盈亏比</span>
+            <span class="metric-value" :class="metricColor('pf')">{{ formatMetric(portfolioStore.metrics.profit_factor, 2) }}</span>
+          </div>
+        </div>
         <div class="header-right">
           <span class="live-badge" v-if="connected">
             <span class="live-dot"></span>
@@ -45,7 +63,7 @@
           <div class="portfolio-value">
             <span class="label">组合价值</span>
             <span class="value" :class="{ up: portfolioChange >= 0, down: portfolioChange < 0 }">
-              ${{ portfolioValue.toLocaleString() }}
+              ${{ Math.round(portfolioValue).toLocaleString() }}
             </span>
           </div>
         </div>
@@ -84,6 +102,33 @@ const currentPageTitle = computed(() => {
 
 const portfolioValue = computed(() => portfolioStore.metrics.total_value || 0)
 const portfolioChange = computed(() => portfolioStore.metrics.total_return_pct || 0)
+
+function formatMetric(v, decimals) {
+  if (v == null || isNaN(v)) return '--'
+  return Number(v).toFixed(decimals)
+}
+
+function formatPct(v) {
+  if (v == null || isNaN(v)) return '--'
+  return (Number(v) * 100).toFixed(1) + '%'
+}
+
+function metricColor(type) {
+  const v = portfolioStore.metrics
+  if (type === 'sharpe') return (v.sharpe_ratio || 0) >= 1 ? 'up' : 'down'
+  if (type === 'winrate') return (v.win_rate || 0) >= 0.5 ? 'up' : 'down'
+  if (type === 'pf') return (v.profit_factor || 0) >= 1.5 ? 'up' : 'down'
+  return ''
+}
+
+async function refreshDashboard() {
+  await Promise.all([
+    portfolioStore.fetchPortfolio(),
+    portfolioStore.fetchDashboard(),
+  ])
+}
+
+let dashboardTimer = null
 
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -136,10 +181,42 @@ function connectWebSocket() {
 
 onMounted(() => {
   connectWebSocket()
-  portfolioStore.fetchPortfolio()
+  refreshDashboard()
+  dashboardTimer = setInterval(refreshDashboard, 15000) // 每15秒刷新仪表盘
 })
 
 onBeforeUnmount(() => {
   ws?.close()
+  if (dashboardTimer) clearInterval(dashboardTimer)
 })
 </script>
+
+<style scoped>
+.header-metrics {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-left: 24px;
+}
+.metric-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.metric-label {
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 2px;
+}
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.metric-value.up { color: #4caf50; }
+.metric-value.down { color: #f44336; }
+</style>

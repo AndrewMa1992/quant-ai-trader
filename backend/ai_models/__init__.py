@@ -5,8 +5,10 @@ from .sentiment import SentimentAnalyzer
 from .ensemble import SignalEnsemble
 from .trainer import ModelTrainer
 from .cross_stock import CrossStockCorrelation, cross_stock
+from .gat_network import GATSignalGenerator, gat_network, StockGAT
 
 __all__ = [
     "TransformerPredictor", "TradingRLAgent", "SentimentAnalyzer",
     "SignalEnsemble", "ModelTrainer", "CrossStockCorrelation", "cross_stock",
+    "GATSignalGenerator", "gat_network", "StockGAT",
 ]

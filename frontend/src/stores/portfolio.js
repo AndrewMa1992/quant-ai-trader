@@ -11,6 +11,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     total_return_pct: 0,
     sharpe_ratio: 0,
     max_drawdown: 0,
+    max_drawdown_pct: 0,
+    win_rate: 0,
+    profit_factor: 0,
+    calmar_ratio: 0,
     num_positions: 0,
     total_trades: 0,
   })
@@ -22,6 +26,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const valueHistory = ref([])
   const analysisLoading = ref(false)
   const lastAnalysisTime = ref('')
+  const dashboardMetrics = ref({})
 
   async function fetchPortfolio() {
     try {
@@ -39,6 +44,28 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     } catch (e) {
       console.error('Failed to fetch portfolio:', e)
       return null
+    }
+  }
+
+  async function fetchDashboard() {
+    try {
+      const res = await axios.get('/api/trade/dashboard')
+      dashboardMetrics.value = res.data
+      // Sync to metrics
+      Object.assign(metrics, {
+        sharpe_ratio: res.data.sharpe_ratio || 0,
+        max_drawdown: res.data.max_drawdown || 0,
+        max_drawdown_pct: res.data.max_drawdown_pct || 0,
+        win_rate: res.data.win_rate || 0,
+        profit_factor: res.data.profit_factor || 0,
+        calmar_ratio: res.data.calmar_ratio || 0,
+        total_value: res.data.total_value || metrics.total_value,
+        cash: res.data.cash || metrics.cash,
+        total_pnl: res.data.total_pnl || metrics.total_pnl,
+        total_return_pct: res.data.total_return_pct || metrics.total_return_pct,
+      })
+    } catch (e) {
+      console.error('Failed to fetch dashboard:', e)
     }
   }
 
@@ -126,7 +153,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     valueHistory,
     analysisLoading,
     lastAnalysisTime,
+    dashboardMetrics,
     fetchPortfolio,
+    fetchDashboard,
     updateMetrics,
     updateSignals,
     prependTrades,

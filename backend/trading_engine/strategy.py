@@ -12,6 +12,7 @@ from backend.data_engine import DataPipeline
 from backend.ai_models import (
     TransformerPredictor, TradingRLAgent, SentimentAnalyzer,
     SignalEnsemble, CrossStockCorrelation, cross_stock,
+    GATSignalGenerator, gat_network,
 )
 from backend.trading_engine.executor import PaperExecutor
 
@@ -77,6 +78,11 @@ class TradingStrategy:
         # 0. 跨股票关联分析（一次性计算，所有股票共享）
         features_dict = {t: data_dict[t]["features"] for t in tickers if t in data_dict}
         cross_stock.compute_sector_momentum(tickers, features_dict)
+        # GAT 行业动量计算
+        try:
+            gat_network.compute_sector_momentum(tickers, features_dict)
+        except Exception:
+            pass
 
         for ticker in tickers:
             if ticker not in data_dict or ticker not in prices:
@@ -143,10 +149,14 @@ class TradingStrategy:
             except Exception as e:
                 logger.debug(f"⚠️ {ticker} RL 推理跳过: {e}")
 
-        # 3. 跨股票关联信号（GNN 轻量版）
+        # 3. 跨股票关联信号（GAT v2 + GNN-lite fallback）
         if all_tickers and features_dict:
             try:
-                cs = cross_stock.get_cross_stock_signal(ticker, all_tickers, features_dict)
+                # 优先使用 GAT
+                if gat_network.model is not None:
+                    cs = gat_network.get_cross_stock_signal(ticker, all_tickers, features_dict)
+                else:
+                    cs = cross_stock.get_cross_stock_signal(ticker, all_tickers, features_dict)
                 if cs.get("strength", 0) > 0 or cs.get("boost_factor", 1.0) != 1.0:
                     signals["cross_stock"] = cs
             except Exception as e:
