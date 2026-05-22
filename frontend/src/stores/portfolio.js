@@ -53,6 +53,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     }
   }
 
+  function prependTrades(newTrades) {
+    trades.value = [...newTrades, ...trades.value].slice(0, 200)
+  }
+
   async function fetchTrades(ticker = null, limit = 100) {
     try {
       const params = { limit }
@@ -125,6 +129,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     fetchPortfolio,
     updateMetrics,
     updateSignals,
+    prependTrades,
     fetchTrades,
     runAnalysis,
     fetchLatestSignals,

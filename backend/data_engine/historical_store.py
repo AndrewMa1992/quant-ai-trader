@@ -1,4 +1,4 @@
-"""
+﻿"""
 历史数据存储层 - SQLite + Parquet 混合存储
 支持增量更新、高效查询
 """
@@ -93,10 +93,37 @@ class HistoricalStore:
                 details TEXT
             )
         """)
+        # 实时价格缓存表（对冲基金级性能）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_ticks (
+                ticker TEXT NOT NULL,
+                price REAL NOT NULL,
+                volume REAL,
+                timestamp TEXT NOT NULL,
+                market TEXT DEFAULT 'US',
+                PRIMARY KEY (ticker, timestamp)
+            )
+        """)
+
+        # 创建索引加速查询
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_time ON trades(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_time ON signals(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_time ON portfolio_snapshots(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_ticks_ticker ON price_ticks(ticker)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_ticks_time ON price_ticks(timestamp)")
+
+        # WAL 模式：写入性能提升 10x，支持并发读写
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000")  # 64MB 缓存
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=268435456")  # 256MB 内存映射
 
         conn.commit()
         conn.close()
-        logger.info(f"✅ 数据库初始化完成: {self.db_path}")
+        logger.info(f"数据库初始化完成: {self.db_path} (WAL模式, 64MB缓存)")
 
     # ================================================================
     # 行情数据读写
@@ -261,6 +288,71 @@ class HistoricalStore:
         ))
         conn.commit()
         conn.close()
+
+    # ================================================================
+    # 实时数据方法（对冲基金级批量写入）
+    # ================================================================
+
+    def save_price_ticks_batch(self, prices: Dict[str, float]):
+        """批量保存实时价格（单事务，高性能）"""
+        now = datetime.now().isoformat()
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+        for ticker, price in prices.items():
+            market = "HK" if ".HK" in ticker else ("SG" if ".SI" in ticker else "US")
+            cursor.execute(
+                "INSERT OR REPLACE INTO price_ticks (ticker, price, timestamp, market) VALUES (?, ?, ?, ?)",
+                (ticker, round(price, 4), now, market)
+            )
+        conn.commit()
+        conn.close()
+
+    def save_signals_batch(self, signals: Dict[str, Dict]):
+        """批量保存信号（单事务）"""
+        now = datetime.now().isoformat()
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+        for ticker, sig in signals.items():
+            cursor.execute(
+                "INSERT INTO signals (ticker, timestamp, signal_type, signal_value, confidence, model_name) VALUES (?, ?, ?, ?, ?, ?)",
+                (ticker, now, sig.get("decision", "hold"),
+                 sig.get("strength", 0), sig.get("confidence", 0),
+                 sig.get("strategy", "ensemble"))
+            )
+        conn.commit()
+        conn.close()
+
+    def save_trades_batch(self, trades: List[Dict]):
+        """批量保存交易"""
+        if not trades:
+            return
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+        for t in trades:
+            cursor.execute(
+                "INSERT INTO trades (ticker, side, quantity, price, value, timestamp, signal_strength, strategy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (t["ticker"], t["side"], t["quantity"], t.get("price", 0),
+                 t.get("value", 0), t.get("timestamp", datetime.now().isoformat()),
+                 t.get("signal_strength", 0), t.get("strategy", "ensemble"))
+            )
+        conn.commit()
+        conn.close()
+        logger.debug(f"已保存 {len(trades)} 笔交易")
+
+    def get_latest_prices(self) -> Dict[str, float]:
+        """获取最新价格快照"""
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ticker, price FROM price_ticks
+            WHERE timestamp = (SELECT MAX(timestamp) FROM price_ticks)
+        """)
+        result = {row[0]: row[1] for row in cursor.fetchall()}
+        conn.close()
+        return result
 
     # ================================================================
     # 内部方法

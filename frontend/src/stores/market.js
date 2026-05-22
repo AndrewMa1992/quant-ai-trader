@@ -28,6 +28,20 @@ export const useMarketStore = defineStore('market', () => {
     }
   }
 
+  function updatePrices(prices) {
+    const now = new Date().toISOString()
+    const newTicks = []
+    for (const [ticker, price] of Object.entries(prices)) {
+      newTicks.push({ ticker, display: ticker, price, timestamp: now })
+      if (!priceHistory.value[ticker]) priceHistory.value[ticker] = []
+      priceHistory.value[ticker].push({ time: now, price })
+      if (priceHistory.value[ticker].length > 200) {
+        priceHistory.value[ticker] = priceHistory.value[ticker].slice(-200)
+      }
+    }
+    ticks.value = newTicks
+  }
+
   async function fetchTickers() {
     try {
       const res = await axios.get('/api/data/tickers')
@@ -59,6 +73,6 @@ export const useMarketStore = defineStore('market', () => {
 
   return {
     ticks, priceHistory, usTickers, hkTickers, loading, allTickers,
-    updateTicks, fetchTickers, fetchHistory, getPriceHistory,
+    updateTicks, updatePrices, fetchTickers, fetchHistory, getPriceHistory,
   }
 })

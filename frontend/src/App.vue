@@ -107,6 +107,15 @@ function connectWebSocket() {
           }
         } else if (msg.type === 'analysis_result') {
           portfolioStore.updateSignals(msg.data.signals)
+        } else if (msg.type === 'market_update') {
+          // 实时更新：价格、信号、交易、组合
+          const d = msg.data
+          if (d.prices) marketStore.updatePrices(d.prices)
+          if (d.signals) portfolioStore.updateSignals(d.signals)
+          if (d.trades && d.trades.length > 0) {
+            portfolioStore.prependTrades(d.trades)
+          }
+          if (d.portfolio) portfolioStore.updateMetrics(d.portfolio)
         }
       } catch (e) {
         console.error('WS parse error:', e)
