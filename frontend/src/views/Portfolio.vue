@@ -122,6 +122,7 @@ let chart = null
 const metrics = computed(() => portfolioStore.metrics)
 const positions = computed(() => portfolioStore.positionDetails)
 const trades = computed(() => portfolioStore.trades)
+const valueHistory = computed(() => portfolioStore.valueHistory || [])
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -132,25 +133,31 @@ function initChart() {
   if (!valueChartRef.value) return
   chart = echarts.init(valueChartRef.value)
 
-  // 模拟价值历史数据
-  const baseValue = metrics.value.total_value || 100000
-  const data = []
   const dates = []
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    dates.push(date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }))
-    const noise = (Math.random() - 0.45) * 0.02
-    data.push(baseValue * (1 + noise * (30 - i)))
+  const data = []
+
+  if (valueHistory.value.length > 1) {
+    for (const item of valueHistory.value) {
+      dates.push(item.time?.slice(5, 16) || '')
+      data.push(item.value)
+    }
+  } else {
+    // 暂无历史数据时展示初始值
+    const baseValue = metrics.value.total_value || 1000000
+    dates.push(new Date().toLocaleDateString('zh-CN'))
+    data.push(baseValue)
   }
+
+  const isUp = data.length > 1 ? data[data.length-1] >= data[0] : true
+  const lineColor = isUp ? '#22c55e' : '#ef4444'
 
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      valueFormatter: (v) => '$' + v.toLocaleString(),
+      valueFormatter: (v) => '$' + (v || 0).toLocaleString(),
     },
-    grid: { left: '5%', right: '5%', bottom: '8%', top: '5%' },
+    grid: { left: '8%', right: '5%', bottom: '8%', top: '5%' },
     xAxis: {
       type: 'category',
       data: dates,
@@ -167,11 +174,11 @@ function initChart() {
       type: 'line',
       data,
       smooth: true,
-      lineStyle: { color: '#22c55e', width: 2 },
+      lineStyle: { color: lineColor, width: 2 },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(34, 197, 94, 0.3)' },
-          { offset: 1, color: 'rgba(34, 197, 94, 0.02)' },
+          { offset: 0, color: lineColor === '#22c55e' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)' },
+          { offset: 1, color: 'rgba(0,0,0,0.02)' },
         ]),
       },
       symbol: 'none',
@@ -180,7 +187,10 @@ function initChart() {
 }
 
 onMounted(async () => {
-  await portfolioStore.fetchPortfolio()
+  const res = await portfolioStore.fetchPortfolio()
+  if (res?.value_history) {
+    portfolioStore.valueHistory = res.value_history
+  }
   await portfolioStore.fetchTrades()
   nextTick(() => {
     initChart()

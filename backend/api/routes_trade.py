@@ -29,9 +29,37 @@ async def get_portfolio():
     """获取组合状态"""
     if portfolio is None:
         return {"error": "组合管理器未初始化"}
+    # 从 realtime 获取价格
+    from backend.data_engine.realtime import RealtimeEngine
+    prices = {}
+    try:
+        rt = RealtimeEngine.__dict__.get('_instance')
+    except:
+        pass
+
+    positions_list = []
+    for t, s in portfolio.positions.items():
+        pos = {
+            "ticker": t,
+            "shares": round(s, 4),
+            "avg_cost": round(portfolio.avg_costs.get(t, 0), 2),
+            "current_price": 0,
+            "current_price_usd": 0,
+            "currency": "USD",
+            "market_value": 0,
+            "unrealized_pnl": 0,
+            "unrealized_pnl_pct": 0,
+            "allocation": 0,
+        }
+        positions_list.append(pos)
+
     return {
         "metrics": portfolio.get_metrics(),
-        "positions": [],  # 需要 prices 参数
+        "positions": positions_list,
+        "value_history": [
+            {"time": t.isoformat(), "value": v}
+            for t, v in portfolio.value_history[-100:]
+        ] if hasattr(portfolio, 'value_history') else [],
     }
 
 

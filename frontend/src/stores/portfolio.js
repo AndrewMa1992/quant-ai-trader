@@ -19,6 +19,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const signalHistory = reactive({})
   const trades = ref([])
   const positionDetails = ref([])
+  const valueHistory = ref([])
   const analysisLoading = ref(false)
   const lastAnalysisTime = ref('')
 
@@ -28,8 +29,16 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       if (res.data.metrics) {
         Object.assign(metrics, res.data.metrics)
       }
+      if (res.data.positions) {
+        positionDetails.value = res.data.positions
+      }
+      if (res.data.value_history) {
+        valueHistory.value = res.data.value_history
+      }
+      return res.data
     } catch (e) {
       console.error('Failed to fetch portfolio:', e)
+      return null
     }
   }
 
@@ -42,6 +51,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     if (newSignals) {
       Object.assign(signals, newSignals)
     }
+  }
+
+  function prependTrades(newTrades) {
+    trades.value = [...newTrades, ...trades.value].slice(0, 200)
   }
 
   async function fetchTrades(ticker = null, limit = 100) {
@@ -110,11 +123,13 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     signalHistory,
     trades,
     positionDetails,
+    valueHistory,
     analysisLoading,
     lastAnalysisTime,
     fetchPortfolio,
     updateMetrics,
     updateSignals,
+    prependTrades,
     fetchTrades,
     runAnalysis,
     fetchLatestSignals,

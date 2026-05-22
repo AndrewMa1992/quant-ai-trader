@@ -256,6 +256,52 @@ async def build_data_dict(tickers: List[str]) -> Dict:
 
 
 # ================================================================
+# 实时数据推送端点（auto_trader → WebSocket → 前端）
+# ================================================================
+
+@app.post("/api/push/cycle-data")
+async def push_cycle_data(data: Dict):
+    """
+    接收 auto_trader 推送的周期数据，广播到所有 WebSocket 客户端
+    同时自动持久化到数据库
+    """
+    try:
+        # 广播实时市场数据
+        if data.get("prices"):
+            await broadcast(json.dumps({
+                "type": "market_update",
+                "data": {
+                    "prices": data["prices"],
+                    "signals": data.get("signals", {}),
+                    "trades": data.get("trades", []),
+                    "portfolio": data.get("portfolio", {}),
+                    "timestamp": datetime.now().isoformat(),
+                }
+            }))
+
+        # 自动持久化
+        store.save_price_ticks_batch(data.get("prices", {}))
+        if data.get("signals"):
+            store.save_signals_batch(data["signals"])
+        if data.get("trades"):
+            store.save_trades_batch(data["trades"])
+        if data.get("portfolio"):
+            store.save_snapshot({
+                "timestamp": datetime.now().isoformat(),
+                "total_value": data["portfolio"].get("total_value", 0),
+                "cash": data["portfolio"].get("cash", 0),
+                "positions_value": data["portfolio"].get("total_value", 0) - data["portfolio"].get("cash", 0),
+                "total_pnl": data["portfolio"].get("total_pnl", 0),
+            })
+
+        return {"status": "ok", "connections": len(active_connections)}
+
+    except Exception as e:
+        logger.error(f"Push error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# ================================================================
 # Health Check & Routes
 # ================================================================
 

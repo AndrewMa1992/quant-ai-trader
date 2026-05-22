@@ -5,40 +5,27 @@ title Quant AI Trader - Full Stack
 set TORCH_HOME=G:\workbuddyspace\Claw\quant-ai-trader\cache\torch
 set HF_HOME=G:\workbuddyspace\Claw\quant-ai-trader\cache\huggingface
 
-echo Starting Quant AI Trader...
+echo ============================================
+echo   Quant AI Trader - Starting
+echo ============================================
 echo.
 
-echo [1/3] Backend (includes Frontend SPA) :8000
+echo [1/3] Backend (FastAPI) :8001
 cd /d G:\workbuddyspace\Claw\quant-ai-trader
-start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+start "QuantTrader-Backend" /MIN python run_backend.py
 
 :wait_backend
-timeout /t 3 /nobreak >nul
-curl -s http://localhost:8000/health >nul 2>&1
-if errorlevel 1 goto wait_backend
+timeout /t 5 /nobreak >nul
+curl -s http://localhost:8001/health >nul 2>&1
+if errorlevel 1 (
+    echo    Waiting for backend...
+    goto wait_backend
+)
+echo    Backend OK
 
-echo [2/3] GitHub Runner
-cd /d G:\workbuddyspace\actions-runner
-rem Fix exFAT junction issue: ensure bin & externals directories exist
-if not exist "bin\Runner.Listener.exe" (
-    for /f "tokens=*" %%i in ('dir /b /ad /on bin.* 2^>nul ^| sort /r') do (
-        if not exist "bin\" (
-            echo Copying %%i -^> bin
-            xcopy "%%i" "bin\" /E /I /Q /Y
-        )
-    )
-)
-if not exist "externals\node20" (
-    if not exist "externals\node24" (
-        for /f "tokens=*" %%i in ('dir /b /ad /on externals.* 2^>nul ^| sort /r') do (
-            if not exist "externals\" (
-                echo Copying %%i -^> externals
-                xcopy "%%i" "externals\" /E /I /Q /Y
-            )
-        )
-    )
-)
-start "QuantTrader-Runner" /MIN run.cmd
+echo [2/3] Frontend (Vue Dev) :5180
+cd /d G:\workbuddyspace\Claw\quant-ai-trader\frontend
+start "QuantTrader-Frontend" /MIN npm run dev
 
 echo [3/3] Auto Trader (30min cycle)
 cd /d G:\workbuddyspace\Claw\quant-ai-trader
@@ -47,6 +34,10 @@ start "QuantTrader-Auto" /MIN python auto_trader.py --interval 1800
 echo.
 echo ============================================
 echo   Quant AI Trader - Running
-echo   Web UI:   http://localhost:8000
-echo   API Docs: http://localhost:8000/docs
+echo   Web UI:   http://localhost:5180
+echo   Backend:  http://localhost:8001
+echo   API Docs: http://localhost:8001/docs
 echo ============================================
+echo.
+echo All windows minimized. Close WorkBuddy safely.
+pause

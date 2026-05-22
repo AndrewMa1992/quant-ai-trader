@@ -232,7 +232,33 @@ class AutoTrader:
         elapsed = time.time() - start
         logger.info(f"⏱  Cycle #{self.cycle} 完成 (耗时 {elapsed:.1f}s)")
 
+        # 6. 推送数据到后端 WebSocket + 自动持久化
+        self._push_to_backend(result, prices)
+
         return result
+
+    def _push_to_backend(self, result: dict, prices: dict):
+        """推送周期数据到后端，实现实时前端更新"""
+        try:
+            import requests
+            payload = {
+                "prices": {t: round(p, 4) for t, p in prices.items()},
+                "signals": self.strategy.last_signals,
+                "trades": result.get("trades", []),
+                "portfolio": {
+                    "total_value": self.portfolio.total_value,
+                    "cash": self.portfolio.cash,
+                    "total_pnl": self.portfolio.total_value - trading_config.INITIAL_CAPITAL,
+                    "num_positions": len(self.portfolio.positions),
+                },
+            }
+            requests.post(
+                "http://localhost:8000/api/push/cycle-data",
+                json=payload,
+                timeout=5,
+            )
+        except Exception:
+            pass  # 静默失败，不阻塞交易循环
 
     def start(self, interval_seconds=300):
         """开始自动循环"""
