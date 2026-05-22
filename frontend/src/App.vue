@@ -87,7 +87,9 @@ const portfolioChange = computed(() => portfolioStore.metrics.total_return_pct |
 
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${location.hostname}:5173/ws`
+  const host = location.hostname
+  const port = location.port || '8000'
+  const wsUrl = `${protocol}//${host}:${port}/ws`
 
   try {
     ws = new WebSocket(wsUrl)

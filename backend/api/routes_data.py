@@ -74,16 +74,60 @@ async def get_quote(ticker: str):
 
 @router.get("/tickers")
 async def get_tickers():
-    """获取关注的所有股票列表（美股 + 港股）"""
-    from backend.config import data_config
-    info = data_config.TICKER_INFO
-    us = data_config.US_TICKERS
-    hk = [t.replace(".HK", "") for t in data_config.ALL_TICKERS if ".HK" in t]
+    """获取全量股票列表（5市场）"""
+    import json
+    from pathlib import Path
+
+    # 直接从缓存文件读取，避免单例初始化时序问题
+    cache_file = Path(__file__).parent.parent.parent / "backend" / "data" / "stock_universe.json"
+
+    us, hk, sg, au, nz = [], [], [], [], []
+    all_info = []
+
+    if cache_file.exists():
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            stocks = data.get("stocks", [])
+            for s in stocks:
+                if not isinstance(s, dict):
+                    continue
+                t = s.get("ticker", "")
+                info = {
+                    "symbol": t,
+                    "name": s.get("name", ""),
+                    "market": s.get("sector", "US"),
+                    "currency": "USD",
+                }
+                all_info.append(info)
+
+                if t.endswith(".HK"):
+                    hk.append(t.replace(".HK", ""))
+                elif t.endswith(".SI"):
+                    sg.append(t)
+                elif t.endswith(".AX"):
+                    au.append(t)
+                elif t.endswith(".NZ"):
+                    nz.append(t)
+                else:
+                    us.append(t)
+
+        except Exception as e:
+            pass
+
+    # 兜底
+    if not us:
+        from backend.config import data_config
+        us = data_config.US_TICKERS
+        hk = data_config.HK_TICKERS
+
     return {
-        "all": info,
+        "all": all_info,
         "us_tickers": us,
         "hk_tickers": hk,
-        "count": len(info),
+        "sg_tickers": sg,
+        "au_tickers": au,
+        "nz_tickers": nz,
+        "count": len(all_info),
     }
 
 
