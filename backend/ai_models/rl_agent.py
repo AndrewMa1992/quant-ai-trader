@@ -156,3 +156,103 @@ class TradingRLAgent:
 
     def is_ready(self):
         return self._is_trained
+
+    def predict_signal(
+        self,
+        features: np.ndarray,
+        ticker: str = "",
+        price: float = 0.0,
+        position_pct: float = 0.0,
+    ) -> Dict:
+        """
+        单股票信号推理（轻量级，适用于实时分析）
+
+        Args:
+            features: 特征矩阵 (seq_len, n_features)
+            ticker: 股票代码
+            price: 当前价格
+            position_pct: 当前仓位占比 0~1
+
+        Returns:
+            {signal: buy/sell/hold, strength: 0~1, confidence: 0~1}
+        """
+        if not self._is_trained or features.shape[0] < 30:
+            return {"signal": "neutral", "strength": 0.0, "confidence": 0.0}
+
+        try:
+            # 获取模型期望的观测维度
+            obs_shape = self.model.observation_space.shape[0]
+            n_features = min(features.shape[1], 37)
+
+            recent = features[-20:]
+            trend = (recent[-1, 0] - recent[0, 0]) / (recent[0, 0] + 1e-8)
+            volatility = float(np.std(np.diff(recent[:, 0]) / (recent[:-1, 0] + 1e-8)))
+
+            # 构建状态：复制单股票特征填满整个观测空间
+            # 原模型期望 (n_tickers * feature_dim + n_tickers + 1) 维度
+            # 我们将单股票特征复制 N 次来模拟多股票状态
+            feat_last = recent[-1, :n_features]
+
+            # 计算需要多少个 ticker 的虚拟位置
+            # obs_shape = n_tickers * n_features + n_tickers + 1
+            # => n_tickers = (obs_shape - 1) / (n_features + 1)
+            n_virtual = max(1, (obs_shape - 1) // (n_features + 1))
+
+            state_parts = []
+            for i in range(n_virtual):
+                # 每个虚拟 ticker 的特征做微调（加噪声避免完全相同）
+                noise = np.random.normal(0, 0.01, n_features) if i > 0 else np.zeros(n_features)
+                state_parts.append(feat_last + noise)
+
+            # 仓位部分
+            for i in range(n_virtual):
+                state_parts.append([position_pct if i == 0 else 0.0])
+
+            # 余额比例
+            state_parts.append([1.0 - position_pct])
+
+            state = np.nan_to_num(np.concatenate(state_parts).astype(np.float32))
+
+            # 确保维度匹配
+            if len(state) < obs_shape:
+                state = np.pad(state, (0, obs_shape - len(state)), mode='constant')
+            elif len(state) > obs_shape:
+                state = state[:obs_shape]
+
+            state = np.clip(state, -10, 10)
+
+            # RL 推理
+            action, _states = self.model.predict(state, deterministic=False)
+
+            # 解析动作
+            if isinstance(action, np.ndarray):
+                action_val = float(np.mean(action))
+            else:
+                action_val = float(action)
+
+            # 动作映射：正→buy，负→sell
+            if action_val > 0.05:
+                signal = "buy"
+                strength = min(action_val * 2.0, 1.0)
+                confidence = min(abs(action_val) * 1.5 + 0.3, 1.0)
+            elif action_val < -0.05:
+                signal = "sell"
+                strength = min(abs(action_val) * 2.0, 1.0)
+                confidence = min(abs(action_val) * 1.5 + 0.3, 1.0)
+            else:
+                signal = "neutral"
+                strength = 0.0
+                confidence = 0.2
+
+            return {
+                "signal": signal,
+                "strength": float(strength),
+                "confidence": float(confidence),
+                "rl_action": float(action_val),
+                "trend": float(trend),
+                "volatility": float(volatility),
+            }
+
+        except Exception as e:
+            logger.debug(f"RL 推理跳过 ({ticker}): {e}")
+            return {"signal": "neutral", "strength": 0.0, "confidence": 0.0}

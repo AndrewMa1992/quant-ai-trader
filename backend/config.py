@@ -157,8 +157,9 @@ class ModelConfig:
     SENTIMENT_MAX_LENGTH: int = 512
 
     ENSEMBLE_WEIGHTS: dict = field(default_factory=lambda: {
-        "transformer": 0.55, "rl_agent": 0.00,
-        "sentiment": 0.15, "technical": 0.30,
+        "transformer": 0.35, "rl_agent": 0.25,
+        "sentiment": 0.10, "technical": 0.20,
+        "cross_stock": 0.10,
     })
 
     RETRAIN_INTERVAL_DAYS: int = 7
