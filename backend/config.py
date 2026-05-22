@@ -196,6 +196,8 @@ class TradingConfig:
     MIN_CONFIDENCE: float = 0.15
     MIN_TRADE_VALUE: float = 1000.0
     MIN_SHARES: int = 1
+    NO_LEVERAGE: bool = True       # 坚决不使用杠杆：买入金额不超过可用现金
+    MAX_CASH_USAGE: float = 0.95   # 最多使用 95% 现金，预留 5% 缓冲
 
     TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))
     TIGER_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY", ""))

@@ -111,13 +111,13 @@ class PortfolioManager:
 
         total_cost_usd = order_value_usd * (1 + trading_config.COMMISSION_RATE)
 
-        if total_cost_usd > self.cash:
-            adjusted_usd = self.cash * 0.95
-            order_value_local = self._from_usd(adjusted_usd, currency)
-            quantity = order_value_local / price
-            total_cost_usd = quantity * self._to_usd(price, currency) * (1 + trading_config.COMMISSION_RATE)
-            if quantity < trading_config.MIN_SHARES:
-                return None
+        if total_cost_usd > self.cash * trading_config.MAX_CASH_USAGE:
+            logger.warning(
+                f"🚫 无杠杆原则拒绝: {ticker} buy | "
+                f"成本 ${total_cost_usd:,.2f} > 可用 ${self.cash * trading_config.MAX_CASH_USAGE:,.2f} "
+                f"(自有资金 ${self.cash:,.2f} × {trading_config.MAX_CASH_USAGE:.0%}) — 坚决不使用杠杆"
+            )
+            return None
 
         # 更新持仓（avg_cost 存 USD）
         old_shares = self.positions.get(ticker, 0.0)

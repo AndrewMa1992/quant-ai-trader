@@ -154,11 +154,18 @@ class RiskManager:
     # ================================================================
 
     def _check_sufficient_cash(self, order_value: float) -> Dict:
-        """资金检查"""
-        if order_value > self.cash * 1.05:  # 5% 余量
+        """资金检查 — 坚决不使用杠杆"""
+        from backend.config import trading_config
+        max_allowed = self.cash * trading_config.MAX_CASH_USAGE
+        if order_value > max_allowed:
             return {
                 "passed": False,
-                "reason": f"资金不足: 需要 ${order_value:.2f}, 可用 ${self.cash:.2f}"
+                "reason": (
+                    f"🚫 无杠杆原则 — 买入金额 ${order_value:,.2f} "
+                    f"超过可用资金 ${max_allowed:,.2f} "
+                    f"(现金 ${self.cash:,.2f} × {trading_config.MAX_CASH_USAGE:.0%}) — "
+                    f"坚决不使用任何杠杆"
+                )
             }
         return {"passed": True}
 

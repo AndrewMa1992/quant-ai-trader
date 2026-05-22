@@ -65,6 +65,18 @@ class PaperExecutor:
         if decision == "hold":
             return None
 
+        # 坚决不使用杠杆
+        if trading_config.NO_LEVERAGE and side == "buy":
+            max_buy_value = self.portfolio.cash * trading_config.MAX_CASH_USAGE
+            estimated_value = self.portfolio.cash * min(strength, trading_config.MAX_POSITION_SIZE)
+            if estimated_value > max_buy_value:
+                logger.warning(
+                    f"🚫 无杠杆原则拒绝: {ticker} buy | "
+                    f"预估金额 ${estimated_value:,.0f} > 可用 ${max_buy_value:,.0f} "
+                    f"(只使用自有资金，严禁杠杆)"
+                )
+                return None
+
         # 置信度门槛
         if confidence < trading_config.MIN_CONFIDENCE:
             return None
