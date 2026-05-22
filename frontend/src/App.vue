@@ -133,7 +133,7 @@ let dashboardTimer = null
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = location.hostname
-  const port = location.port || '8000'
+  const port = location.port || '8001'
   const wsUrl = `${protocol}//${host}:${port}/ws`
 
   try {

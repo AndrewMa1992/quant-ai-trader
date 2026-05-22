@@ -9,7 +9,7 @@ PROJ_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 from backend.config import DB_PATH
 import sqlite3
 
-BASE = "http://localhost:8000"
+BASE = "http://localhost:8001"
 errors = []
 
 def get(path):
@@ -27,9 +27,9 @@ print("=" * 55)
 # 1. 进程 & 端口
 print("\n1. 进程检查")
 import psutil
-port_8000 = [c for c in psutil.net_connections() if c.laddr.port == 8000 and c.status == 'LISTEN']
+port_8001 = [c for c in psutil.net_connections() if c.laddr.port == 8001 and c.status == 'LISTEN']
 port_5173 = [c for c in psutil.net_connections() if c.laddr.port == 5173 and c.status == 'LISTEN']
-print(f"   Backend :8000: {'✅' if port_8000 else '❌'} {port_8000[0].pid if port_8000 else 'not running'}")
+print(f"   Backend :8001: {'✅' if port_8001 else '❌'} {port_8001[0].pid if port_8001 else 'not running'}")
 print(f"   Frontend:5173: {'✅' if port_5173 else '❌'} {port_5173[0].pid if port_5173 else 'not running'}")
 
 # 2. API 健康检查

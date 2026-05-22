@@ -24,7 +24,7 @@ try {
     # 方法2: 启动文件夹 (不需要管理员)
     $startupDir = [Environment]::GetFolderPath("Startup")
     $lnkPath = Join-Path $startupDir "QuantAITrader.bat"
-    "@echo off`nstart /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --app-dir `"G:\workbuddyspace\quant-ai-trader`"`ncd /d G:\workbuddyspace\quant-ai-trader\frontend`nstart /MIN npm run dev" | Set-Content $lnkPath -Encoding ASCII
+    "@echo off`nstart /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001 --app-dir `"G:\workbuddyspace\quant-ai-trader`"`ncd /d G:\workbuddyspace\quant-ai-trader\frontend`nstart /MIN npm run dev" | Set-Content $lnkPath -Encoding ASCII
     Write-Host "✅ [启动文件夹] 开机启动已设置" -ForegroundColor Green
     Write-Host "   路径: $lnkPath"
 }
@@ -37,8 +37,8 @@ Write-Host ""
 
 # 测试当前状态
 Write-Host "当前服务状态:" -ForegroundColor Yellow
-$b = netstat -ano 2>&1 | Select-String "LISTENING" | Select-String ":8000"
-if ($b) { Write-Host "  Backend :8000 ✅ 已运行" -ForegroundColor Green } else { Write-Host "  Backend :8000 ❌ 未运行" -ForegroundColor Red }
+$b = netstat -ano 2>&1 | Select-String "LISTENING" | Select-String ":8001"
+if ($b) { Write-Host "  Backend :8001 ✅ 已运行" -ForegroundColor Green } else { Write-Host "  Backend :8001 ❌ 未运行" -ForegroundColor Red }
 
 $f = netstat -ano 2>&1 | Select-String "LISTENING" | Select-String ":5173"
 if ($f) { Write-Host "  Frontend:5173 ✅ 已运行" -ForegroundColor Green } else { Write-Host "  Frontend:5173 ❌ 未运行" -ForegroundColor Red }

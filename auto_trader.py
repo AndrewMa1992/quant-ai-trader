@@ -253,7 +253,7 @@ class AutoTrader:
                 },
             }
             requests.post(
-                "http://localhost:8000/api/push/cycle-data",
+                "http://localhost:8001/api/push/cycle-data",
                 json=payload,
                 timeout=5,
             )
