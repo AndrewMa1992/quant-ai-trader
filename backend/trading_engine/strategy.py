@@ -1,6 +1,6 @@
 """
-策略管理器 - 信号生成与策略调度中枢
-整合 AI 模型、技术指标、情绪分析生成统一交易信号
+策略管理器 - 信号生成与策略调度中枢 (v3 - GNN + RL Enhanced)
+整合 AI 模型、技术指标、情绪分析、跨股票关联生成统一交易信号
 """
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
@@ -9,7 +9,10 @@ from loguru import logger
 
 from backend.config import model_config
 from backend.data_engine import DataPipeline
-from backend.ai_models import TransformerPredictor, TradingRLAgent, SentimentAnalyzer, SignalEnsemble
+from backend.ai_models import (
+    TransformerPredictor, TradingRLAgent, SentimentAnalyzer,
+    SignalEnsemble, CrossStockCorrelation, cross_stock,
+)
 from backend.trading_engine.executor import PaperExecutor
 
 pipeline = DataPipeline()
@@ -53,7 +56,7 @@ class TradingStrategy:
         prices: Dict[str, float],
     ) -> Dict:
         """
-        执行一次完整的分析交易循环
+        执行一次完整的分析交易循环 (v3 Enhanced)
 
         Args:
             tickers: 股票列表
@@ -71,11 +74,15 @@ class TradingStrategy:
             "trades": [],
         }
 
+        # 0. 跨股票关联分析（一次性计算，所有股票共享）
+        features_dict = {t: data_dict[t]["features"] for t in tickers if t in data_dict}
+        cross_stock.compute_sector_momentum(tickers, features_dict)
+
         for ticker in tickers:
             if ticker not in data_dict or ticker not in prices:
                 continue
 
-            signal = self._analyze_single_ticker(ticker, data_dict, prices)
+            signal = self._analyze_single_ticker(ticker, data_dict, prices, tickers, features_dict)
             if signal:
                 results["signals"][ticker] = signal
                 self.last_signals[ticker] = signal
@@ -94,19 +101,20 @@ class TradingStrategy:
         ticker: str,
         data_dict: Dict[str, Dict],
         prices: Dict[str, float],
+        all_tickers: List[str] = None,
+        features_dict: Dict[str, np.ndarray] = None,
     ) -> Optional[Dict]:
-        """分析单只股票"""
+        """分析单只股票 (v3: RL + GNN cross-stock enhanced)"""
         features = data_dict.get(ticker, {}).get("features")
         if features is None:
             return None
 
-        # 收集各模型信号
+        price = prices.get(ticker, 0.0)
         signals = {}
 
         # 1. Transformer 预测信号
         if self.transformer.is_ready() and len(features) >= model_config.TRANSFORMER_LOOKBACK:
             try:
-                # 取最近 seq_len 天
                 input_seq = features[-model_config.TRANSFORMER_LOOKBACK:]
                 if input_seq.shape[0] == model_config.TRANSFORMER_LOOKBACK:
                     pred = self.transformer.predict(input_seq)
@@ -119,31 +127,48 @@ class TradingStrategy:
             except Exception as e:
                 logger.warning(f"⚠️ {ticker} Transformer 预测失败: {e}")
 
-        # 2. 技术指标信号
+        # 2. RL Agent 信号（v3: 已启用，单股推理）
+        if self.rl_agent.is_ready() and len(features) >= 30:
+            try:
+                from backend.trading_engine.portfolio import PortfolioManager
+                pos_pct = 0.0
+                rl_signal = self.rl_agent.predict_signal(
+                    features=features,
+                    ticker=ticker,
+                    price=price,
+                    position_pct=pos_pct,
+                )
+                if rl_signal.get("confidence", 0) > 0:
+                    signals["rl_agent"] = rl_signal
+            except Exception as e:
+                logger.debug(f"⚠️ {ticker} RL 推理跳过: {e}")
+
+        # 3. 跨股票关联信号（GNN 轻量版）
+        if all_tickers and features_dict:
+            try:
+                cs = cross_stock.get_cross_stock_signal(ticker, all_tickers, features_dict)
+                if cs.get("strength", 0) > 0 or cs.get("boost_factor", 1.0) != 1.0:
+                    signals["cross_stock"] = cs
+            except Exception as e:
+                logger.debug(f"⚠️ {ticker} 跨股票分析跳过: {e}")
+
+        # 4. 技术指标信号
         tech_signal = self._generate_technical_signal(features)
         signals["technical"] = tech_signal
 
-        # 3. 情绪信号
+        # 5. 情绪信号
         sentiment_signal = self.sentiment.get_signal(ticker)
         signals["sentiment"] = sentiment_signal
 
-        # 4. RL Agent 信号
-        if self.rl_agent.is_ready():
-            try:
-                state = self._build_rl_state(features, ticker, prices)
-                rl_action, _ = self.rl_agent.predict(state)
-                signals["rl_agent"] = {
-                    "actions": rl_action.tolist() if hasattr(rl_action, "tolist") else [float(rl_action)],
-                    "confidence": 0.6,
-                }
-            except Exception as e:
-                logger.warning(f"⚠️ {ticker} RL 预测失败: {e}")
-
-        # 信号融合
+        # 信号融合（带跨股票增强因子）
         if not signals:
             return None
 
-        fused = self.ensemble.fuse_signals(signals)
+        cross_stock_boost = 1.0
+        if "cross_stock" in signals:
+            cross_stock_boost = signals["cross_stock"].get("boost_factor", 1.0)
+
+        fused = self.ensemble.fuse_signals(signals, cross_stock_boost)
 
         return {
             "decision": fused["decision"],
@@ -176,11 +201,14 @@ class TradingStrategy:
         return signal
 
     def _build_rl_state(self, features: np.ndarray, ticker: str, prices: Dict[str, float]) -> np.ndarray:
-        """构建 RL 状态"""
-        flat = features.flatten()[-1000:] if len(features.flatten()) > 1000 else features.flatten()
+        """构建 RL 状态（仅用数值特征，过滤非数值）"""
+        flat = features.flatten()
+        # 只保留纯数值，过滤任何字符串或 NaN
+        flat = pd.Series(flat[pd.notna(flat)]).apply(lambda x: float(x) if isinstance(x, (int, float, np.number)) else np.nan).dropna().values
+        flat = flat[-1000:] if len(flat) > 1000 else flat
         state = np.concatenate([
             flat,
-            [prices.get(ticker, 0.0)],
+            [float(prices.get(ticker, 0.0))],
         ])
         return state.astype(np.float32)
 

@@ -53,6 +53,21 @@ MARKET_CONFIGS = {
         "open": "09:30", "close": "16:00",
         "currency": "HKD",
     },
+    "SG": {
+        "timezone": "Asia/Singapore",
+        "open": "09:00", "close": "17:00",
+        "currency": "SGD",
+    },
+    "AU": {
+        "timezone": "Australia/Sydney",
+        "open": "10:00", "close": "16:00",
+        "currency": "AUD",
+    },
+    "NZ": {
+        "timezone": "Pacific/Auckland",
+        "open": "10:00", "close": "16:45",
+        "currency": "NZD",
+    },
 }
 
 
@@ -70,12 +85,25 @@ class DataConfig:
         "00700", "09988", "03690", "09999",
         "01810", "00941", "00883", "01299",
     ])
+    SG_TICKERS: List[str] = field(default_factory=lambda: [
+        "D05.SI", "O39.SI", "U11.SI", "Z74.SI",
+        "C52.SI", "C6L.SI", "S58.SI", "BS6.SI",
+    ])
+    AU_TICKERS: List[str] = field(default_factory=lambda: [
+        "BHP.AX", "CBA.AX", "CSL.AX", "NAB.AX",
+        "WBC.AX", "ANZ.AX", "MQG.AX", "WES.AX",
+    ])
+    NZ_TICKERS: List[str] = field(default_factory=lambda: [
+        "FPH.NZ", "AIA.NZ", "MEL.NZ", "SPK.NZ",
+        "ATM.NZ", "MCY.NZ", "IFT.NZ", "EBO.NZ",
+    ])
 
     @property
     def ALL_TICKERS(self):
         _hk_map = {"00700":"0700","09988":"9988","03690":"3690","09999":"9999",
                    "01810":"1810","00941":"0941","00883":"0883","01299":"1299"}
-        return self.US_TICKERS + [f"{_hk_map.get(t,t)}.HK" for t in self.HK_TICKERS]
+        return self.US_TICKERS + [f"{_hk_map.get(t,t)}.HK" for t in self.HK_TICKERS] \
+               + self.SG_TICKERS + self.AU_TICKERS + self.NZ_TICKERS
 
     @property
     def TICKER_INFO(self):
@@ -86,6 +114,12 @@ class DataConfig:
             result.append({"symbol": t, "name": t, "market": "US", "currency": "USD"})
         for t in self.HK_TICKERS:
             result.append({"symbol": f"{_hk_map.get(t,t)}.HK", "name": t, "market": "HK", "currency": "HKD"})
+        for t in self.SG_TICKERS:
+            result.append({"symbol": t, "name": t.replace(".SI",""), "market": "SG", "currency": "SGD"})
+        for t in self.AU_TICKERS:
+            result.append({"symbol": t, "name": t.replace(".AX",""), "market": "AU", "currency": "AUD"})
+        for t in self.NZ_TICKERS:
+            result.append({"symbol": t, "name": t.replace(".NZ",""), "market": "NZ", "currency": "NZD"})
         return result
 
     BENCHMARK: str = "SPY"
@@ -123,8 +157,9 @@ class ModelConfig:
     SENTIMENT_MAX_LENGTH: int = 512
 
     ENSEMBLE_WEIGHTS: dict = field(default_factory=lambda: {
-        "transformer": 0.35, "rl_agent": 0.35,
-        "sentiment": 0.15, "technical": 0.15,
+        "transformer": 0.35, "rl_agent": 0.25,
+        "sentiment": 0.10, "technical": 0.20,
+        "cross_stock": 0.10,
     })
 
     RETRAIN_INTERVAL_DAYS: int = 7
@@ -137,18 +172,30 @@ class ModelConfig:
 # ============================================================
 @dataclass
 class TradingConfig:
-    INITIAL_CAPITAL: float = 100000.0
+    INITIAL_CAPITAL: float = 1_000_000.0
     BASE_CURRENCY: str = "USD"
     SIMULATION_MODE: bool = True
 
-    MAX_POSITION_SIZE: float = 0.25
-    MAX_PORTFOLIO_RISK: float = 0.02
+    # Multi-currency conversion rates to USD
+    CURRENCY_RATES: dict = field(default_factory=lambda: {
+        "USD": 1.0,
+        "HKD": 0.128,   # 1 HKD ≈ 0.128 USD
+        "SGD": 0.75,    # 1 SGD ≈ 0.75 USD
+        "AUD": 0.67,    # 1 AUD ≈ 0.67 USD
+        "NZD": 0.62,    # 1 NZD ≈ 0.62 USD
+    })
+
+    MAX_POSITION_SIZE: float = 0.20
+    MAX_PORTFOLIO_RISK: float = 0.03
     STOP_LOSS_PCT: float = 0.05
     TAKE_PROFIT_PCT: float = 0.15
-    MAX_DRAWDOWN: float = 0.20
+    MAX_DRAWDOWN: float = 0.25
     VAR_CONFIDENCE: float = 0.95
     COMMISSION_RATE: float = 0.001
     SLIPPAGE: float = 0.0005
+    MIN_CONFIDENCE: float = 0.15
+    MIN_TRADE_VALUE: float = 1000.0
+    MIN_SHARES: int = 1
 
     TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))
     TIGER_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY", ""))

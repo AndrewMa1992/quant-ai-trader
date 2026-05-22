@@ -1,0 +1,5010 @@
+{
+  "last_update": "2026-05-22T18:20:36.926787",
+  "us_count": 186,
+  "hk_count": 157,
+  "sg_count": 97,
+  "au_count": 30,
+  "nz_count": 30,
+  "stocks": [
+    {
+      "ticker": "HD",
+      "name": "Home Depot, Inc. (The)",
+      "market_cap": 312533549056,
+      "avg_volume": 4378923,
+      "price": 313.78,
+      "volatility": 0.26905524423135974,
+      "beta": 0.999,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "SLB",
+      "name": "SLB Limited",
+      "market_cap": 85592047616,
+      "avg_volume": 16365807,
+      "price": 57.25,
+      "volatility": 0.2768817727244039,
+      "beta": 0.731,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "BABA",
+      "name": "Alibaba Group Holding Limited",
+      "market_cap": 315414151168,
+      "avg_volume": 11422620,
+      "price": 131.47,
+      "volatility": 0.5164854201058451,
+      "beta": 0.494,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "XOM",
+      "name": "Exxon Mobil Corporation",
+      "market_cap": 643668836352,
+      "avg_volume": 21109300,
+      "price": 155.29,
+      "volatility": 0.3228180889484526,
+      "beta": 0.183,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "CVX",
+      "name": "Chevron Corporation",
+      "market_cap": 380415049728,
+      "avg_volume": 12165676,
+      "price": 191.01,
+      "volatility": 0.2685631435394754,
+      "beta": 0.501,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "ISRG",
+      "name": "Intuitive Surgical, Inc.",
+      "market_cap": 155760820224,
+      "avg_volume": 1984515,
+      "price": 439.8,
+      "volatility": 0.3503258442358522,
+      "beta": 1.509,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "ZTS",
+      "name": "Zoetis Inc.",
+      "market_cap": 33567596544,
+      "avg_volume": 5387953,
+      "price": 80.07,
+      "volatility": 0.8266755366573837,
+      "beta": 0.863,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "DDOG",
+      "name": "Datadog, Inc.",
+      "market_cap": 77613555712,
+      "avg_volume": 5544601,
+      "price": 218.04,
+      "volatility": 1.120282207035339,
+      "beta": 1.295,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "NFLX",
+      "name": "Netflix, Inc.",
+      "market_cap": 376024334336,
+      "avg_volume": 43924892,
+      "price": 89.3,
+      "volatility": 0.24342323271129016,
+      "beta": 1.548,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "JNJ",
+      "name": "Johnson & Johnson",
+      "market_cap": 557824344064,
+      "avg_volume": 7843184,
+      "price": 231.73,
+      "volatility": 0.18919258540501874,
+      "beta": 0.263,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "CRWD",
+      "name": "CrowdStrike Holdings, Inc.",
+      "market_cap": 164998201344,
+      "avg_volume": 3966890,
+      "price": 648.23,
+      "volatility": 0.43955489497490774,
+      "beta": 1.06,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TJX",
+      "name": "TJX Companies, Inc. (The)",
+      "market_cap": 174121517056,
+      "avg_volume": 4966225,
+      "price": 157.46,
+      "volatility": 0.2648962022497217,
+      "beta": 0.637,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "LOW",
+      "name": "Lowe's Companies, Inc.",
+      "market_cap": 121967009792,
+      "avg_volume": 2782004,
+      "price": 217.41,
+      "volatility": 0.2837365507105607,
+      "beta": 0.904,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "KMB",
+      "name": "Kimberly-Clark Corporation",
+      "market_cap": 32772472832,
+      "avg_volume": 4788584,
+      "price": 98.73,
+      "volatility": 0.22435401659768855,
+      "beta": 0.31,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "DE",
+      "name": "Deere & Company",
+      "market_cap": 143521497088,
+      "avg_volume": 1260569,
+      "price": 531.35,
+      "volatility": 0.3811135766120199,
+      "beta": 0.969,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "HPE",
+      "name": "Hewlett Packard Enterprise Comp",
+      "market_cap": 45073235968,
+      "avg_volume": 17295069,
+      "price": 33.97,
+      "volatility": 0.4630705313316534,
+      "beta": 1.295,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "CI",
+      "name": "The Cigna Group",
+      "market_cap": 74603421696,
+      "avg_volume": 1687534,
+      "price": 282.02,
+      "volatility": 0.3049845999462689,
+      "beta": 0.313,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "ZM",
+      "name": "Zoom Communications, Inc.",
+      "market_cap": 28516243456,
+      "avg_volume": 4792580,
+      "price": 96.75,
+      "volatility": 0.466207679198089,
+      "beta": 1.003,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "UNH",
+      "name": "UnitedHealth Group Incorporated",
+      "market_cap": 347347058688,
+      "avg_volume": 8446563,
+      "price": 382.48,
+      "volatility": 0.22523353460598716,
+      "beta": 0.646,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "PFE",
+      "name": "Pfizer, Inc.",
+      "market_cap": 147900579840,
+      "avg_volume": 37547368,
+      "price": 25.95,
+      "volatility": 0.14887048673312195,
+      "beta": 0.305,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "BP",
+      "name": "BP p.l.c.",
+      "market_cap": 115540123648,
+      "avg_volume": 13666546,
+      "price": 44.87,
+      "volatility": 0.2587356954622159,
+      "beta": -0.219,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "PYPL",
+      "name": "PayPal Holdings, Inc.",
+      "market_cap": 39077273600,
+      "avg_volume": 18301061,
+      "price": 44.3,
+      "volatility": 0.32312672287157923,
+      "beta": 1.395,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "REGN",
+      "name": "Regeneron Pharmaceuticals, Inc.",
+      "market_cap": 67368517632,
+      "avg_volume": 753441,
+      "price": 642.59,
+      "volatility": 0.4787029672854967,
+      "beta": 0.296,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "ROK",
+      "name": "Rockwell Automation, Inc.",
+      "market_cap": 48988356608,
+      "avg_volume": 878939,
+      "price": 440.25,
+      "volatility": 0.4470855121224933,
+      "beta": 1.557,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "AVGO",
+      "name": "Broadcom Inc.",
+      "market_cap": 1962851434496,
+      "avg_volume": 23906141,
+      "price": 414.57,
+      "volatility": 0.39561824335237084,
+      "beta": 1.44,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "MU",
+      "name": "Micron Technology, Inc.",
+      "market_cap": 859446050816,
+      "avg_volume": 45507795,
+      "price": 762.1,
+      "volatility": 0.8853311591400572,
+      "beta": 1.919,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "COP",
+      "name": "ConocoPhillips",
+      "market_cap": 146865340416,
+      "avg_volume": 9476022,
+      "price": 120.55,
+      "volatility": 0.3316919070723707,
+      "beta": 0.149,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "AXP",
+      "name": "American Express Company",
+      "market_cap": 211316506624,
+      "avg_volume": 3690098,
+      "price": 309.7,
+      "volatility": 0.2257054822491863,
+      "beta": 1.084,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "TSLA",
+      "name": "Tesla, Inc.",
+      "market_cap": 1569329250304,
+      "avg_volume": 62062252,
+      "price": 417.85,
+      "volatility": 0.4041028954905832,
+      "beta": 1.793,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "ADSK",
+      "name": "Autodesk, Inc.",
+      "market_cap": 50714976256,
+      "avg_volume": 2037634,
+      "price": 240.19,
+      "volatility": 0.37316015326765534,
+      "beta": 1.322,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AIG",
+      "name": "American International Group, I",
+      "market_cap": 41684811776,
+      "avg_volume": 4292277,
+      "price": 78.62,
+      "volatility": 0.2598195100674523,
+      "beta": 0.541,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "BAC",
+      "name": "Bank of America Corporation",
+      "market_cap": 365403471872,
+      "avg_volume": 39035071,
+      "price": 51.49,
+      "volatility": 0.2038676043404874,
+      "beta": 1.221,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "market_cap": 4479496749056,
+      "avg_volume": 43669777,
+      "price": 304.99,
+      "volatility": 0.18832887889366082,
+      "beta": 1.065,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "MCD",
+      "name": "McDonald's Corporation",
+      "market_cap": 201911549952,
+      "avg_volume": 3492866,
+      "price": 284.18,
+      "volatility": 0.20933621456340937,
+      "beta": 0.436,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "VRTX",
+      "name": "Vertex Pharmaceuticals Incorpor",
+      "market_cap": 110034804736,
+      "avg_volume": 1288555,
+      "price": 433.54,
+      "volatility": 0.21341282978197942,
+      "beta": 0.301,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "HCA",
+      "name": "HCA Healthcare, Inc.",
+      "market_cap": 87085432832,
+      "avg_volume": 1201544,
+      "price": 392.56,
+      "volatility": 0.39055844441984333,
+      "beta": 1.19,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "GILD",
+      "name": "Gilead Sciences, Inc.",
+      "market_cap": 162024882176,
+      "avg_volume": 6108436,
+      "price": 130.5,
+      "volatility": 0.21646019477884845,
+      "beta": 0.332,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "C",
+      "name": "Citigroup, Inc.",
+      "market_cap": 213572354048,
+      "avg_volume": 13583460,
+      "price": 125.22,
+      "volatility": 0.2310172486936013,
+      "beta": 1.124,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "LUV",
+      "name": "Southwest Airlines Company",
+      "market_cap": 19932192768,
+      "avg_volume": 8323433,
+      "price": 40.78,
+      "volatility": 0.45386548737709087,
+      "beta": 1.113,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "ULTA",
+      "name": "Ulta Beauty, Inc.",
+      "market_cap": 22045448192,
+      "avg_volume": 741844,
+      "price": 504.05,
+      "volatility": 0.283559956589577,
+      "beta": 0.891,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "SBUX",
+      "name": "Starbucks Corporation",
+      "market_cap": 118676955136,
+      "avg_volume": 7684717,
+      "price": 104.13,
+      "volatility": 0.33153039440188187,
+      "beta": 1.009,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "SPG",
+      "name": "Simon Property Group, Inc.",
+      "market_cap": 77857824768,
+      "avg_volume": 1527260,
+      "price": 204.9,
+      "volatility": 0.2040294593995918,
+      "beta": 1.363,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "CMCSA",
+      "name": "Comcast Corporation",
+      "market_cap": 89591496704,
+      "avg_volume": 32365346,
+      "price": 25.08,
+      "volatility": 0.5628535663179534,
+      "beta": 0.689,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "SBAC",
+      "name": "SBA Communications Corporation",
+      "market_cap": 22068533248,
+      "avg_volume": 1193146,
+      "price": 208.07,
+      "volatility": 0.26526022911898156,
+      "beta": 1.024,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "CL",
+      "name": "Colgate-Palmolive Company",
+      "market_cap": 72369127424,
+      "avg_volume": 5918231,
+      "price": 90.44,
+      "volatility": 0.195336879264541,
+      "beta": 0.304,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "META",
+      "name": "Meta Platforms, Inc.",
+      "market_cap": 1541787615232,
+      "avg_volume": 15316147,
+      "price": 607.38,
+      "volatility": 0.3503884034111545,
+      "beta": 1.243,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "ETN",
+      "name": "Eaton Corporation, PLC",
+      "market_cap": 148140343296,
+      "avg_volume": 2635123,
+      "price": 381.51,
+      "volatility": 0.4451707920190945,
+      "beta": 1.24,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "SONY",
+      "name": "Sony Group Corporation",
+      "market_cap": 133285855232,
+      "avg_volume": 6229053,
+      "price": 22.56,
+      "volatility": 0.3755866899856395,
+      "beta": 0.719,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AMD",
+      "name": "Advanced Micro Devices, Inc.",
+      "market_cap": 733101686784,
+      "avg_volume": 38788373,
+      "price": 449.59,
+      "volatility": 1.0146328738682868,
+      "beta": 2.399,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TMO",
+      "name": "Thermo Fisher Scientific Inc",
+      "market_cap": 166995542016,
+      "avg_volume": 2143182,
+      "price": 449.37,
+      "volatility": 0.39652496503407403,
+      "beta": 0.883,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "DG",
+      "name": "Dollar General Corporation",
+      "market_cap": 23147988992,
+      "avg_volume": 3392704,
+      "price": 105.11,
+      "volatility": 0.3901365121258064,
+      "beta": 0.282,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "CAT",
+      "name": "Caterpillar, Inc.",
+      "market_cap": 398849605632,
+      "avg_volume": 2536826,
+      "price": 865.95,
+      "volatility": 0.4776517799386566,
+      "beta": 1.625,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "KLAC",
+      "name": "KLA Corporation",
+      "market_cap": 240639410176,
+      "avg_volume": 986192,
+      "price": 1842.18,
+      "volatility": 0.5321503943892294,
+      "beta": 1.501,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TWLO",
+      "name": "Twilio Inc.",
+      "market_cap": 27820148736,
+      "avg_volume": 2425626,
+      "price": 183.3,
+      "volatility": 0.9317046405933747,
+      "beta": 1.32,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "BILI",
+      "name": "Bilibili Inc.",
+      "market_cap": 7324331520,
+      "avg_volume": 2862082,
+      "price": 17.58,
+      "volatility": 0.5718727624763068,
+      "beta": 0.79,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "INTC",
+      "name": "Intel Corporation",
+      "market_cap": 595581009920,
+      "avg_volume": 117614917,
+      "price": 118.5,
+      "volatility": 1.1876042230305932,
+      "beta": 2.19,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "MRVL",
+      "name": "Marvell Technology, Inc.",
+      "market_cap": 166959235072,
+      "avg_volume": 25073322,
+      "price": 190.69,
+      "volatility": 0.6601822544461173,
+      "beta": 2.251,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TRV",
+      "name": "The Travelers Companies, Inc.",
+      "market_cap": 65330831360,
+      "avg_volume": 1435326,
+      "price": 307.23,
+      "volatility": 0.18306360990314996,
+      "beta": 0.512,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "AMAT",
+      "name": "Applied Materials, Inc.",
+      "market_cap": 339157090304,
+      "avg_volume": 6813798,
+      "price": 427.36,
+      "volatility": 0.5381346928703755,
+      "beta": 1.654,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TME",
+      "name": "Tencent Music Entertainment Gro",
+      "market_cap": 14981055488,
+      "avg_volume": 10800042,
+      "price": 9.15,
+      "volatility": 0.42116057490741504,
+      "beta": 0.782,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc.",
+      "market_cap": 4696673091584,
+      "avg_volume": 28738885,
+      "price": 387.66,
+      "volatility": 0.4143634789582923,
+      "beta": 1.267,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "ADI",
+      "name": "Analog Devices, Inc.",
+      "market_cap": 187143700480,
+      "avg_volume": 3815431,
+      "price": 384.21,
+      "volatility": 0.39538251597625934,
+      "beta": 1.194,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "BMY",
+      "name": "Bristol-Myers Squibb Company",
+      "market_cap": 121605341184,
+      "avg_volume": 11649165,
+      "price": 59.55,
+      "volatility": 0.2761276837345053,
+      "beta": 0.259,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "OKTA",
+      "name": "Okta, Inc.",
+      "market_cap": 15682987008,
+      "avg_volume": 3706693,
+      "price": 89.44,
+      "volatility": 0.42093118946889907,
+      "beta": 0.592,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "RNG",
+      "name": "Ringcentral, Inc.",
+      "market_cap": 3540510464,
+      "avg_volume": 2030436,
+      "price": 42.22,
+      "volatility": 0.7410517196103403,
+      "beta": 1.132,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "HUM",
+      "name": "Humana Inc.",
+      "market_cap": 36460277760,
+      "avg_volume": 1811573,
+      "price": 303.68,
+      "volatility": 0.5351778424878025,
+      "beta": 0.683,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "LI",
+      "name": "Li Auto Inc.",
+      "market_cap": 16500615168,
+      "avg_volume": 3414909,
+      "price": 16.2,
+      "volatility": 0.5257041070577126,
+      "beta": 0.618,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "MRK",
+      "name": "Merck & Company, Inc.",
+      "market_cap": 286203248640,
+      "avg_volume": 9527176,
+      "price": 115.88,
+      "volatility": 0.22289404033334984,
+      "beta": 0.195,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "BA",
+      "name": "Boeing Company (The)",
+      "market_cap": 173119078400,
+      "avg_volume": 6882565,
+      "price": 219.61,
+      "volatility": 0.34889511327256684,
+      "beta": 1.207,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "HPQ",
+      "name": "HP Inc.",
+      "market_cap": 20103860224,
+      "avg_volume": 18221395,
+      "price": 21.9,
+      "volatility": 0.4230278758296317,
+      "beta": 1.108,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AVB",
+      "name": "AvalonBay Communities, Inc.",
+      "market_cap": 26120065024,
+      "avg_volume": 1036073,
+      "price": 184.11,
+      "volatility": 0.24972695128284486,
+      "beta": 0.798,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "FDX",
+      "name": "FedEx Corporation",
+      "market_cap": 92796551168,
+      "avg_volume": 1758449,
+      "price": 388.91,
+      "volatility": 0.4402968650814706,
+      "beta": 1.303,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "NTAP",
+      "name": "NetApp, Inc.",
+      "market_cap": 24548589568,
+      "avg_volume": 2292322,
+      "price": 123.945,
+      "volatility": 0.2888601360730672,
+      "beta": 1.267,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "BDX",
+      "name": "Becton, Dickinson and Company",
+      "market_cap": 40297787392,
+      "avg_volume": 2901585,
+      "price": 146.25,
+      "volatility": 0.3706795820492753,
+      "beta": 0.285,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "ASML",
+      "name": "ASML Holding N.V. - New York Re",
+      "market_cap": 613584928768,
+      "avg_volume": 1727644,
+      "price": 1592.0,
+      "volatility": 0.5470979490392512,
+      "beta": 1.373,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "SHOP",
+      "name": "Shopify Inc.",
+      "market_cap": 136072069120,
+      "avg_volume": 10294341,
+      "price": 104.86,
+      "volatility": 0.7513058659510302,
+      "beta": 2.644,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "NET",
+      "name": "Cloudflare, Inc.",
+      "market_cap": 75164590080,
+      "avg_volume": 4396776,
+      "price": 212.65,
+      "volatility": 0.9898512352346995,
+      "beta": 1.673,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TFC",
+      "name": "Truist Financial Corporation",
+      "market_cap": 59665145856,
+      "avg_volume": 8750669,
+      "price": 47.89,
+      "volatility": 0.2383793190317271,
+      "beta": 0.906,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "MS",
+      "name": "Morgan Stanley",
+      "market_cap": 316261367808,
+      "avg_volume": 6466103,
+      "price": 200.51,
+      "volatility": 0.24714829975511612,
+      "beta": 1.207,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "HON",
+      "name": "Honeywell International Inc.",
+      "market_cap": 141811564544,
+      "avg_volume": 3889765,
+      "price": 223.8,
+      "volatility": 0.25924680493241314,
+      "beta": 0.811,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "DAL",
+      "name": "Delta Air Lines, Inc.",
+      "market_cap": 49701625856,
+      "avg_volume": 11451806,
+      "price": 75.65,
+      "volatility": 0.43521934786358923,
+      "beta": 1.252,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "ZS",
+      "name": "Zscaler, Inc.",
+      "market_cap": 27496816640,
+      "avg_volume": 3176369,
+      "price": 171.01,
+      "volatility": 0.6414835455580884,
+      "beta": 0.962,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TXN",
+      "name": "Texas Instruments Incorporated",
+      "market_cap": 271562604544,
+      "avg_volume": 7197468,
+      "price": 298.39,
+      "volatility": 0.7360897714308927,
+      "beta": 1.298,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "WMT",
+      "name": "Walmart Inc.",
+      "market_cap": 967199948800,
+      "avg_volume": 19111355,
+      "price": 121.34,
+      "volatility": 0.3373205080975139,
+      "beta": 0.652,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "ABBV",
+      "name": "AbbVie Inc.",
+      "market_cap": 378977058816,
+      "avg_volume": 6710538,
+      "price": 214.5,
+      "volatility": 0.2381271028758071,
+      "beta": 0.305,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "COF",
+      "name": "Capital One Financial Corporati",
+      "market_cap": 116157177856,
+      "avg_volume": 4956273,
+      "price": 186.66,
+      "volatility": 0.24718981933630732,
+      "beta": 1.05,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "MDB",
+      "name": "MongoDB, Inc.",
+      "market_cap": 25558728704,
+      "avg_volume": 1967955,
+      "price": 317.5,
+      "volatility": 0.5822216848757816,
+      "beta": 1.486,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "PEP",
+      "name": "Pepsico, Inc.",
+      "market_cap": 203469160448,
+      "avg_volume": 6332736,
+      "price": 148.85,
+      "volatility": 0.20194367932581198,
+      "beta": 0.394,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "BIDU",
+      "name": "Baidu, Inc.",
+      "market_cap": 44634341376,
+      "avg_volume": 2322258,
+      "price": 131.18,
+      "volatility": 0.6722445729849957,
+      "beta": 0.524,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "GE",
+      "name": "GE Aerospace",
+      "market_cap": 315287797760,
+      "avg_volume": 5951073,
+      "price": 301.76,
+      "volatility": 0.3869926962427733,
+      "beta": 1.352,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "LRCX",
+      "name": "Lam Research Corporation",
+      "market_cap": 377972555776,
+      "avg_volume": 9924363,
+      "price": 302.24,
+      "volatility": 0.5847256793663407,
+      "beta": 1.819,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "SCHW",
+      "name": "Charles Schwab Corporation (The",
+      "market_cap": 157235249152,
+      "avg_volume": 10271220,
+      "price": 90.41,
+      "volatility": 0.24640599404171515,
+      "beta": 0.797,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "EW",
+      "name": "Edwards Lifesciences Corporatio",
+      "market_cap": 47906557952,
+      "avg_volume": 4920030,
+      "price": 83.2,
+      "volatility": 0.33851570890785404,
+      "beta": 0.872,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "ROST",
+      "name": "Ross Stores, Inc.",
+      "market_cap": 70249005056,
+      "avg_volume": 2665073,
+      "price": 217.19,
+      "volatility": 0.2499629581918239,
+      "beta": 0.875,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "CMG",
+      "name": "Chipotle Mexican Grill, Inc.",
+      "market_cap": 42073673728,
+      "avg_volume": 15874412,
+      "price": 32.8,
+      "volatility": 0.3325316073997923,
+      "beta": 1.03,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "KO",
+      "name": "Coca-Cola Company (The)",
+      "market_cap": 349232496640,
+      "avg_volume": 15396593,
+      "price": 81.17,
+      "volatility": 0.18322569968562438,
+      "beta": 0.356,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "AFL",
+      "name": "AFLAC Incorporated",
+      "market_cap": 59963510784,
+      "avg_volume": 2283850,
+      "price": 117.81,
+      "volatility": 0.15149412915736316,
+      "beta": 0.619,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "TGT",
+      "name": "Target Corporation",
+      "market_cap": 57294442496,
+      "avg_volume": 5899228,
+      "price": 126.15,
+      "volatility": 0.3536370596440065,
+      "beta": 1.011,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "ITW",
+      "name": "Illinois Tool Works Inc.",
+      "market_cap": 71904862208,
+      "avg_volume": 1332495,
+      "price": 249.93,
+      "volatility": 0.20940539340685516,
+      "beta": 1.055,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "DLR",
+      "name": "Digital Realty Trust, Inc.",
+      "market_cap": 69490196480,
+      "avg_volume": 2008846,
+      "price": 194.27,
+      "volatility": 0.2304587859112938,
+      "beta": 1.08,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "DOCU",
+      "name": "DocuSign, Inc.",
+      "market_cap": 9514449920,
+      "avg_volume": 4381073,
+      "price": 48.97,
+      "volatility": 0.4407387049492184,
+      "beta": 0.883,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "MA",
+      "name": "Mastercard Incorporated",
+      "market_cap": 441456164864,
+      "avg_volume": 3625301,
+      "price": 499.62,
+      "volatility": 0.27031708872707577,
+      "beta": 0.759,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "TSM",
+      "name": "Taiwan Semiconductor Manufactur",
+      "market_cap": 2111672811520,
+      "avg_volume": 13763642,
+      "price": 407.15,
+      "volatility": 0.40991034839707235,
+      "beta": 1.264,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "MMM",
+      "name": "3M Company",
+      "market_cap": 79069601792,
+      "avg_volume": 3927773,
+      "price": 151.6,
+      "volatility": 0.2735173629764219,
+      "beta": 1.09,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "V",
+      "name": "Visa Inc.",
+      "market_cap": 629705408512,
+      "avg_volume": 7420620,
+      "price": 331.12,
+      "volatility": 0.3320930466579313,
+      "beta": 0.784,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "MDLZ",
+      "name": "Mondelez International, Inc.",
+      "market_cap": 78944460800,
+      "avg_volume": 8899436,
+      "price": 61.5,
+      "volatility": 0.21291218614873697,
+      "beta": 0.404,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "PNC",
+      "name": "PNC Financial Services Group, I",
+      "market_cap": 87689666560,
+      "avg_volume": 2298957,
+      "price": 218.37,
+      "volatility": 0.20316226948354518,
+      "beta": 0.93,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "VZ",
+      "name": "Verizon Communications Inc.",
+      "market_cap": 201554231296,
+      "avg_volume": 25097177,
+      "price": 48.27,
+      "volatility": 0.21790347158318338,
+      "beta": 0.224,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "INTU",
+      "name": "Intuit Inc.",
+      "market_cap": 83995009024,
+      "avg_volume": 3923919,
+      "price": 307.07,
+      "volatility": 0.8286934842241579,
+      "beta": 1.035,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "LULU",
+      "name": "lululemon athletica inc.",
+      "market_cap": 15154273280,
+      "avg_volume": 2940787,
+      "price": 126.76,
+      "volatility": 0.5719091463380012,
+      "beta": 0.899,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "LMT",
+      "name": "Lockheed Martin Corporation",
+      "market_cap": 120536350720,
+      "avg_volume": 1556009,
+      "price": 522.79,
+      "volatility": 0.2540725469807906,
+      "beta": 0.1,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "MCK",
+      "name": "McKesson Corporation",
+      "market_cap": 92136398848,
+      "avg_volume": 914425,
+      "price": 766.5,
+      "volatility": 0.3240915310420719,
+      "beta": 0.355,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "QCOM",
+      "name": "QUALCOMM Incorporated",
+      "market_cap": 224934150144,
+      "avg_volume": 17789392,
+      "price": 213.41,
+      "volatility": 1.0050902288433332,
+      "beta": 1.493,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "SNOW",
+      "name": "Snowflake Inc.",
+      "market_cap": 57376645120,
+      "avg_volume": 7119434,
+      "price": 165.54,
+      "volatility": 0.5569127908751522,
+      "beta": 1.079,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AMZN",
+      "name": "Amazon.com, Inc.",
+      "market_cap": 2887853539328,
+      "avg_volume": 45528315,
+      "price": 268.46,
+      "volatility": 0.2249138003452737,
+      "beta": 1.468,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "WFC",
+      "name": "Wells Fargo & Company",
+      "market_cap": 232329576448,
+      "avg_volume": 17890912,
+      "price": 75.92,
+      "volatility": 0.2577086580745091,
+      "beta": 0.96,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation",
+      "market_cap": 3113182822400,
+      "avg_volume": 34263476,
+      "price": 419.09,
+      "volatility": 0.2777108493683423,
+      "beta": 1.093,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "PSX",
+      "name": "Phillips 66",
+      "market_cap": 69782740992,
+      "avg_volume": 3168180,
+      "price": 174.05,
+      "volatility": 0.374677118658532,
+      "beta": 0.693,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "COST",
+      "name": "Costco Wholesale Corporation",
+      "market_cap": 466034786304,
+      "avg_volume": 1853876,
+      "price": 1050.45,
+      "volatility": 0.21856088045355387,
+      "beta": 0.908,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "YUM",
+      "name": "Yum! Brands, Inc.",
+      "market_cap": 42533867520,
+      "avg_volume": 1725720,
+      "price": 154.32,
+      "volatility": 0.2501384723975304,
+      "beta": 0.604,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "RTX",
+      "name": "RTX Corporation",
+      "market_cap": 236989333504,
+      "avg_volume": 5711504,
+      "price": 175.98,
+      "volatility": 0.2334714415455599,
+      "beta": 0.301,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "WDAY",
+      "name": "Workday, Inc.",
+      "market_cap": 30424184832,
+      "avg_volume": 5514457,
+      "price": 121.85,
+      "volatility": 0.6175766776488423,
+      "beta": 1.035,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "SNPS",
+      "name": "Synopsys, Inc.",
+      "market_cap": 96543432704,
+      "avg_volume": 1906133,
+      "price": 503.98,
+      "volatility": 0.4140038257782408,
+      "beta": 1.245,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "CCI",
+      "name": "Crown Castle Inc.",
+      "market_cap": 40171040768,
+      "avg_volume": 3205265,
+      "price": 92.04,
+      "volatility": 0.30906370549214474,
+      "beta": 0.949,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "PLD",
+      "name": "Prologis, Inc.",
+      "market_cap": 134844047360,
+      "avg_volume": 3451536,
+      "price": 144.63,
+      "volatility": 0.19673869331035268,
+      "beta": 1.35,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "ICE",
+      "name": "Intercontinental Exchange Inc.",
+      "market_cap": 85669494784,
+      "avg_volume": 3304438,
+      "price": 151.49,
+      "volatility": 0.17141017451936597,
+      "beta": 0.964,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "CSCO",
+      "name": "Cisco Systems, Inc.",
+      "market_cap": 465877565440,
+      "avg_volume": 23005680,
+      "price": 118.2,
+      "volatility": 0.5428574841740795,
+      "beta": 0.912,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "FTNT",
+      "name": "Fortinet, Inc.",
+      "market_cap": 94848663552,
+      "avg_volume": 6179341,
+      "price": 129.46,
+      "volatility": 0.7475853299079008,
+      "beta": 0.919,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "XPEV",
+      "name": "XPeng Inc.",
+      "market_cap": 14938383360,
+      "avg_volume": 6638887,
+      "price": 15.63,
+      "volatility": 0.45252270515211174,
+      "beta": 1.13,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "BLK",
+      "name": "BlackRock, Inc.",
+      "market_cap": 165130158080,
+      "avg_volume": 792393,
+      "price": 1063.75,
+      "volatility": 0.251976240541847,
+      "beta": 1.456,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "STX",
+      "name": "Seagate Technology Holdings PLC",
+      "market_cap": 181728641024,
+      "avg_volume": 3968185,
+      "price": 810.46,
+      "volatility": 0.6834450443695044,
+      "beta": 2.009,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AMT",
+      "name": "American Tower Corporation (REI",
+      "market_cap": 85621825536,
+      "avg_volume": 3169228,
+      "price": 183.78,
+      "volatility": 0.2738478807641337,
+      "beta": 0.9,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "T",
+      "name": "AT&T Inc.",
+      "market_cap": 176070901760,
+      "avg_volume": 39763857,
+      "price": 25.34,
+      "volatility": 0.2532595085738209,
+      "beta": 0.417,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "BK",
+      "name": "The Bank of New York Mellon Cor",
+      "market_cap": 94143750144,
+      "avg_volume": 3663390,
+      "price": 137.16,
+      "volatility": 0.16684008772500494,
+      "beta": 1.068,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "BSX",
+      "name": "Boston Scientific Corporation",
+      "market_cap": 84945199104,
+      "avg_volume": 16478620,
+      "price": 57.15,
+      "volatility": 0.4034353460587918,
+      "beta": 0.623,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "NSC",
+      "name": "Norfolk Southern Corporation",
+      "market_cap": 69947555840,
+      "avg_volume": 1309019,
+      "price": 311.44,
+      "volatility": 0.3179007039360505,
+      "beta": 1.295,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "BX",
+      "name": "Blackstone Inc.",
+      "market_cap": 144923607040,
+      "avg_volume": 8138349,
+      "price": 118.57,
+      "volatility": 0.37640366167198086,
+      "beta": 1.634,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "ADBE",
+      "name": "Adobe Inc.",
+      "market_cap": 98665226240,
+      "avg_volume": 5567204,
+      "price": 244.1,
+      "volatility": 0.4190332623677366,
+      "beta": 1.417,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "CRM",
+      "name": "Salesforce, Inc.",
+      "market_cap": 144231055360,
+      "avg_volume": 13588166,
+      "price": 176.31,
+      "volatility": 0.48931288870960343,
+      "beta": 1.139,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "CHTR",
+      "name": "Charter Communications, Inc.",
+      "market_cap": 21021458432,
+      "avg_volume": 2532452,
+      "price": 148.9,
+      "volatility": 1.0074838113595612,
+      "beta": 0.757,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "UNP",
+      "name": "Union Pacific Corporation",
+      "market_cap": 157595238400,
+      "avg_volume": 2936188,
+      "price": 265.44,
+      "volatility": 0.3556125487784057,
+      "beta": 0.994,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "MNST",
+      "name": "Monster Beverage Corporation",
+      "market_cap": 84421664768,
+      "avg_volume": 5579301,
+      "price": 86.32,
+      "volatility": 0.5134543016972689,
+      "beta": 0.501,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "VLO",
+      "name": "Valero Energy Corporation",
+      "market_cap": 71587520512,
+      "avg_volume": 3733877,
+      "price": 241.09,
+      "volatility": 0.420945002558991,
+      "beta": 0.571,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "TM",
+      "name": "Toyota Motor Corporation",
+      "market_cap": 247191158784,
+      "avg_volume": 372225,
+      "price": 189.66,
+      "volatility": 0.27040312502162883,
+      "beta": 0.327,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "GS",
+      "name": "Goldman Sachs Group, Inc. (The)",
+      "market_cap": 291517497344,
+      "avg_volume": 2189825,
+      "price": 988.17,
+      "volatility": 0.29834036831005445,
+      "beta": 1.274,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "EQIX",
+      "name": "Equinix, Inc.",
+      "market_cap": 106358366208,
+      "avg_volume": 579203,
+      "price": 1078.42,
+      "volatility": 0.18211319635140222,
+      "beta": 0.997,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "WDC",
+      "name": "Western Digital Corporation",
+      "market_cap": 167674068992,
+      "avg_volume": 8214100,
+      "price": 486.46,
+      "volatility": 0.5874855573712918,
+      "beta": 2.158,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AKAM",
+      "name": "Akamai Technologies, Inc.",
+      "market_cap": 21261170688,
+      "avg_volume": 5642003,
+      "price": 146.24,
+      "volatility": 1.0953687641179441,
+      "beta": 0.454,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "IBM",
+      "name": "International Business Machines",
+      "market_cap": 237762789376,
+      "avg_volume": 6628771,
+      "price": 252.97,
+      "volatility": 0.585374160484372,
+      "beta": 0.581,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "ABT",
+      "name": "Abbott Laboratories",
+      "market_cap": 152878923776,
+      "avg_volume": 12214052,
+      "price": 87.77,
+      "volatility": 0.27997011821595336,
+      "beta": 0.647,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "PANW",
+      "name": "Palo Alto Networks, Inc.",
+      "market_cap": 205118111744,
+      "avg_volume": 8537917,
+      "price": 252.92,
+      "volatility": 0.4491077556761407,
+      "beta": 0.77,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "NOW",
+      "name": "ServiceNow, Inc.",
+      "market_cap": 102811099136,
+      "avg_volume": 23741780,
+      "price": 99.69,
+      "volatility": 0.84035071485278,
+      "beta": 0.819,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "ANET",
+      "name": "Arista Networks, Inc.",
+      "market_cap": 187099971584,
+      "avg_volume": 8693239,
+      "price": 148.59,
+      "volatility": 0.6615330327762508,
+      "beta": 1.673,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "CME",
+      "name": "CME Group Inc.",
+      "market_cap": 104527060992,
+      "avg_volume": 2364169,
+      "price": 289.29,
+      "volatility": 0.24686328583658126,
+      "beta": 0.26,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "DHR",
+      "name": "Danaher Corporation",
+      "market_cap": 122677886976,
+      "avg_volume": 4440174,
+      "price": 173.33,
+      "volatility": 0.24496877600170633,
+      "beta": 0.841,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "JD",
+      "name": "JD.com, Inc.",
+      "market_cap": 42500231168,
+      "avg_volume": 10877549,
+      "price": 31.47,
+      "volatility": 0.39541030150211853,
+      "beta": 0.403,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "O",
+      "name": "Realty Income Corporation",
+      "market_cap": 58029010944,
+      "avg_volume": 5910292,
+      "price": 62.23,
+      "volatility": 0.19218641719616883,
+      "beta": 0.757,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "PRU",
+      "name": "Prudential Financial, Inc.",
+      "market_cap": 36205170688,
+      "avg_volume": 2300639,
+      "price": 104.24,
+      "volatility": 0.18727950321234282,
+      "beta": 0.851,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "DIS",
+      "name": "Walt Disney Company (The)",
+      "market_cap": 179867860992,
+      "avg_volume": 9852976,
+      "price": 103.58,
+      "volatility": 0.34965024191072575,
+      "beta": 1.416,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "NIO",
+      "name": "NIO Inc.",
+      "market_cap": 14031735808,
+      "avg_volume": 40961646,
+      "price": 5.6,
+      "volatility": 0.5033292708240665,
+      "beta": 1.0,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "DLTR",
+      "name": "Dollar Tree, Inc.",
+      "market_cap": 18637168640,
+      "avg_volume": 3362123,
+      "price": 95.71,
+      "volatility": 0.3947891465540654,
+      "beta": 0.609,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "LLY",
+      "name": "Eli Lilly and Company",
+      "market_cap": 928882425856,
+      "avg_volume": 3086131,
+      "price": 1041.65,
+      "volatility": 0.46439580790264984,
+      "beta": 0.481,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "UPS",
+      "name": "United Parcel Service, Inc.",
+      "market_cap": 83513114624,
+      "avg_volume": 6249428,
+      "price": 98.25,
+      "volatility": 0.45469059426350844,
+      "beta": 1.049,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "SAP",
+      "name": "SAP  SE",
+      "market_cap": 207822192640,
+      "avg_volume": 3425890,
+      "price": 176.28,
+      "volatility": 0.449309677064523,
+      "beta": 0.709,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "WELL",
+      "name": "Welltower Inc.",
+      "market_cap": 152484577280,
+      "avg_volume": 3088873,
+      "price": 216.01,
+      "volatility": 0.24919411485872042,
+      "beta": 0.825,
+      "sector": "Real Estate"
+    },
+    {
+      "ticker": "PG",
+      "name": "Procter & Gamble Company (The)",
+      "market_cap": 333921091584,
+      "avg_volume": 9654611,
+      "price": 143.4,
+      "volatility": 0.21347253939875016,
+      "beta": 0.398,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "MET",
+      "name": "MetLife, Inc.",
+      "market_cap": 54241722368,
+      "avg_volume": 3725444,
+      "price": 84.3,
+      "volatility": 0.19579403794426453,
+      "beta": 0.775,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "TEAM",
+      "name": "Atlassian Corporation",
+      "market_cap": 20854642688,
+      "avg_volume": 7643990,
+      "price": 82.18,
+      "volatility": 1.232743562692906,
+      "beta": 0.899,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "PDD",
+      "name": "PDD Holdings Inc.",
+      "market_cap": 139193942016,
+      "avg_volume": 6917269,
+      "price": 97.79,
+      "volatility": 0.36892040210741583,
+      "beta": 0.033,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "UBER",
+      "name": "Uber Technologies, Inc.",
+      "market_cap": 149840445440,
+      "avg_volume": 16928077,
+      "price": 73.61,
+      "volatility": 0.3787551233893219,
+      "beta": 1.158,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "ORCL",
+      "name": "Oracle Corporation",
+      "market_cap": 545787281408,
+      "avg_volume": 27485188,
+      "price": 189.77,
+      "volatility": 0.5217257492235117,
+      "beta": 1.544,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "NKE",
+      "name": "Nike, Inc.",
+      "market_cap": 65736572928,
+      "avg_volume": 21585730,
+      "price": 44.39,
+      "volatility": 0.26973039850414826,
+      "beta": 1.124,
+      "sector": "Consumer Cyclical"
+    },
+    {
+      "ticker": "CVS",
+      "name": "CVS Health Corporation",
+      "market_cap": 119069532160,
+      "avg_volume": 8260850,
+      "price": 93.32,
+      "volatility": 0.4015994868538621,
+      "beta": 0.592,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "EOG",
+      "name": "EOG Resources, Inc.",
+      "market_cap": 74557341696,
+      "avg_volume": 4760425,
+      "price": 139.98,
+      "volatility": 0.2964817082454961,
+      "beta": 0.279,
+      "sector": "Energy"
+    },
+    {
+      "ticker": "TER",
+      "name": "Teradyne, Inc.",
+      "market_cap": 55328260096,
+      "avg_volume": 3558609,
+      "price": 353.44,
+      "volatility": 1.0494828035105226,
+      "beta": 1.793,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "AMGN",
+      "name": "Amgen Inc.",
+      "market_cap": 182206808064,
+      "avg_volume": 2669546,
+      "price": 337.42,
+      "volatility": 0.2671044363604108,
+      "beta": 0.435,
+      "sector": "Healthcare"
+    },
+    {
+      "ticker": "EL",
+      "name": "Estee Lauder Companies, Inc. (T",
+      "market_cap": 28549238784,
+      "avg_volume": 4435944,
+      "price": 78.91,
+      "volatility": 0.3935367409467561,
+      "beta": 1.211,
+      "sector": "Consumer Defensive"
+    },
+    {
+      "ticker": "USB",
+      "name": "U.S. Bancorp",
+      "market_cap": 84693475328,
+      "avg_volume": 9669490,
+      "price": 54.56,
+      "volatility": 0.20504635720666461,
+      "beta": 1.016,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "DELL",
+      "name": "Dell Technologies Inc.",
+      "market_cap": 164210851840,
+      "avg_volume": 8030977,
+      "price": 252.8,
+      "volatility": 0.7032759335539505,
+      "beta": 1.062,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "PLTR",
+      "name": "Palantir Technologies Inc.",
+      "market_cap": 329426599936,
+      "avg_volume": 47146811,
+      "price": 137.415,
+      "volatility": 0.44735061591142,
+      "beta": 1.521,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "TMUS",
+      "name": "T-Mobile US, Inc.",
+      "market_cap": 206592868352,
+      "avg_volume": 5713336,
+      "price": 190.9,
+      "volatility": 0.3462584702897193,
+      "beta": 0.32,
+      "sector": "Communication Services"
+    },
+    {
+      "ticker": "CDNS",
+      "name": "Cadence Design Systems, Inc.",
+      "market_cap": 98869002240,
+      "avg_volume": 2404111,
+      "price": 358.46,
+      "volatility": 0.39943577542495406,
+      "beta": 1.131,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation",
+      "market_cap": 5316751654912,
+      "avg_volume": 171318169,
+      "price": 219.51,
+      "volatility": 0.44403785549856173,
+      "beta": 2.244,
+      "sector": "Technology"
+    },
+    {
+      "ticker": "JPM",
+      "name": "JP Morgan Chase & Co.",
+      "market_cap": 811891949568,
+      "avg_volume": 9510417,
+      "price": 303.0,
+      "volatility": 0.20659200010440112,
+      "beta": 1.023,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "EMR",
+      "name": "Emerson Electric Company",
+      "market_cap": 75557478400,
+      "avg_volume": 2965607,
+      "price": 134.9,
+      "volatility": 0.3829351775805598,
+      "beta": 1.255,
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "CB",
+      "name": "Chubb Limited",
+      "market_cap": 128094683136,
+      "avg_volume": 1650204,
+      "price": 330.26,
+      "volatility": 0.1850102558039642,
+      "beta": 0.44,
+      "sector": "Financial Services"
+    },
+    {
+      "ticker": "00005",
+      "name": "00005",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00011",
+      "name": "00011",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00012",
+      "name": "00012",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00016",
+      "name": "00016",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00017",
+      "name": "00017",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00019",
+      "name": "00019",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00027",
+      "name": "00027",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00066",
+      "name": "00066",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00101",
+      "name": "00101",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00175",
+      "name": "00175",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00241",
+      "name": "00241",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00267",
+      "name": "00267",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00268",
+      "name": "00268",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00285",
+      "name": "00285",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00288",
+      "name": "00288",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00291",
+      "name": "00291",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00316",
+      "name": "00316",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00322",
+      "name": "00322",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00386",
+      "name": "00386",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00388",
+      "name": "00388",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00669",
+      "name": "00669",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00688",
+      "name": "00688",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00700",
+      "name": "00700",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00762",
+      "name": "00762",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00823",
+      "name": "00823",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00857",
+      "name": "00857",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00868",
+      "name": "00868",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00881",
+      "name": "00881",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00883",
+      "name": "00883",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00939",
+      "name": "00939",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00941",
+      "name": "00941",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00960",
+      "name": "00960",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00968",
+      "name": "00968",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00981",
+      "name": "00981",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00992",
+      "name": "00992",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01038",
+      "name": "01038",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01044",
+      "name": "01044",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01088",
+      "name": "01088",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01093",
+      "name": "01093",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01109",
+      "name": "01109",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01113",
+      "name": "01113",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01177",
+      "name": "01177",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01209",
+      "name": "01209",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01211",
+      "name": "01211",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01288",
+      "name": "01288",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01299",
+      "name": "01299",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01378",
+      "name": "01378",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01398",
+      "name": "01398",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01810",
+      "name": "01810",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01876",
+      "name": "01876",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01928",
+      "name": "01928",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01929",
+      "name": "01929",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01997",
+      "name": "01997",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02007",
+      "name": "02007",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02015",
+      "name": "02015",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02018",
+      "name": "02018",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02020",
+      "name": "02020",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02269",
+      "name": "02269",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02313",
+      "name": "02313",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02318",
+      "name": "02318",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02319",
+      "name": "02319",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02328",
+      "name": "02328",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02331",
+      "name": "02331",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02382",
+      "name": "02382",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02388",
+      "name": "02388",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02601",
+      "name": "02601",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02628",
+      "name": "02628",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02688",
+      "name": "02688",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02899",
+      "name": "02899",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03690",
+      "name": "03690",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03888",
+      "name": "03888",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03968",
+      "name": "03968",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03988",
+      "name": "03988",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06030",
+      "name": "06030",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06160",
+      "name": "06160",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06618",
+      "name": "06618",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06862",
+      "name": "06862",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09618",
+      "name": "09618",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09633",
+      "name": "09633",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09688",
+      "name": "09688",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09888",
+      "name": "09888",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09901",
+      "name": "09901",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09961",
+      "name": "09961",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09988",
+      "name": "09988",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09992",
+      "name": "09992",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09999",
+      "name": "09999",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00728",
+      "name": "00728",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01099",
+      "name": "01099",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01171",
+      "name": "01171",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01818",
+      "name": "01818",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02039",
+      "name": "02039",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02202",
+      "name": "02202",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02618",
+      "name": "02618",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03328",
+      "name": "03328",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03898",
+      "name": "03898",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06098",
+      "name": "06098",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06881",
+      "name": "06881",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00136",
+      "name": "00136",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00270",
+      "name": "00270",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00392",
+      "name": "00392",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01193",
+      "name": "01193",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02696",
+      "name": "02696",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01801",
+      "name": "01801",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06855",
+      "name": "06855",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02162",
+      "name": "02162",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01548",
+      "name": "01548",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02500",
+      "name": "02500",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02196",
+      "name": "02196",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09926",
+      "name": "09926",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02157",
+      "name": "02157",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06990",
+      "name": "06990",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02096",
+      "name": "02096",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02170",
+      "name": "02170",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09966",
+      "name": "09966",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02013",
+      "name": "02013",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01833",
+      "name": "01833",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01797",
+      "name": "01797",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09923",
+      "name": "09923",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01024",
+      "name": "01024",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09899",
+      "name": "09899",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09866",
+      "name": "09866",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09868",
+      "name": "09868",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02423",
+      "name": "02423",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06690",
+      "name": "06690",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01347",
+      "name": "01347",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00780",
+      "name": "00780",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09990",
+      "name": "09990",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00777",
+      "name": "00777",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09626",
+      "name": "09626",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09878",
+      "name": "09878",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02518",
+      "name": "02518",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09998",
+      "name": "09998",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01020",
+      "name": "01020",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00168",
+      "name": "00168",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02219",
+      "name": "02219",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06808",
+      "name": "06808",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06110",
+      "name": "06110",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01368",
+      "name": "01368",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01773",
+      "name": "01773",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01579",
+      "name": "01579",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06837",
+      "name": "06837",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09922",
+      "name": "09922",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09987",
+      "name": "09987",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09896",
+      "name": "09896",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09863",
+      "name": "09863",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02238",
+      "name": "02238",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "00425",
+      "name": "00425",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01772",
+      "name": "01772",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "09696",
+      "name": "09696",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01339",
+      "name": "01339",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "02611",
+      "name": "02611",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06066",
+      "name": "06066",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06886",
+      "name": "06886",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06099",
+      "name": "06099",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "06178",
+      "name": "06178",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "03908",
+      "name": "03908",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "01776",
+      "name": "01776",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "HK"
+    },
+    {
+      "ticker": "D05.SI",
+      "name": "D05.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "O39.SI",
+      "name": "O39.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "U11.SI",
+      "name": "U11.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "Z74.SI",
+      "name": "Z74.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C52.SI",
+      "name": "C52.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C6L.SI",
+      "name": "C6L.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S58.SI",
+      "name": "S58.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "BS6.SI",
+      "name": "BS6.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "U96.SI",
+      "name": "U96.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C09.SI",
+      "name": "C09.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "F34.SI",
+      "name": "F34.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "U14.SI",
+      "name": "U14.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S68.SI",
+      "name": "S68.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "V03.SI",
+      "name": "V03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "BN4.SI",
+      "name": "BN4.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "T39.SI",
+      "name": "T39.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "G13.SI",
+      "name": "G13.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "H78.SI",
+      "name": "H78.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "Y92.SI",
+      "name": "Y92.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C07.SI",
+      "name": "C07.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C31.SI",
+      "name": "C31.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S51.SI",
+      "name": "S51.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "N2IU.SI",
+      "name": "N2IU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "J36.SI",
+      "name": "J36.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "M44U.SI",
+      "name": "M44U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "A17U.SI",
+      "name": "A17U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "AU8U.SI",
+      "name": "AU8U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C38U.SI",
+      "name": "C38U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C2PU.SI",
+      "name": "C2PU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C61U.SI",
+      "name": "C61U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "J69U.SI",
+      "name": "J69U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "K71U.SI",
+      "name": "K71U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "M1GU.SI",
+      "name": "M1GU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "SK6U.SI",
+      "name": "SK6U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "T82U.SI",
+      "name": "T82U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "ACV.SI",
+      "name": "ACV.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "BWCU.SI",
+      "name": "BWCU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "BUOU.SI",
+      "name": "BUOU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "CRPU.SI",
+      "name": "CRPU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "DCRU.SI",
+      "name": "DCRU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "EDMU.SI",
+      "name": "EDMU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "K2LU.SI",
+      "name": "K2LU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "ME8U.SI",
+      "name": "ME8U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "ND8U.SI",
+      "name": "ND8U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "OXMU.SI",
+      "name": "OXMU.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "RW0U.SI",
+      "name": "RW0U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "UD1U.SI",
+      "name": "UD1U.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "D01.SI",
+      "name": "D01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "G07.SI",
+      "name": "G07.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "O10.SI",
+      "name": "O10.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "T14.SI",
+      "name": "T14.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "U06.SI",
+      "name": "U06.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "A26.SI",
+      "name": "A26.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "F01.SI",
+      "name": "F01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "P15.SI",
+      "name": "P15.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S23.SI",
+      "name": "S23.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S59.SI",
+      "name": "S59.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S63.SI",
+      "name": "S63.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C70.SI",
+      "name": "C70.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "G18.SI",
+      "name": "G18.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "H02.SI",
+      "name": "H02.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "I07.SI",
+      "name": "I07.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "J85.SI",
+      "name": "J85.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "K17.SI",
+      "name": "K17.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "L19.SI",
+      "name": "L19.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "M01.SI",
+      "name": "M01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "N03.SI",
+      "name": "N03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "R01.SI",
+      "name": "R01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S08.SI",
+      "name": "S08.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "S10.SI",
+      "name": "S10.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "T12.SI",
+      "name": "T12.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "U04.SI",
+      "name": "U04.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "V01.SI",
+      "name": "V01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "W05.SI",
+      "name": "W05.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "Y03.SI",
+      "name": "Y03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "Z01.SI",
+      "name": "Z01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "A04.SI",
+      "name": "A04.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "B02.SI",
+      "name": "B02.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "B69.SI",
+      "name": "B69.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "BVA.SI",
+      "name": "BVA.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C04.SI",
+      "name": "C04.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "C76.SI",
+      "name": "C76.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "D03.SI",
+      "name": "D03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "E02.SI",
+      "name": "E02.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "F03.SI",
+      "name": "F03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "F83.SI",
+      "name": "F83.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "G92.SI",
+      "name": "G92.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "H13.SI",
+      "name": "H13.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "H22.SI",
+      "name": "H22.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "I49.SI",
+      "name": "I49.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "J03.SI",
+      "name": "J03.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "K01.SI",
+      "name": "K01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "L02.SI",
+      "name": "L02.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "M05.SI",
+      "name": "M05.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "N01.SI",
+      "name": "N01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "O01.SI",
+      "name": "O01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "P01.SI",
+      "name": "P01.SI",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 10,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "SG"
+    },
+    {
+      "ticker": "TCL.AX",
+      "name": "TCL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WBC.AX",
+      "name": "WBC.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "ANZ.AX",
+      "name": "ANZ.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "RIO.AX",
+      "name": "RIO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SUN.AX",
+      "name": "SUN.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "XRO.AX",
+      "name": "XRO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CAR.AX",
+      "name": "CAR.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WDS.AX",
+      "name": "WDS.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WES.AX",
+      "name": "WES.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "QBE.AX",
+      "name": "QBE.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "MQG.AX",
+      "name": "MQG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "FMG.AX",
+      "name": "FMG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "TLS.AX",
+      "name": "TLS.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "RHC.AX",
+      "name": "RHC.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "ALL.AX",
+      "name": "ALL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "COL.AX",
+      "name": "COL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "STO.AX",
+      "name": "STO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "BHP.AX",
+      "name": "BHP.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SHL.AX",
+      "name": "SHL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CPU.AX",
+      "name": "CPU.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SCG.AX",
+      "name": "SCG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WOW.AX",
+      "name": "WOW.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SEK.AX",
+      "name": "SEK.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "ORG.AX",
+      "name": "ORG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NAB.AX",
+      "name": "NAB.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NCM.AX",
+      "name": "NCM.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CSL.AX",
+      "name": "CSL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "REA.AX",
+      "name": "REA.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CBA.AX",
+      "name": "CBA.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "GMG.AX",
+      "name": "GMG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "FPH.NZ",
+      "name": "FPH.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "AIA.NZ",
+      "name": "AIA.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "MEL.NZ",
+      "name": "MEL.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "SPK.NZ",
+      "name": "SPK.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "ATM.NZ",
+      "name": "ATM.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "MCY.NZ",
+      "name": "MCY.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "IFT.NZ",
+      "name": "IFT.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "EBO.NZ",
+      "name": "EBO.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "SUM.NZ",
+      "name": "SUM.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "RYM.NZ",
+      "name": "RYM.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "CEN.NZ",
+      "name": "CEN.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "MEL.NZ",
+      "name": "MEL.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "CNU.NZ",
+      "name": "CNU.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "FBU.NZ",
+      "name": "FBU.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "GMT.NZ",
+      "name": "GMT.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "KPG.NZ",
+      "name": "KPG.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "PCT.NZ",
+      "name": "PCT.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "POT.NZ",
+      "name": "POT.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "SKC.NZ",
+      "name": "SKC.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "SKT.NZ",
+      "name": "SKT.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "STU.NZ",
+      "name": "STU.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "THL.NZ",
+      "name": "THL.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "VHP.NZ",
+      "name": "VHP.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "VGL.NZ",
+      "name": "VGL.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "OCA.NZ",
+      "name": "OCA.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "ARG.NZ",
+      "name": "ARG.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "ARV.NZ",
+      "name": "ARV.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "GNE.NZ",
+      "name": "GNE.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "MCY.NZ",
+      "name": "MCY.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    },
+    {
+      "ticker": "ZEL.NZ",
+      "name": "ZEL.NZ",
+      "market_cap": 1000000000.0,
+      "avg_volume": 500000.0,
+      "price": 5,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "NZ"
+    }
+  ]
+}
