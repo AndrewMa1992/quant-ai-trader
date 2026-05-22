@@ -24,11 +24,11 @@ class SignalEnsemble:
             total_confidence += weight * confidence
             details[model_name] = {"score": score, "weight": weight, "confidence": confidence}
         final_score = weighted_score / (total_confidence + 1e-8)
-        final_confidence = min(total_confidence, 1.0)
-        if final_score > 0.15:
-            decision, strength = "buy", min(abs(final_score), 1.0)
-        elif final_score < -0.15:
-            decision, strength = "sell", min(abs(final_score), 1.0)
+        final_confidence = min(total_confidence * 2.5, 1.0)  # boost for practical use
+        if final_score > 0.05:
+            decision, strength = "buy", min(abs(final_score) * 3.0, 1.0)
+        elif final_score < -0.05:
+            decision, strength = "sell", min(abs(final_score) * 3.0, 1.0)
         else:
             decision, strength = "hold", 0.0
         position_size = self._kelly_position(final_score, final_confidence)

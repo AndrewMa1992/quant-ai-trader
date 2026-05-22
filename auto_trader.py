@@ -5,7 +5,7 @@
 - AI 分析聚焦 Top 候选 + 持仓
 - 风控 + 老虎下单
 """
-import os, sys, time, json
+import os, sys, time, json, random
 from datetime import datetime
 from pathlib import Path
 
@@ -81,7 +81,7 @@ class AutoTrader:
 
         self.cycle = 0
         self.full_scan_cycle = 0
-        self.batch_size = 30  # 每批获取的股票数
+        self.batch_size = 50  # 每批获取的股票数（扩容后增加）
 
     @property
     def position_tickers(self) -> list:
@@ -89,22 +89,32 @@ class AutoTrader:
         return list(self.portfolio.positions.keys())
 
     def _get_candidate_tickers(self) -> list:
-        """获取本轮要分析的候选股票：持仓 + 高波动Top"""
+        """获取本轮要分析的候选股票：持仓 + 高波动Top + 各市场分散"""
         candidates = set(self.position_tickers)
 
-        # 加入高波动候选
-        volatile = stock_universe.get_high_volatility(n=20)
+        # 加入高波动候选（扩容后增加）
+        volatile = stock_universe.get_high_volatility(n=35)
         for s in volatile:
             t = s.get("ticker", "")
             if isinstance(t, str) and t:
                 candidates.add(t)
 
-        # 加入 Top 市值（分散行业）
-        top = stock_universe.get_top_by("market_cap", n=15)
+        # 加入 Top 市值（分散行业和市场）
+        top = stock_universe.get_top_by("market_cap", n=25)
         for s in top:
             t = s.get("ticker", "")
             if isinstance(t, str) and t:
                 candidates.add(t)
+
+        # 确保美股/港股/新加坡股都有代表
+        for market_suffix, count in [("", 5), (".HK", 5), (".SI", 3)]:
+            market_stocks = [s.get("ticker","") for s in stock_universe._all_stocks 
+                           if isinstance(s, dict) and s.get("ticker","").endswith(market_suffix) if market_suffix
+                           or (isinstance(s, dict) and not any(x in s.get("ticker","") for x in [".HK",".SI",".AX",".NZ"]))]
+            # 随机采样一些
+            if len(market_stocks) > count:
+                market_stocks = random.sample(market_stocks, count)
+            candidates.update(market_stocks)
 
         # 限制总数，优先持仓
         tickers = list(candidates)

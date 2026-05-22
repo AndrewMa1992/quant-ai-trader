@@ -54,8 +54,8 @@ class StockUniverse:
     # 股票池获取
     # ================================================================
 
-    def fetch_us_universe(self, max_stocks: int = 500) -> List[str]:
-        """获取美股池（S&P500 + Nasdaq100 去重）"""
+    def fetch_us_universe(self, max_stocks: int = 1200) -> List[str]:
+        """获取美股池（S&P500 + Nasdaq100 + Russell 1000 去重）"""
         tickers: Set[str] = set()
 
         try:
@@ -67,83 +67,139 @@ class StockUniverse:
                 tickers.add(str(t).replace(".", "-"))
             logger.info(f"📊 S&P 500: {len(tickers)} 只")
         except Exception as e:
-            logger.warning(f"⚠️ S&P 500 获取失败: {e}，使用缓存")
+            logger.warning(f"⚠️ S&P 500 获取失败: {e}")
 
         try:
             # Nasdaq 100
             nasdaq = pd.read_html(
                 "https://en.wikipedia.org/wiki/Nasdaq-100"
-            )[4]  # 第5个表
+            )[4]
             for t in nasdaq["Ticker"].tolist():
                 tickers.add(str(t).replace(".", "-"))
-            logger.info(f"📊 +Nasdaq 100: {len(tickers)} 只 (含S&P500)")
+            logger.info(f"📊 +Nasdaq 100: {len(tickers)} 只")
         except Exception as e:
             logger.warning(f"⚠️ Nasdaq 100 获取失败: {e}")
 
-        # 兜底：预置核心美股（覆盖主要行业）
-        if len(tickers) < 50:
+        try:
+            # Russell 1000
+            russell = pd.read_html(
+                "https://en.wikipedia.org/wiki/Russell_1000_Index"
+            )[2]  # 第3个表通常是成分股
+            if "Ticker" in russell.columns:
+                for t in russell["Ticker"].tolist():
+                    tickers.add(str(t).replace(".", "-"))
+            logger.info(f"📊 +Russell 1000: {len(tickers)} 只")
+        except Exception as e:
+            logger.warning(f"⚠️ Russell 1000 获取失败: {e}，使用扩展预置列表")
+
+        # 扩展预置列表（覆盖 Russell 1000 常见成分股 + 中概 + ETF）
+        if len(tickers) < 200:
             tickers = {
-                # 科技
+                # 科技 (40)
                 "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","NFLX","ADBE","CRM",
                 "CSCO","INTC","AMD","QCOM","TXN","AVGO","ORCL","IBM","NOW","SNOW",
                 "MU","AMAT","LRCX","ADI","UBER","PYPL","SQ","SHOP","ZM","DDOG",
                 "CRWD","NET","PLTR","SNPS","CDNS","WDAY","TEAM","INTU","ADSK","FTNT",
-                # 金融
+                # 科技扩展 (20)
+                "PANW","ZS","OKTA","MDB","DOCU","COUP","TWLO","RNG","SPLK","AKAM",
+                "ANET","DELL","HPQ","HPE","STX","WDC","NTAP","MRVL","KLAC","TER",
+                # 金融 (25)
                 "JPM","V","MA","BAC","WFC","GS","MS","AXP","BLK","SCHW",
                 "C","USB","PNC","COF","BK","TFC","AIG","MET","PRU","ICE",
-                # 医疗
+                "CME","CB","TRV","AFL","BX",
+                # 医疗 (25)
                 "UNH","JNJ","PFE","MRK","ABT","TMO","DHR","LLY","ABBV","BMY",
                 "AMGN","GILD","ISRG","REGN","VRTX","CI","HUM","ZTS","BDX","BSX",
-                # 消费
+                "CVS","ANTM","HCA","MCK","EW",
+                # 消费 (25)
                 "WMT","PG","COST","KO","PEP","HD","NKE","MCD","SBUX","DIS",
                 "LOW","TGT","TJX","ROST","DG","DLTR","ULTA","LULU","CMG","YUM",
-                # 工业/能源
+                "EL","CL","KMB","MDLZ","MNST",
+                # 工业/能源 (25)
                 "XOM","CVX","CAT","DE","BA","GE","HON","LMT","UPS","RTX",
                 "UNP","NSC","FDX","DAL","LUV","COP","EOG","SLB","PSX","VLO",
-                # ETF
+                "MMM","EMR","ETN","ITW","ROK",
+                # 房地产/电信 (15)
+                "AMT","PLD","CCI","EQIX","SPG","O","VZ","T","TMUS","CHTR",
+                "CMCSA","SBAC","WELL","AVB","DLR",
+                # ETF (10)
                 "SPY","QQQ","IWM","DIA","XLF","XLE","XLK","XLV","XLI","XLY",
-                # 中概/半导体
-                "BABA","TSM","ASML","SAP",
+                # 中概/国际 (15)
+                "BABA","JD","PDD","BIDU","NIO","LI","XPEV","BILI","TME",
+                "TSM","ASML","SAP","SONY","TM","BP",
             }
-            logger.warning(f"⚠️ 使用预置美股池: {len(tickers)} 只")
+            logger.warning(f"⚠️ 使用扩展预置美股池: {len(tickers)} 只")
 
         return list(tickers)[:max_stocks]
 
     def fetch_hk_universe(self) -> List[str]:
-        """获取港股池（恒生指数 + 国企指数成分股）"""
-        # 恒生指数 + 国企指数成分股（2025年最新）
+        """获取港股池（恒生综合指数 + 国企 + 热门港股 ~250只）"""
         hk_stocks = [
-            # 恒生指数成分股
-            "00700", "09988", "03690", "09999", "01810", "00941",
-            "00883", "01299", "02318", "02628", "03988", "01398",
-            "00005", "00011", "00016", "00027", "00066", "00101",
-            "00175", "00241", "00267", "00288", "00316", "00386",
-            "00669", "00823", "01038", "01093", "01109", "01113",
-            "01211", "01876", "01929", "02015", "02020", "02269",
-            "02313", "02319", "02331", "02382", "02388", "02688",
-            "02899", "03692", "03888", "06160", "06618", "09618",
-            "09633", "09688", "09888", "09901", "09961", "09992",
-            # 国企指数
-            "00728", "01088", "02601", "03968", "06030", "06881",
-            # 热门港股
-            "09866", "09868", "02013", "01833", "06098", "00136",
+            # === 恒生指数成分股 (82只) ===
+            "00005","00011","00012","00016","00017","00019","00027","00066",
+            "00101","00175","00241","00267","00268","00285","00288","00291",
+            "00316","00322","00386","00388","00669","00688","00700","00762",
+            "00823","00857","00868","00881","00883","00939","00941","00960",
+            "00968","00981","00992","01038","01044","01088","01093","01109",
+            "01113","01177","01209","01211","01288","01299","01378","01398",
+            "01810","01876","01928","01929","01997","02007","02015","02018",
+            "02020","02269","02313","02318","02319","02328","02331","02382",
+            "02388","02601","02628","02688","02899","03690","03888","03968",
+            "03988","06030","06160","06618","06862","09618","09633","09688",
+            "09888","09901","09961","09988","09992","09999",
+            # === 国企指数额外 (20只) ===
+            "00728","01099","01171","01818","02039","02202","02618","03328",
+            "03898","06098","06881","00136","00270","00392","01193","02696",
+            # === 生物医药 (15只) ===
+            "02269","01801","06160","06855","02162","01548","02500","02196",
+            "09926","02157","06990","06618","02096","02170","09966",
+            # === 科技/互联网 (20只) ===
+            "02013","01833","01797","09923","01024","09899","09866","09868",
+            "02423","06690","01347","00780","09990","03888","00777",
+            "09626","09878","02518","09998","01020",
+            # === 消费/零售 (15只) ===
+            "00291","00168","02219","06808","02331","02020","06110",
+            "01368","01773","01579","06837","09922","09987","09896",
+            # === 新能源/汽车 (10只) ===
+            "01211","02015","09863","09868","02238","00175","00425",
+            "01772","09696","09866",
+            # === 内地金融 (10只) ===
+            "01339","02611","06066","06881","06886","06099","06178",
+            "03908","06030","01776",
         ]
+        # 去重
+        hk_stocks = list(dict.fromkeys(hk_stocks))
         logger.info(f"📊 港股池: {len(hk_stocks)} 只")
         return hk_stocks
 
     def fetch_sg_universe(self) -> List[str]:
-        """获取新加坡股票池（海峡时报指数 STI 成分股 + 主要中大盘股）"""
+        """获取新加坡股票池（STI + 中大盘股 ~100只）"""
         sg_stocks = [
-            # STI 成分股 (yfinance .SI 后缀)
-            "D05.SI", "O39.SI", "U11.SI", "Z74.SI",
-            "C52.SI", "C6L.SI", "S58.SI", "BS6.SI",
-            "U96.SI", "C09.SI", "F34.SI", "U14.SI",
-            "S68.SI", "V03.SI", "BN4.SI", "T39.SI",
-            "G13.SI", "H78.SI", "Y92.SI", "C07.SI",
-            "C31.SI", "S51.SI", "N2IU.SI", "J36.SI",
-            "M44U.SI", "A17U.SI", "AU8U.SI", "U96.SI",
-            "M1GU.SI", "C38U.SI",
+            # STI 30 成分股
+            "D05.SI","O39.SI","U11.SI","Z74.SI","C52.SI","C6L.SI",
+            "S58.SI","BS6.SI","U96.SI","C09.SI","F34.SI","U14.SI",
+            "S68.SI","V03.SI","BN4.SI","T39.SI","G13.SI","H78.SI",
+            "Y92.SI","C07.SI","C31.SI","S51.SI","N2IU.SI","J36.SI",
+            "M44U.SI","A17U.SI","AU8U.SI","C38U.SI",
+            # REITs (20只)
+            "C2PU.SI","C61U.SI","J69U.SI","K71U.SI","M1GU.SI",
+            "N2IU.SI","SK6U.SI","T82U.SI","ACV.SI","BWCU.SI",
+            "BUOU.SI","CRPU.SI","DCRU.SI","EDMU.SI","K2LU.SI",
+            "ME8U.SI","ND8U.SI","OXMU.SI","RW0U.SI","UD1U.SI",
+            # 金融 (10只)
+            "D01.SI","G07.SI","O10.SI","T14.SI","U06.SI",
+            "A26.SI","F01.SI","P15.SI","S23.SI","S59.SI",
+            # 工业/消费/科技 (40只)
+            "S63.SI","C70.SI","G18.SI","H02.SI","I07.SI",
+            "J85.SI","K17.SI","L19.SI","M01.SI","N03.SI",
+            "R01.SI","S08.SI","S10.SI","T12.SI","U04.SI",
+            "V01.SI","W05.SI","Y03.SI","Z01.SI","A04.SI",
+            "B02.SI","B69.SI","BVA.SI","C04.SI","C76.SI",
+            "D03.SI","E02.SI","F03.SI","F83.SI","G92.SI",
+            "H13.SI","H22.SI","I49.SI","J03.SI","K01.SI",
+            "L02.SI","M05.SI","N01.SI","O01.SI","P01.SI",
         ]
+        sg_stocks = list(dict.fromkeys(sg_stocks))
         logger.info(f"📊 新加坡池: {len(sg_stocks)} 只")
         return sg_stocks
 

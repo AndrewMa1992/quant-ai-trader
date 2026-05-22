@@ -157,8 +157,8 @@ class ModelConfig:
     SENTIMENT_MAX_LENGTH: int = 512
 
     ENSEMBLE_WEIGHTS: dict = field(default_factory=lambda: {
-        "transformer": 0.35, "rl_agent": 0.35,
-        "sentiment": 0.15, "technical": 0.15,
+        "transformer": 0.55, "rl_agent": 0.00,
+        "sentiment": 0.15, "technical": 0.30,
     })
 
     RETRAIN_INTERVAL_DAYS: int = 7
@@ -184,16 +184,16 @@ class TradingConfig:
         "NZD": 0.62,    # 1 NZD ≈ 0.62 USD
     })
 
-    MAX_POSITION_SIZE: float = 0.25
-    MAX_PORTFOLIO_RISK: float = 0.02
+    MAX_POSITION_SIZE: float = 0.20
+    MAX_PORTFOLIO_RISK: float = 0.03
     STOP_LOSS_PCT: float = 0.05
     TAKE_PROFIT_PCT: float = 0.15
-    MAX_DRAWDOWN: float = 0.20
+    MAX_DRAWDOWN: float = 0.25
     VAR_CONFIDENCE: float = 0.95
     COMMISSION_RATE: float = 0.001
     SLIPPAGE: float = 0.0005
-    MIN_CONFIDENCE: float = 0.30
-    MIN_TRADE_VALUE: float = 500.0
+    MIN_CONFIDENCE: float = 0.15
+    MIN_TRADE_VALUE: float = 1000.0
     MIN_SHARES: int = 1
 
     TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))

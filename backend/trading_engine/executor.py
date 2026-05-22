@@ -73,7 +73,8 @@ class PaperExecutor:
 
         # 1. 风控检查
         if side == "buy":
-            estimated_value = self.portfolio.cash * strength
+            buy_strength = min(strength, trading_config.MAX_POSITION_SIZE)
+            estimated_value = self.portfolio.cash * buy_strength
             quantity = estimated_value / price if price > 0 else 0
             if quantity < trading_config.MIN_SHARES:
                 return None
