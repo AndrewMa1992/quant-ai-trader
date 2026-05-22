@@ -17,13 +17,14 @@ class PortfolioManager:
     """
     投资组合管理器
     追踪组合状态、计算各项指标
+    支持多币种自动兑换为 USD
     """
 
     def __init__(self, initial_capital: float = None):
         self.initial_capital = initial_capital or trading_config.INITIAL_CAPITAL
         self.cash = self.initial_capital
         self.positions: Dict[str, float] = {}  # ticker -> shares
-        self.avg_costs: Dict[str, float] = {}  # ticker -> avg cost per share
+        self.avg_costs: Dict[str, float] = {}  # ticker -> avg cost per share (USD)
         self.total_value = self.initial_capital
         self.trade_history: List[Dict] = []
 
@@ -32,6 +33,33 @@ class PortfolioManager:
             (datetime.now(), self.initial_capital)
         ]
         self.daily_returns: List[float] = []
+
+    # ================================================================
+    # 多币种兑换
+    # ================================================================
+
+    def _get_currency(self, ticker: str) -> str:
+        """根据 ticker 后缀判断币种"""
+        ticker_upper = ticker.upper()
+        if ".HK" in ticker_upper:
+            return "HKD"
+        elif ".SI" in ticker_upper:
+            return "SGD"
+        elif ".AX" in ticker_upper:
+            return "AUD"
+        elif ".NZ" in ticker_upper:
+            return "NZD"
+        return "USD"
+
+    def _to_usd(self, amount: float, currency: str) -> float:
+        """将任意币种金额转换为 USD"""
+        rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+        return amount * rate
+
+    def _from_usd(self, amount_usd: float, currency: str) -> float:
+        """将 USD 转换为目标币种"""
+        rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+        return amount_usd / rate if rate > 0 else amount_usd
 
     # ================================================================
     # 持仓操作
@@ -60,37 +88,47 @@ class PortfolioManager:
     def _execute_buy(
         self, ticker: str, price: float, signal_strength: float, strategy: str
     ) -> Optional[Dict]:
-        """执行买入"""
+        """执行买入（price 为本地币种，内部自动兑换为 USD）"""
         if self.cash <= 0:
             return None
 
+        currency = self._get_currency(ticker)
+
         # 仓位比例 = 信号强度
         target_ratio = min(signal_strength, trading_config.MAX_POSITION_SIZE)
-        order_value = self.cash * target_ratio
+        order_value_usd = self.cash * target_ratio
 
         # 最小交易额
-        if order_value < 100:
+        if order_value_usd < trading_config.MIN_TRADE_VALUE:
             return None
 
-        quantity = order_value / price
-        commission = order_value * trading_config.COMMISSION_RATE
-        total_cost = order_value + commission
+        # 本地币种金额
+        order_value_local = self._from_usd(order_value_usd, currency)
+        quantity = order_value_local / price if price > 0 else 0
 
-        if total_cost > self.cash:
-            quantity = (self.cash * 0.95) / price
-            total_cost = quantity * price * (1 + trading_config.COMMISSION_RATE)
-            if quantity <= 0:
+        if quantity < trading_config.MIN_SHARES:
+            return None
+
+        total_cost_usd = order_value_usd * (1 + trading_config.COMMISSION_RATE)
+
+        if total_cost_usd > self.cash:
+            adjusted_usd = self.cash * 0.95
+            order_value_local = self._from_usd(adjusted_usd, currency)
+            quantity = order_value_local / price
+            total_cost_usd = quantity * self._to_usd(price, currency) * (1 + trading_config.COMMISSION_RATE)
+            if quantity < trading_config.MIN_SHARES:
                 return None
 
-        # 更新持仓
+        # 更新持仓（avg_cost 存 USD）
         old_shares = self.positions.get(ticker, 0.0)
         old_cost = self.avg_costs.get(ticker, 0.0)
+        price_usd = self._to_usd(price, currency)
 
         new_shares = old_shares + quantity
         if new_shares > 0:
-            self.avg_costs[ticker] = (old_cost * old_shares + price * quantity) / new_shares
+            self.avg_costs[ticker] = (old_cost * old_shares + price_usd * quantity) / new_shares
         self.positions[ticker] = new_shares
-        self.cash -= total_cost
+        self.cash -= total_cost_usd
 
         # 记录
         record = {
@@ -98,49 +136,60 @@ class PortfolioManager:
             "side": "buy",
             "quantity": round(quantity, 4),
             "price": round(price, 2),
+            "price_usd": round(price_usd, 2),
+            "currency": currency,
             "value": round(quantity * price, 2),
-            "commission": round(commission, 2),
+            "value_usd": round(quantity * price_usd, 2),
+            "commission": round(total_cost_usd - order_value_usd, 2),
             "signal_strength": signal_strength,
             "strategy": strategy,
             "timestamp": datetime.now().isoformat(),
         }
         self.trade_history.append(record)
 
-        logger.info(f"📈 BUY  {ticker}: {quantity:.2f}股 @ ${price:.2f} = ${quantity*price:.2f}")
+        logger.info(f"📈 BUY  {ticker}: {quantity:.2f}股 @ {currency}${price:.2f} = ${quantity*price_usd:.2f} USD")
         return record
 
     def _execute_sell(
         self, ticker: str, price: float, signal_strength: float, strategy: str
     ) -> Optional[Dict]:
-        """执行卖出"""
+        """执行卖出（price 为本地币种，收入自动兑换为 USD）"""
         shares = self.positions.get(ticker, 0.0)
-        if shares <= 0:
+        if shares < trading_config.MIN_SHARES:
             return None
+
+        currency = self._get_currency(ticker)
 
         # 卖出比例
         sell_ratio = min(abs(signal_strength), 1.0)
         quantity = shares * sell_ratio
 
-        if quantity < 0.001:
-            return None
+        if quantity < trading_config.MIN_SHARES:
+            quantity = shares  # 少于最小量则全卖
 
-        value = quantity * price
-        commission = value * trading_config.COMMISSION_RATE
-        net_value = value - commission
+        value_local = quantity * price
+        value_usd = self._to_usd(value_local, currency)
+        commission = value_usd * trading_config.COMMISSION_RATE
+        net_value = value_usd - commission
 
         self.cash += net_value
         self.positions[ticker] = shares - quantity
 
         if self.positions[ticker] < 0.001:
             del self.positions[ticker]
-            del self.avg_costs[ticker]
+            if ticker in self.avg_costs:
+                del self.avg_costs[ticker]
 
+        price_usd = self._to_usd(price, currency)
         record = {
             "ticker": ticker,
             "side": "sell",
             "quantity": round(quantity, 4),
             "price": round(price, 2),
-            "value": round(value, 2),
+            "price_usd": round(price_usd, 2),
+            "currency": currency,
+            "value": round(value_local, 2),
+            "value_usd": round(value_usd, 2),
             "commission": round(commission, 2),
             "signal_strength": signal_strength,
             "strategy": strategy,
@@ -148,7 +197,7 @@ class PortfolioManager:
         }
         self.trade_history.append(record)
 
-        logger.info(f"📉 SELL {ticker}: {quantity:.2f}股 @ ${price:.2f} = ${value:.2f}")
+        logger.info(f"📉 SELL {ticker}: {quantity:.2f}股 @ {currency}${price:.2f} = ${value_usd:.2f} USD")
         return record
 
     # ================================================================
@@ -156,11 +205,13 @@ class PortfolioManager:
     # ================================================================
 
     def update_value(self, prices: Dict[str, float]):
-        """更新组合总价值"""
+        """更新组合总价值（prices 为各币种本地价格，自动兑换 USD）"""
         positions_value = 0.0
         for ticker, shares in self.positions.items():
             if ticker in prices:
-                positions_value += shares * prices[ticker]
+                price_local = prices[ticker]
+                price_usd = self._to_usd(price_local, self._get_currency(ticker))
+                positions_value += shares * price_usd
 
         self.total_value = self.cash + positions_value
         self.value_history.append((datetime.now(), self.total_value))
@@ -172,24 +223,28 @@ class PortfolioManager:
             self.daily_returns.append(daily_return)
 
     def get_positions_summary(self, prices: Dict[str, float]) -> List[Dict]:
-        """获取持仓摘要"""
+        """获取持仓摘要（统一 USD）"""
         summary = []
         for ticker, shares in self.positions.items():
-            price = prices.get(ticker, 0.0)
-            value = shares * price
+            local_price = prices.get(ticker, 0.0)
+            currency = self._get_currency(ticker)
+            price_usd = self._to_usd(local_price, currency)
+            value_usd = shares * price_usd
             avg_cost = self.avg_costs.get(ticker, 0.0)
-            unrealized_pnl = (price - avg_cost) * shares if avg_cost > 0 else 0.0
-            unrealized_pnl_pct = (price / avg_cost - 1) * 100 if avg_cost > 0 else 0.0
+            unrealized_pnl = (price_usd - avg_cost) * shares if avg_cost > 0 else 0.0
+            unrealized_pnl_pct = (price_usd / avg_cost - 1) * 100 if avg_cost > 0 else 0.0
 
             summary.append({
                 "ticker": ticker,
                 "shares": round(shares, 4),
                 "avg_cost": round(avg_cost, 2),
-                "current_price": round(price, 2),
-                "market_value": round(value, 2),
+                "current_price": round(local_price, 2),
+                "current_price_usd": round(price_usd, 2),
+                "currency": currency,
+                "market_value": round(value_usd, 2),
                 "unrealized_pnl": round(unrealized_pnl, 2),
                 "unrealized_pnl_pct": round(unrealized_pnl_pct, 2),
-                "allocation": round(value / (self.total_value + 1e-8) * 100, 2),
+                "allocation": round(value_usd / (self.total_value + 1e-8) * 100, 2),
             })
 
         summary.sort(key=lambda x: x["market_value"], reverse=True)

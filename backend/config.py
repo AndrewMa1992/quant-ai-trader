@@ -171,9 +171,18 @@ class ModelConfig:
 # ============================================================
 @dataclass
 class TradingConfig:
-    INITIAL_CAPITAL: float = 100000.0
+    INITIAL_CAPITAL: float = 1_000_000.0
     BASE_CURRENCY: str = "USD"
     SIMULATION_MODE: bool = True
+
+    # Multi-currency conversion rates to USD
+    CURRENCY_RATES: dict = field(default_factory=lambda: {
+        "USD": 1.0,
+        "HKD": 0.128,   # 1 HKD ≈ 0.128 USD
+        "SGD": 0.75,    # 1 SGD ≈ 0.75 USD
+        "AUD": 0.67,    # 1 AUD ≈ 0.67 USD
+        "NZD": 0.62,    # 1 NZD ≈ 0.62 USD
+    })
 
     MAX_POSITION_SIZE: float = 0.25
     MAX_PORTFOLIO_RISK: float = 0.02
@@ -183,6 +192,9 @@ class TradingConfig:
     VAR_CONFIDENCE: float = 0.95
     COMMISSION_RATE: float = 0.001
     SLIPPAGE: float = 0.0005
+    MIN_CONFIDENCE: float = 0.30
+    MIN_TRADE_VALUE: float = 500.0
+    MIN_SHARES: int = 1
 
     TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))
     TIGER_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY", ""))

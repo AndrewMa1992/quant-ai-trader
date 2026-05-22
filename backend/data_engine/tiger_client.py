@@ -288,6 +288,9 @@ class TigerClient:
                 quantity=qty,
             )
             if limit_price:
+                # HK 价格 tick size 对齐
+                if is_hk:
+                    limit_price = self._align_hk_tick(limit_price)
                 order.limit_price = limit_price
 
             logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}")
@@ -377,6 +380,36 @@ class TigerClient:
         except Exception as e:
             logger.error(f"❌ 获取账户信息失败: {e}")
         return None
+
+    # ================================================================
+    # 价格精度对齐
+    # ================================================================
+
+    @staticmethod
+    def _align_hk_tick(price: float) -> float:
+        """将价格对齐到港股最小变动价位"""
+        if price <= 0:
+            return price
+        # HKEX tick size rules
+        tick_rules = [
+            (0.25, 0.001), (0.50, 0.005), (2.0, 0.010),
+            (5.0, 0.025), (10.0, 0.020), (20.0, 0.050),
+            (100.0, 0.100), (200.0, 0.200), (500.0, 0.500),
+            (1000.0, 1.000), (2000.0, 2.000), (float("inf"), 5.000),
+        ]
+        for upper, tick in tick_rules:
+            if price < upper:
+                return round(price / tick) * tick
+        return price
+
+    @staticmethod
+    def _align_sg_tick(price: float) -> float:
+        """新加坡股票 tick size"""
+        if price < 1.0:
+            return round(price / 0.001) * 0.001
+        elif price < 10.0:
+            return round(price / 0.005) * 0.005
+        return round(price / 0.01) * 0.01
 
     # ================================================================
     # 状态

@@ -65,16 +65,29 @@ class PaperExecutor:
         if decision == "hold":
             return None
 
+        # 置信度门槛
+        if confidence < trading_config.MIN_CONFIDENCE:
+            return None
+
         side = decision  # buy or sell
 
         # 1. 风控检查
         if side == "buy":
-            # 估算订单价值
             estimated_value = self.portfolio.cash * strength
             quantity = estimated_value / price if price > 0 else 0
+            if quantity < trading_config.MIN_SHARES:
+                return None
         else:
             shares = self.portfolio.positions.get(ticker, 0.0)
+            if shares < trading_config.MIN_SHARES:
+                return None  # 无仓位不卖
             quantity = shares * strength
+            if quantity < trading_config.MIN_SHARES:
+                quantity = shares  # 少于最小量则全卖
+
+        # 最小交易额检查
+        if quantity * price < trading_config.MIN_TRADE_VALUE:
+            return None
 
         report = self.risk_manager.check_order(ticker, side, quantity, price)
 
