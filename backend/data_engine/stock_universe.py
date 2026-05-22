@@ -30,6 +30,9 @@ class StockUniverse:
     数据来源:
     - US: Wikipedia S&P 500 + Nasdaq 100 列表
     - HK: 预置恒生指数 + 国企指数成分股
+    - SG: 预置海峡时报指数 (STI) 成分股
+    - AU: Wikipedia S&P/ASX 200 列表
+    - NZ: 预置 NZX 50 成分股
 
     筛选条件（可配置）:
     - 市值 > $500M
@@ -40,6 +43,9 @@ class StockUniverse:
     def __init__(self):
         self._us_stocks: List[Dict] = []
         self._hk_stocks: List[Dict] = []
+        self._sg_stocks: List[Dict] = []
+        self._au_stocks: List[Dict] = []
+        self._nz_stocks: List[Dict] = []
         self._all_stocks: List[Dict] = []
         self._last_update: Optional[datetime] = None
         self._load_cache()
@@ -124,6 +130,70 @@ class StockUniverse:
         ]
         logger.info(f"📊 港股池: {len(hk_stocks)} 只")
         return hk_stocks
+
+    def fetch_sg_universe(self) -> List[str]:
+        """获取新加坡股票池（海峡时报指数 STI 成分股 + 主要中大盘股）"""
+        sg_stocks = [
+            # STI 成分股 (yfinance .SI 后缀)
+            "D05.SI", "O39.SI", "U11.SI", "Z74.SI",
+            "C52.SI", "C6L.SI", "S58.SI", "BS6.SI",
+            "U96.SI", "C09.SI", "F34.SI", "U14.SI",
+            "S68.SI", "V03.SI", "BN4.SI", "T39.SI",
+            "G13.SI", "H78.SI", "Y92.SI", "C07.SI",
+            "C31.SI", "S51.SI", "N2IU.SI", "J36.SI",
+            "M44U.SI", "A17U.SI", "AU8U.SI", "U96.SI",
+            "M1GU.SI", "C38U.SI",
+        ]
+        logger.info(f"📊 新加坡池: {len(sg_stocks)} 只")
+        return sg_stocks
+
+    def fetch_au_universe(self) -> List[str]:
+        """获取澳洲股票池（S&P/ASX 200 成分股）"""
+        tickers: Set[str] = set()
+
+        try:
+            asx200 = pd.read_html(
+                "https://en.wikipedia.org/wiki/S%26P/ASX_200"
+            )[0]
+            if "Code" in asx200.columns:
+                for t in asx200["Code"].tolist():
+                    tickers.add(f"{str(t).strip()}.AX")
+            elif "Ticker" in asx200.columns:
+                for t in asx200["Ticker"].tolist():
+                    tickers.add(f"{str(t).strip()}.AX")
+            logger.info(f"📊 ASX 200: {len(tickers)} 只")
+        except Exception as e:
+            logger.warning(f"⚠️ ASX 200 获取失败: {e}")
+
+        # 兜底
+        if len(tickers) < 20:
+            tickers = {
+                "BHP.AX","CBA.AX","CSL.AX","NAB.AX","WBC.AX",
+                "ANZ.AX","MQG.AX","WES.AX","WOW.AX","TLS.AX",
+                "WDS.AX","FMG.AX","RIO.AX","GMG.AX","ALL.AX",
+                "COL.AX","QBE.AX","SUN.AX","ORG.AX","STO.AX",
+                "NCM.AX","RHC.AX","SHL.AX","CPU.AX","XRO.AX",
+                "REA.AX","SEK.AX","CAR.AX","TCL.AX","SCG.AX",
+            }
+            logger.warning(f"⚠️ 使用预置澳股池: {len(tickers)} 只")
+
+        return list(tickers)
+
+    def fetch_nz_universe(self) -> List[str]:
+        """获取新西兰股票池（NZX 50 成分股）"""
+        nz_stocks = [
+            # NZX 50 成分股 (yfinance .NZ 后缀)
+            "FPH.NZ", "AIA.NZ", "MEL.NZ", "SPK.NZ",
+            "ATM.NZ", "MCY.NZ", "IFT.NZ", "EBO.NZ",
+            "SUM.NZ", "RYM.NZ", "CEN.NZ", "MEL.NZ",
+            "CNU.NZ", "FBU.NZ", "GMT.NZ", "KPG.NZ",
+            "PCT.NZ", "POT.NZ", "SKC.NZ", "SKT.NZ",
+            "STU.NZ", "THL.NZ", "VHP.NZ", "VGL.NZ",
+            "OCA.NZ", "ARG.NZ", "ARV.NZ", "GNE.NZ",
+            "MCY.NZ", "ZEL.NZ",
+        ]
+        logger.info(f"📊 新西兰池: {len(nz_stocks)} 只")
+        return nz_stocks
 
     # ================================================================
     # 筛选逻辑
@@ -260,35 +330,64 @@ class StockUniverse:
         # 1. 获取成分股
         us_raw = self.fetch_us_universe()
         hk_raw = self.fetch_hk_universe()
+        sg_raw = self.fetch_sg_universe()
+        au_raw = self.fetch_au_universe()
+        nz_raw = self.fetch_nz_universe()
 
         # 2. 筛选（首次全量，后续增量）
         if not self._all_stocks or force:
             us_screened = self.screen_stocks(us_raw, max_workers=25)
-            # HK 用 yfinance 不可靠，直接从列表通过（market_data 用 tiger_open）
+            # HK/SG/AU/NZ 用 yfinance 不可靠，直接从列表通过（market_data 用 tiger_open）
             hk_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6, 
                            "price": 50, "volatility": 0.3, "beta": 1.0, "sector": "HK"}
                           for t in hk_raw]
+            sg_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6,
+                           "price": 10, "volatility": 0.3, "beta": 1.0, "sector": "SG"}
+                          for t in sg_raw]
+            au_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6,
+                           "price": 50, "volatility": 0.3, "beta": 1.0, "sector": "AU"}
+                          for t in au_raw]
+            nz_screened = [{"ticker": t, "name": t, "market_cap": 1e9, "avg_volume": 5e5,
+                           "price": 5, "volatility": 0.3, "beta": 1.0, "sector": "NZ"}
+                          for t in nz_raw]
         else:
             us_screened = self.quick_screen(us_raw)
             hk_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6,
                            "price": 50, "volatility": 0.3, "beta": 1.0, "sector": "HK"}
                           for t in hk_raw]
+            sg_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6,
+                           "price": 10, "volatility": 0.3, "beta": 1.0, "sector": "SG"}
+                          for t in sg_raw]
+            au_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6,
+                           "price": 50, "volatility": 0.3, "beta": 1.0, "sector": "AU"}
+                          for t in au_raw]
+            nz_screened = [{"ticker": t, "name": t, "market_cap": 1e9, "avg_volume": 5e5,
+                           "price": 5, "volatility": 0.3, "beta": 1.0, "sector": "NZ"}
+                          for t in nz_raw]
 
         # 3. 组装
         self._us_stocks = us_screened
         self._hk_stocks = hk_screened
-        self._all_stocks = us_screened + hk_screened
+        self._sg_stocks = sg_screened
+        self._au_stocks = au_screened
+        self._nz_stocks = nz_screened
+        self._all_stocks = us_screened + hk_screened + sg_screened + au_screened + nz_screened
         self._last_update = datetime.now()
 
         self._save_cache()
 
-        logger.info(f"✅ 股票池构建完成: US {len(self._us_stocks)} + HK {len(self._hk_stocks)} = {len(self._all_stocks)} 只")
+        logger.info(f"✅ 股票池构建完成: US {len(self._us_stocks)} + HK {len(self._hk_stocks)} "
+                    f"+ SG {len(self._sg_stocks)} + AU {len(self._au_stocks)} + NZ {len(self._nz_stocks)} "
+                    f"= {len(self._all_stocks)} 只")
 
     def _save_cache(self):
         data = {
             "last_update": self._last_update.isoformat() if self._last_update else None,
             "us_count": len(self._us_stocks),
             "hk_count": len(self._hk_stocks),
+            "sg_count": len(self._sg_stocks),
+            "au_count": len(self._au_stocks),
+            "nz_count": len(self._nz_stocks),
             "stocks": [s for s in self._all_stocks if isinstance(s, dict)],
         }
         with open(UNIVERSE_FILE, "w", encoding="utf-8") as f:
@@ -300,11 +399,20 @@ class StockUniverse:
                 with open(UNIVERSE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self._all_stocks = data.get("stocks", [])
-                self._us_stocks = [s for s in self._all_stocks if not s.get("ticker","").endswith(".HK")]
-                self._hk_stocks = [s for s in self._all_stocks if s.get("ticker","").endswith(".HK")]
+                def _by_suffix(suffix):
+                    return [s for s in self._all_stocks if s.get("ticker","").endswith(suffix)]
+                self._us_stocks = [s for s in self._all_stocks if not any(
+                    s.get("ticker","").endswith(x) for x in (".HK",".SI",".AX",".NZ"))]
+                self._hk_stocks = _by_suffix(".HK")
+                self._sg_stocks = _by_suffix(".SI")
+                self._au_stocks = _by_suffix(".AX")
+                self._nz_stocks = _by_suffix(".NZ")
                 if data.get("last_update"):
                     self._last_update = datetime.fromisoformat(data["last_update"])
-                logger.info(f"📦 加载缓存: {len(self._all_stocks)} 只 ({data.get('us_count',0)} US + {data.get('hk_count',0)} HK)")
+                logger.info(f"📦 加载缓存: {len(self._all_stocks)} 只 "
+                           f"({data.get('us_count',0)} US + {data.get('hk_count',0)} HK "
+                           f"+ {data.get('sg_count',0)} SG + {data.get('au_count',0)} AU "
+                           f"+ {data.get('nz_count',0)} NZ)")
             except Exception as e:
                 logger.warning(f"⚠️ 缓存加载失败: {e}")
 
@@ -319,15 +427,29 @@ class StockUniverse:
     @property
     def hk_tickers(self) -> List[str]:
         raw = [s["ticker"] if isinstance(s, dict) else s for s in self._hk_stocks]
-        # 转 5 位补零格式用于 yfinance
-        return [t.zfill(5) if t.isdigit() else t for t in raw]
+        return [t.replace(".HK","").zfill(5) if t.replace(".HK","").isdigit() else t for t in raw]
+
+    @property
+    def sg_tickers(self) -> List[str]:
+        return [s["ticker"] if isinstance(s, dict) else s for s in self._sg_stocks]
+
+    @property
+    def au_tickers(self) -> List[str]:
+        return [s["ticker"] if isinstance(s, dict) else s for s in self._au_stocks]
+
+    @property
+    def nz_tickers(self) -> List[str]:
+        return [s["ticker"] if isinstance(s, dict) else s for s in self._nz_stocks]
 
     @property
     def all_tickers(self) -> List[str]:
-        """所有 ticker，HK 加 .HK 后缀"""
+        """所有 ticker，HK 加 .HK 后缀，SG/AU/NZ 自带后缀"""
         us = self.us_tickers
         hk = [f"{t}.HK" for t in self.hk_tickers]
-        return us + hk
+        sg = self.sg_tickers  # already .SI
+        au = self.au_tickers  # already .AX
+        nz = self.nz_tickers  # already .NZ
+        return us + hk + sg + au + nz
 
     def get_top_by(self, key: str = "market_cap", n: int = 50) -> List[Dict]:
         """按指标排序取 top N"""
@@ -346,6 +468,9 @@ class StockUniverse:
         return {
             "us_count": len(self._us_stocks),
             "hk_count": len(self._hk_stocks),
+            "sg_count": len(self._sg_stocks),
+            "au_count": len(self._au_stocks),
+            "nz_count": len(self._nz_stocks),
             "total": len(self._all_stocks),
             "last_update": self._last_update.isoformat() if self._last_update else None,
             "top_mcap": self.get_top_by("market_cap", 10),
@@ -364,6 +489,9 @@ if __name__ == "__main__":
     print(f"\n📊 股票池概览:")
     print(f"   US: {s['us_count']} 只")
     print(f"   HK: {s['hk_count']} 只")
+    print(f"   SG: {s['sg_count']} 只")
+    print(f"   AU: {s['au_count']} 只")
+    print(f"   NZ: {s['nz_count']} 只")
     print(f"   总计: {s['total']} 只")
     print(f"\n📈 Top 10 市值:")
     for st in s["top_mcap"][:10]:
