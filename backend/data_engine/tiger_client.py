@@ -240,25 +240,67 @@ class TigerClient:
             return None
 
         try:
-            # 默认使用模拟账号（如果存在）
-            target_account = account or self._simulation_account or trading_config.TIGER_ACCOUNT
+            from tigeropen.trade.domain.order import Order
+            from tigeropen.trade.domain.contract import Contract
+            from tigeropen.common.consts import SecurityType, Currency
 
-            logger.info(f"📤 下单: {ticker} {action} {quantity}股 @ {order_type}")
+            # 确定账号（模拟优先）
+            target_account = self._simulation_account or self._real_account or trading_config.TIGER_ACCOUNT
+
+            # 确定市场和币种
+            is_hk = ticker.endswith('.HK')
+            if is_hk:
+                market = 'HK'
+                currency = Currency.HKD
+                symbol = ticker.replace('.HK', '').zfill(5)
+                # HK 不支持 MKT，必须用 LMT
+                if order_type == 'MKT':
+                    if limit_price:
+                        order_type = 'LMT'
+                    else:
+                        logger.warning(f"⚠️ HK 无价格，跳过: {ticker}")
+                        return None
+            else:
+                market = 'US'
+                currency = Currency.USD
+                symbol = ticker
+
+            # 确保最小数量为 1 股
+            qty = int(quantity)
+            if qty < 1:
+                qty = 1
+                logger.warning(f"⚠️ 数量调整为 1 (原始: {quantity})")
+
+            # 构造 Contract 对象
+            contract = Contract(
+                symbol=symbol,
+                currency=currency,
+                sec_type=SecurityType.STK,
+                exchange=market,
+            )
+
+            # 构造 Order 对象
+            order = Order(
+                account=target_account,
+                contract=contract,
+                action=action,
+                order_type=order_type,
+                quantity=qty,
+            )
+            if limit_price:
+                order.limit_price = limit_price
+
+            logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}")
             if trading_config.TIGER_PAPER_TRADING:
                 logger.info(f"   📝 Paper Trading 模式 (账号: {target_account})")
 
-            order = self._trade_client.place_order(
-                account=target_account,
-                symbol=ticker,
-                action=action,
-                quantity=quantity,
-                order_type=order_type,
-                limit_price=limit_price,
-            )
-
+            result_id = self._trade_client.place_order(order)
+            # place_order 返回 global order id (int)，同时更新 order.id
+            logger.info(f"✅ 下单成功: {ticker} 订单ID {result_id}, 状态 {order._status}")
+            
             return {
-                "order_id": order.id,
-                "status": order.status,
+                "order_id": result_id,
+                "status": str(order._status) if order._status else 'SUBMITTED',
                 "symbol": ticker,
                 "action": action,
                 "quantity": quantity,
@@ -267,7 +309,15 @@ class TigerClient:
             }
 
         except Exception as e:
-            logger.error(f"❌ 下单失败: {e}")
+            error_msg = str(e)
+            if 'cannot be placed at this moment' in error_msg.lower():
+                logger.info(f"⏰ 市场休市，跳过实盘下单 ({ticker})")
+            elif 'must be greater than 0' in error_msg.lower():
+                logger.warning(f"⚠️ 参数错误 ({ticker}): {error_msg[:80]}")
+            else:
+                logger.error(f"❌ 下单失败 ({ticker} {action}): {error_msg[:100]}")
+                import traceback
+                logger.error(traceback.format_exc())
             return None
 
     def cancel_order(self, order_id: str) -> bool:

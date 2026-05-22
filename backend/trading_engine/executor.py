@@ -1,21 +1,24 @@
 """
-订单执行器 - Paper Trading 模拟
-当前为纯模拟模式，预留 Tiger Brokers 实盘接口
+订单执行器
+- 实盘：调用 Tiger Brokers API 下单
+- 模拟：本地 Paper Trading 撮合
+- 风控前置检查
+- 交易记录持久化
 """
 from typing import Dict, List, Optional, Callable
 from loguru import logger
 
+from backend.config import trading_config
 from backend.trading_engine.risk_manager import RiskManager
 from backend.trading_engine.portfolio import PortfolioManager
+from backend.data_engine.tiger_client import tiger_client
 
 
 class PaperExecutor:
     """
-    Paper Trading 模拟执行器
-    - 模拟订单撮合
-    - 风控前置检查
-    - 交易记录持久化
-    - 预留 Tiger Brokers 实盘接口
+    订单执行器
+    - tiger_client 已连接时，执行实盘下单
+    - 否则降级为 Paper Trading 模拟
     """
 
     def __init__(self, portfolio: PortfolioManager, risk_manager: RiskManager):
@@ -24,6 +27,12 @@ class PaperExecutor:
         self._order_callbacks: List[Callable] = []
         self.pending_orders: List[Dict] = []
         self.filled_orders: List[Dict] = []
+        # 是否使用老虎实盘下单（动态检查，在 execute_signal 中判断）
+        self._tiger_account = trading_config.TIGER_ACCOUNT
+        if self._tiger_account:
+            logger.info(f"📝 老虎账号已配置: {self._tiger_account}（将在下单时动态检查连接）")
+        else:
+            logger.info("📝 老虎账号未配置，使用模拟模式")
 
     # ================================================================
     # 订单执行
@@ -74,6 +83,7 @@ class PaperExecutor:
             return None
 
         # 2. 执行交易
+        # 优先：本地模拟撮合（保证交易逻辑正常运行）
         trade = self.portfolio.execute_trade(
             ticker=ticker,
             side=side,
@@ -81,12 +91,33 @@ class PaperExecutor:
             signal_strength=strength,
             strategy=strategy,
         )
-
+        
         if trade:
             self.filled_orders.append(trade)
             self._emit_order_filled(trade)
-
-        return trade
+            
+            # 同时发送到老虎实盘（如果已配置且连接）
+            use_tiger_now = bool(self._tiger_account and tiger_client.is_connected())
+            if use_tiger_now:
+                try:
+                    action = "BUY" if side == "buy" else "SELL"
+                    order_result = tiger_client.place_order(
+                        ticker=ticker,
+                        action=action,
+                        quantity=int(quantity),
+                        order_type="MKT",
+                        limit_price=price,  # HK 需 LMT，自动转换
+                    )
+                    if order_result:
+                        logger.info(f"✅ 实盘下单成功: {ticker} {action} | 订单ID: {order_result.get('order_id')}")
+                    else:
+                        logger.warning(f"⚠️ 实盘下单返回空: {ticker} {action}")
+                except Exception as e:
+                    logger.error(f"❌ 老虎下单异常: {ticker} {action} | {e}")
+            
+            return trade
+        
+        return None
 
     def execute_signal_batch(
         self,

@@ -1,14 +1,17 @@
-﻿"""
-Quant AI Trader - FastAPI 涓诲叆鍙?WebSocket 瀹炴椂鎺ㄩ€?+ REST API + 瀹氭椂浠诲姟
+"""
+Quant AI Trader - FastAPI main entry (WebSocket + REST API + Frontend SPA)
 """
 import asyncio
 import json
 from datetime import datetime
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, List, Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 
 from backend.config import api_config, data_config
@@ -31,7 +34,7 @@ from backend.api import (
 
 
 # ================================================================
-# 鍏ㄥ眬缁勪欢
+# Global Components
 # ================================================================
 
 market_data = MarketDataEngine()
@@ -52,79 +55,83 @@ trainer = ModelTrainer()
 
 realtime = RealtimeEngine(market_data, data_pipeline)
 
-# WebSocket 杩炴帴绠＄悊
 active_connections: Set[WebSocket] = set()
 
 
 # ================================================================
-# 鐢熷懡鍛ㄦ湡
+# Lifespan
 # ================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """搴旂敤鐢熷懡鍛ㄦ湡绠＄悊"""
-    logger.info("Quant AI Trader 鍚姩涓?..")
+    """Application lifecycle management"""
+    logger.info("Quant AI Trader starting...")
 
-    # 鍒濆鍖栦俊鍙峰巻鍙插瓨鍌?    signal_history_store = SignalHistory()
+    # Init signal history
+    signal_history_store = SignalHistory()
     routes_analysis.init_signal_history(signal_history_store)
 
-    # 鍒濆鍖栬矾鐢?    routes_trade.init(executor, portfolio, risk_manager, store)
+    # Init routes
+    routes_trade.init(executor, portfolio, risk_manager, store)
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
 
-    # 灏濊瘯鍔犺浇妯″瀷锛堜娇鐢?trainer 鍋氱粺涓€鍔犺浇锛?    trans_ready, rl_ready = trainer.load_or_retrain()
-    logger.info(f"妯″瀷鍔犺浇: Transformer={'灏辩华' if trans_ready else '鏈缁?}, RL={'灏辩华' if rl_ready else '鏈缁?}")
+    # Load models via trainer
+    trans_ready, rl_ready = trainer.load_or_retrain()
+    logger.info(f"Model load: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
     if not trans_ready or not rl_ready:
-        logger.info("妯″瀷鏈缁冿紝鍚庡彴鍚姩璁粌...")
+        logger.info("Models not trained, starting background training...")
         import threading
         t = threading.Thread(target=trainer.train_all, daemon=True)
         t.start()
 
-    # 灏濊瘯杩炴帴鑰佽檸璇佸埜 API
-    logger.info("灏濊瘯杩炴帴鑰佽檸璇佸埜 API...")
+    # Connect Tiger API
+    logger.info("Connecting to Tiger API...")
     tiger_connected = tiger_client.connect()
     if tiger_connected:
         tiger_status = tiger_client.get_status()
-        logger.info(f"鑰佽檸API 杩炴帴鎴愬姛! 妯℃嫙璐﹀彿: {tiger_status['simulation_account']}")
+        logger.info(f"Tiger API connected! Account: {tiger_status['simulation_account']}")
     else:
-        logger.info("鑰佽檸API 鏈厤缃紝浣跨敤妯℃嫙妯″紡 (yfinance)")
+        logger.info("Tiger API not configured, using simulation mode (yfinance)")
 
-    # 浠庢暟鎹簱鎭㈠缁勫悎鐘舵€?    state_loaded = portfolio.load_state()
+    # Restore portfolio state
+    state_loaded = portfolio.load_state()
     if state_loaded:
-        logger.info("鉁?缁勫悎鐘舵€佸凡浠庢暟鎹簱鎭㈠")
+        logger.info("Portfolio state restored from database")
     else:
-        logger.info("馃啎 鏃犲巻鍙茬姸鎬侊紝浣跨敤榛樿鍒濆璧勯噾")
+        logger.info("No history, using default initial capital")
 
-    # 娉ㄥ唽鎵ц鍥炶皟 - 姣忔浜ゆ槗鍚庝繚瀛樼姸鎬?    executor.on_order_filled(lambda trade: portfolio.save_state())
+    # Save state after each trade
+    executor.on_order_filled(lambda trade: portfolio.save_state())
 
-    # 鍚姩瀹炴椂寮曟搸
+    # Start realtime engine
     realtime_task = asyncio.create_task(realtime.start())
 
-    # 娉ㄥ唽瀹炴椂鏇存柊鍥炶皟
+    # Register callbacks
     realtime.on_tick(handle_market_tick)
     strategy_engine.on_analysis(handle_analysis_result)
 
-    logger.info("Quant AI Trader 鍚姩瀹屾垚锛?)
-    logger.info(f"妯″瀷鐘舵€? Transformer={'灏辩华' if trans_ready else '鏈缁?}, RL={'灏辩华' if rl_ready else '鏈缁?}")
-    logger.info(f"缇庤偂: {len(data_config.US_TICKERS)} 鍙? 娓偂: {len(data_config.HK_TICKERS)} 鍙?)
+    logger.info("Quant AI Trader started")
+    logger.info(f"Model status: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
+    logger.info(f"US: {len(data_config.US_TICKERS)} stocks, HK: {len(data_config.HK_TICKERS)} stocks")
     logger.info(f"Web UI: http://localhost:{api_config.PORT}")
     logger.info(f"API:    http://localhost:{api_config.PORT}/docs")
 
     yield
 
-    # 鍏抽棴
+    # Shutdown
     realtime.stop()
     realtime_task.cancel()
-    logger.info("Quant AI Trader 宸插叧闂?)
+    logger.info("Quant AI Trader shutting down")
 
 
 # ================================================================
-# FastAPI 搴旂敤
+# FastAPI App
 # ================================================================
 
 app = FastAPI(
     title="Quant AI Trader",
-    description="鏈€鍓嶆部绉戞妧鎵撻€犵殑閲忓寲AI缇庤偂浜ゆ槗绯荤粺",
+    description="Quantitative AI Stock Trading System",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -137,11 +144,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 娉ㄥ唽璺敱
+# Register API routes
 app.include_router(routes_data.router)
 app.include_router(routes_trade.router)
 app.include_router(routes_analysis.router)
 app.include_router(routes_models.router)
+
+# Mount frontend static files (production build)
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="frontend_assets")
 
 
 # ================================================================
@@ -150,10 +162,10 @@ app.include_router(routes_models.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    """WebSocket 瀹炴椂鏁版嵁鎺ㄩ€?""
+    """WebSocket realtime data push"""
     await ws.accept()
     active_connections.add(ws)
-    logger.info(f"WebSocket 瀹㈡埛绔繛鎺?(褰撳墠: {len(active_connections)})")
+    logger.info(f"WebSocket client connected (active: {len(active_connections)})")
 
     try:
         while True:
@@ -172,18 +184,18 @@ async def websocket_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         active_connections.discard(ws)
-        logger.info(f"WebSocket 瀹㈡埛绔柇寮€ (褰撳墠: {len(active_connections)})")
+        logger.info(f"WebSocket client disconnected (active: {len(active_connections)})")
     except Exception as e:
-        logger.error(f"WebSocket 閿欒: {e}")
+        logger.error(f"WebSocket error: {e}")
         active_connections.discard(ws)
 
 
 # ================================================================
-# 鍥炶皟澶勭悊
+# Callback Handlers
 # ================================================================
 
 async def handle_market_tick(ticks: List[Dict]):
-    """澶勭悊甯傚満 tick 鏇存柊锛屾敮鎸佸甯傚満"""
+    """Handle market tick updates"""
     if not active_connections:
         return
 
@@ -209,7 +221,7 @@ async def handle_market_tick(ticks: List[Dict]):
 
 
 async def handle_analysis_result(results: Dict):
-    """澶勭悊鍒嗘瀽缁撴灉"""
+    """Handle analysis results"""
     if not active_connections:
         return
     message = json.dumps({"type": "analysis_result", "data": results})
@@ -217,7 +229,7 @@ async def handle_analysis_result(results: Dict):
 
 
 async def broadcast(message: str):
-    """骞挎挱娑堟伅鍒版墍鏈塛ebSocket瀹㈡埛绔?""
+    """Broadcast to all WebSocket clients"""
     if not active_connections:
         return
     dead_connections = set()
@@ -231,7 +243,7 @@ async def broadcast(message: str):
 
 
 async def build_data_dict(tickers: List[str]) -> Dict:
-    """鏋勫缓妯″瀷杈撳叆鏁版嵁"""
+    """Build model input data"""
     data_dict = {}
     for ticker in tickers:
         df = market_data.get_historical_data(ticker, period="3mo", interval="1d")
@@ -244,12 +256,11 @@ async def build_data_dict(tickers: List[str]) -> Dict:
 
 
 # ================================================================
-# 鍋ュ悍妫€鏌?& 棣栭〉
+# Health Check & Routes
 # ================================================================
 
 @app.get("/health")
 async def health():
-    """鍋ュ悍妫€鏌?""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -264,12 +275,25 @@ async def health():
 
 @app.get("/")
 async def root():
-    """杩斿洖绯荤粺淇℃伅"""
+    """Frontend SPA entry"""
+    index_path = FRONTEND_DIST / "index.html"
+    if FRONTEND_DIST.exists() and index_path.exists():
+        return FileResponse(index_path)
     return {
         "name": "Quant AI Trader",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
-        "frontend": "http://localhost:5180",
     }
 
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """SPA fallback for client-side routing"""
+    if full_path.startswith(("api/", "docs", "openapi.json", "ws")):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    index_path = FRONTEND_DIST / "index.html"
+    if FRONTEND_DIST.exists() and index_path.exists():
+        return FileResponse(index_path)
+    return JSONResponse({"detail": "Frontend not built"}, status_code=404)

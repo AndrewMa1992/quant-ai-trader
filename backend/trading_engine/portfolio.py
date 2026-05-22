@@ -272,6 +272,32 @@ class PortfolioManager:
                 "INSERT INTO portfolio_positions (ticker, shares, avg_cost) VALUES (?, ?, ?)",
                 (ticker, shares, avg_cost)
             )
+
+        # 保存交易记录
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                price REAL NOT NULL,
+                value REAL NOT NULL,
+                commission REAL DEFAULT 0,
+                timestamp TEXT,
+                signal_strength REAL DEFAULT 0,
+                strategy TEXT DEFAULT 'ensemble',
+                status TEXT DEFAULT 'FILLED',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        for trade in self.trade_history[-100:]:  # 只保存最近100笔
+            conn.execute(
+                """INSERT OR IGNORE INTO trades (ticker, side, quantity, price, value, commission, timestamp, signal_strength, strategy)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (trade['ticker'], trade['side'], trade['quantity'], trade['price'],
+                 trade['value'], trade['commission'], trade['timestamp'],
+                 trade['signal_strength'], trade['strategy'])
+            )
         # 保存账户状态
         conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_account (

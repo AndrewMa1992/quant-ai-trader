@@ -127,17 +127,19 @@ class TradingStrategy:
         sentiment_signal = self.sentiment.get_signal(ticker)
         signals["sentiment"] = sentiment_signal
 
-        # 4. RL Agent 信号
-        if self.rl_agent.is_ready():
-            try:
-                state = self._build_rl_state(features, ticker, prices)
-                rl_action, _ = self.rl_agent.predict(state)
-                signals["rl_agent"] = {
-                    "actions": rl_action.tolist() if hasattr(rl_action, "tolist") else [float(rl_action)],
-                    "confidence": 0.6,
-                }
-            except Exception as e:
-                logger.warning(f"⚠️ {ticker} RL 预测失败: {e}")
+        # 4. RL Agent 信号（暂禁用：状态空间不兼容单股票预测）
+        # TODO: 需要重构为组合级别状态才能启用
+        # if self.rl_agent.is_ready():
+        #     try:
+        #         state = self._build_rl_state(features, ticker, prices)
+        #         rl_action, _ = self.rl_agent.predict(state)
+        #         signals["rl_agent"] = {
+        #             "actions": rl_action.tolist() if hasattr(rl_action, "tolist") else [float(rl_action)],
+        #             "confidence": 0.6,
+        #         }
+        #     except Exception as e:
+        #         logger.warning(f"⚠️ {ticker} RL 预测失败: {e}")
+        pass
 
         # 信号融合
         if not signals:
@@ -176,11 +178,14 @@ class TradingStrategy:
         return signal
 
     def _build_rl_state(self, features: np.ndarray, ticker: str, prices: Dict[str, float]) -> np.ndarray:
-        """构建 RL 状态"""
-        flat = features.flatten()[-1000:] if len(features.flatten()) > 1000 else features.flatten()
+        """构建 RL 状态（仅用数值特征，过滤非数值）"""
+        flat = features.flatten()
+        # 只保留纯数值，过滤任何字符串或 NaN
+        flat = pd.Series(flat[pd.notna(flat)]).apply(lambda x: float(x) if isinstance(x, (int, float, np.number)) else np.nan).dropna().values
+        flat = flat[-1000:] if len(flat) > 1000 else flat
         state = np.concatenate([
             flat,
-            [prices.get(ticker, 0.0)],
+            [float(prices.get(ticker, 0.0))],
         ])
         return state.astype(np.float32)
 
