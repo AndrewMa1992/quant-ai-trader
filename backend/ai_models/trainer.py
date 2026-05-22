@@ -14,9 +14,9 @@ pipeline = DataPipeline()
 
 
 class ModelTrainer:
-    def __init__(self):
-        self.transformer = TransformerPredictor()
-        self.rl_agent = TradingRLAgent()
+    def __init__(self, transformer=None, rl_agent=None):
+        self.transformer = transformer or TransformerPredictor()
+        self.rl_agent = rl_agent or TradingRLAgent()
         self.training_history: List[Dict] = []
 
     def train_all(self, tickers: Optional[List[str]] = None):

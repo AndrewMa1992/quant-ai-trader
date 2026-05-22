@@ -51,7 +51,7 @@ risk_manager = RiskManager()
 executor = PaperExecutor(portfolio, risk_manager)
 strategy_engine = TradingStrategy(transformer, rl_agent, sentiment, ensemble, executor)
 backtester = Backtester()
-trainer = ModelTrainer()
+trainer = ModelTrainer(transformer=transformer, rl_agent=rl_agent)
 
 realtime = RealtimeEngine(market_data, data_pipeline)
 
