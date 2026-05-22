@@ -29,7 +29,7 @@ start "QuantTrader-Frontend" /MIN npm run dev
 
 echo [3/3] Auto Trader (30min cycle)
 cd /d G:\workbuddyspace\Claw\quant-ai-trader
-start "QuantTrader-Auto" /MIN python auto_trader.py --interval 1800
+start "QuantTrader-Auto" /MIN python auto_trader.py --interval 180
 
 echo.
 echo ============================================
