@@ -28,6 +28,9 @@ class PortfolioManager:
         self.total_value = self.initial_capital
         self.trade_history: List[Dict] = []
 
+        # ★ Tiger 同步标记：首次同步后 initial_capital 以 Tiger 为准
+        self._tiger_initial_capital_synced = False
+
         # 历史记录
         self.value_history: List[Tuple[datetime, float]] = [
             (datetime.now(), self.initial_capital)
@@ -39,7 +42,7 @@ class PortfolioManager:
     # ================================================================
 
     def _get_currency(self, ticker: str) -> str:
-        """根据 ticker 后缀判断币种"""
+        """根据 ticker 判断币种"""
         ticker_upper = ticker.upper()
         if ".HK" in ticker_upper:
             return "HKD"
@@ -49,6 +52,10 @@ class PortfolioManager:
             return "AUD"
         elif ".NZ" in ticker_upper:
             return "NZD"
+        # 纯数字 ticker (1-5位) = 港股
+        clean = ticker_upper.replace(".HK", "").replace(".SI", "").strip()
+        if clean.isdigit() and len(clean) <= 5:
+            return "HKD"
         return "USD"
 
     def _to_usd(self, amount: float, currency: str) -> float:
@@ -411,3 +418,297 @@ class PortfolioManager:
             return False
         finally:
             conn.close()
+
+    # ================================================================
+    # Tiger Brokers 实时同步
+    # ================================================================
+
+    def sync_from_tiger(self, force: bool = False) -> Dict:
+        """
+        从老虎证券 API 拉取实际持仓和账户信息，覆盖本地状态
+        ★ 这是唯一真实数据源
+
+        Args:
+            force: 是否强制同步（即使本地已有数据）
+
+        Returns:
+            {"synced": bool, "positions": int, "cash": float, "total_value": float, "source": str}
+        """
+        from backend.data_engine.tiger_client import tiger_client
+
+        result = {
+            "synced": False,
+            "positions": 0,
+            "cash": 0.0,
+            "total_value": 0.0,
+            "source": "none",
+        }
+
+        if not tiger_client.is_connected():
+            # 尝试重连
+            logger.info("🔄 Tiger 未连接，尝试重新连接...")
+            tiger_client.connect()
+        
+        if not tiger_client.is_connected():
+            logger.warning("⚠️ Tiger 未连接，无法同步持仓")
+            result["source"] = "tiger_offline"
+            return result
+
+        try:
+            # ★ 确保 session 有效：强制重连再查询
+            tiger_client.connect()
+            
+            # 1. 拉取老虎实际持仓
+            tiger_positions = tiger_client.get_positions()
+            tiger_account = tiger_client.get_account_info()
+
+            if not tiger_account:
+                logger.warning("⚠️ 无法获取 Tiger 账户信息")
+                result["source"] = "tiger_account_error"
+                return result
+
+            # 2. 记录同步前的本地状态
+            old_pos_count = len(self.positions)
+            old_cash = self.cash
+
+            # ★ 安全网：Tiger 返回 0 持仓但本地有大量持仓，说明 Tiger API 异常，保留本地
+            if len(tiger_positions) == 0 and old_pos_count > 5:
+                logger.error(
+                    f"🚨 Tiger 返回 0 持仓但本地有 {old_pos_count} 只！"
+                    f"Tiger API 可能异常，保留本地数据不覆盖"
+                )
+                result["synced"] = False
+                result["source"] = "tiger_empty_abnormal"
+                result["positions"] = old_pos_count
+                result["cash"] = old_cash
+                result["total_value"] = self.total_value
+                return result
+
+            # 3. 用老虎数据覆盖本地状态
+            self.positions.clear()
+            self.avg_costs.clear()
+            self.cash = tiger_account.get("cash", 0.0)
+
+            # ★ 首次 Tiger 同步：用老虎实际总资产作为 initial_capital
+            tiger_total = tiger_account.get("total_value", 0.0)
+            if tiger_total > 0:
+                # 条件：从未同步过 OR 差距超过 5% OR 强制重置
+                need_reset = (
+                    force or
+                    not self._tiger_initial_capital_synced or
+                    abs(tiger_total - self.initial_capital) / max(self.initial_capital, 1) > 0.05
+                )
+                if need_reset:
+                    reset_reason = "强制重置" if force else (
+                        "首次同步" if not self._tiger_initial_capital_synced else
+                        f"差距 {abs(tiger_total-self.initial_capital)/max(self.initial_capital,1)*100:.1f}%"
+                    )
+                    logger.info(
+                        f"🔑 Tiger 同步 initial_capital ({reset_reason}): "
+                        f"${self.initial_capital:,.2f} → ${tiger_total:,.2f}"
+                    )
+                    self.initial_capital = tiger_total
+                    self._tiger_initial_capital_synced = True
+                    # 重设 value_history 起点
+                    self.value_history = [(datetime.now(), tiger_total)]
+
+            for pos in tiger_positions:
+                ticker = pos.get("ticker", "")
+                shares = pos.get("shares", 0.0)
+                avg_cost = pos.get("avg_cost", 0.0)
+                if ticker:
+                    if shares > 0:
+                        self.positions[ticker] = shares
+                        self.avg_costs[ticker] = avg_cost
+                    elif shares < 0:
+                        # 负持仓 = 空头，需要买回来修复
+                        self.positions[ticker] = shares  # 保留负数用于修复
+                        self.avg_costs[ticker] = avg_cost
+
+            # 4. 计算总价值 — 以 Tiger account.total_value 为权威数据
+            tiger_total = tiger_account.get("total_value", 0.0)
+            if tiger_total > 0:
+                self.total_value = tiger_total  # Tiger 已经正确处理了多币种
+            else:
+                positions_value = sum(
+                    pos.get("market_value", 0.0) for pos in tiger_positions
+                )
+                self.total_value = self.cash + positions_value
+
+            # 5. 记录同步结果
+            result["synced"] = True
+            pos_count = sum(1 for s in self.positions.values() if s > 0)
+            neg_count = sum(1 for s in self.positions.values() if s < 0)
+            result["positions"] = pos_count
+            result["negative_positions"] = neg_count
+            result["cash"] = self.cash
+            result["total_value"] = self.total_value
+            result["source"] = "tiger_api"
+
+            logger.info(
+                f"🔄 Tiger 同步完成: "
+                f"持仓 {pos_count} 只, "
+                f"现金 ${old_cash:,.2f}→${self.cash:,.2f}, "
+                f"总资产 ${self.total_value:,.2f}"
+            )
+            
+            if neg_count > 0:
+                neg_list = [(t, s) for t, s in self.positions.items() if s < 0]
+                neg_tickers = [t for t, _ in neg_list[:10]]
+                logger.warning(f"⚠️ 发现 {neg_count} 个负持仓(空头): {neg_tickers}")
+                result["negative_tickers"] = neg_tickers
+
+            if len(self.positions) > 0:
+                logger.info(f"  Tiger 持仓详情:")
+                for pos in tiger_positions[:40]:  # 最多显示40只
+                    logger.info(
+                        f"    {pos['ticker']:10s}: {pos['shares']:>10.2f} 股, "
+                        f"市值 ${pos.get('market_value', 0):>12,.2f}, "
+                        f"均价 ${pos.get('avg_cost', 0):>8.2f}"
+                    )
+
+            # 6. 立即保存同步后的状态到本地数据库
+            self.save_state()
+            logger.info("  📝 已保存 Tiger 同步状态到本地数据库")
+
+            # ★ 杠杆检测
+            tiger_leverage = tiger_account.get("leverage", 1.0)
+            if tiger_leverage > 1.001:
+                tiger_mkt = tiger_account.get("market_value", 0)
+                tiger_total = tiger_account.get("total_value", 0)
+                margin_amt = tiger_mkt - tiger_total if tiger_mkt > tiger_total else (tiger_leverage - 1.0) * tiger_total
+                result["margin_detected"] = True
+                result["margin_amount"] = round(margin_amt, 2)
+                result["leverage"] = round(tiger_leverage, 4)
+                logger.warning(
+                    f"⚠️ Tiger 杠杆检测！杠杆率 {tiger_leverage:.4f} | "
+                    f"市值 ${tiger_mkt:,.0f} | 净资产 ${tiger_total:,.0f}"
+                )
+            else:
+                result["margin_detected"] = False
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Tiger 同步失败: {e}", exc_info=True)
+            result["source"] = "sync_error"
+            return result
+
+    def reconcile_with_tiger(self) -> Dict:
+        """
+        与老虎证券对账：对比本地持仓与 Tiger 实际持仓
+        输出差异报告，但不自动修复（需要手动确认）
+
+        Returns:
+            {"matched": bool, "differences": [...], "local_count": int, "tiger_count": int}
+        """
+        from backend.data_engine.tiger_client import tiger_client
+
+        result = {
+            "matched": True,
+            "differences": [],
+            "local_count": len(self.positions),
+            "tiger_count": 0,
+            "local_cash": self.cash,
+            "tiger_cash": 0.0,
+        }
+
+        if not tiger_client.is_connected():
+            # 尝试重连
+            tiger_client.connect()
+        
+        if not tiger_client.is_connected():
+            result["matched"] = False
+            result["differences"].append({"type": "connection", "msg": "Tiger 未连接"})
+            return result
+
+        try:
+            # ★ 确保 session 有效
+            tiger_client.connect()
+            
+            tiger_positions = tiger_client.get_positions()
+            tiger_account = tiger_client.get_account_info()
+
+            result["tiger_count"] = len(tiger_positions)
+            result["tiger_cash"] = tiger_account.get("cash", 0.0) if tiger_account else 0.0
+
+            # 构建 Tiger 持仓字典（ticker -> shares）
+            tiger_dict = {}
+            for pos in tiger_positions:
+                ticker = pos.get("ticker", "")
+                shares = pos.get("shares", 0.0)
+                if ticker:
+                    tiger_dict[ticker] = {
+                        "shares": shares,
+                        "avg_cost": pos.get("avg_cost", 0.0),
+                        "market_value": pos.get("market_value", 0.0),
+                    }
+
+            # 对比：本地有但 Tiger 没有
+            local_tickers = set(self.positions.keys())
+            tiger_tickers = set(tiger_dict.keys())
+
+            only_local = local_tickers - tiger_tickers
+            only_tiger = tiger_tickers - local_tickers
+            both = local_tickers & tiger_tickers
+
+            if only_local:
+                result["matched"] = False
+                for t in only_local:
+                    result["differences"].append({
+                        "type": "local_only",
+                        "ticker": t,
+                        "local_shares": self.positions.get(t, 0),
+                        "msg": f"本地有持仓但 Tiger 没有: {t}",
+                    })
+
+            if only_tiger:
+                result["matched"] = False
+                for t in only_tiger:
+                    result["differences"].append({
+                        "type": "tiger_only",
+                        "ticker": t,
+                        "tiger_shares": tiger_dict[t]["shares"],
+                        "msg": f"Tiger 有持仓但本地没有: {t}",
+                    })
+
+            # 对比：两边都有但数量不同
+            for t in both:
+                local_shares = self.positions.get(t, 0)
+                tiger_shares = tiger_dict[t]["shares"]
+                if abs(local_shares - tiger_shares) > 0.01:  # 允许 0.01 股误差
+                    result["matched"] = False
+                    result["differences"].append({
+                        "type": "quantity_mismatch",
+                        "ticker": t,
+                        "local_shares": local_shares,
+                        "tiger_shares": tiger_shares,
+                        "diff": local_shares - tiger_shares,
+                        "msg": f"数量不一致: {t} 本地{local_shares:.2f} vs Tiger{tiger_shares:.2f}",
+                    })
+
+            # 现金对比
+            if abs(self.cash - result["tiger_cash"]) > 1.0:
+                result["matched"] = False
+                result["differences"].append({
+                    "type": "cash_mismatch",
+                    "local_cash": self.cash,
+                    "tiger_cash": result["tiger_cash"],
+                    "diff": self.cash - result["tiger_cash"],
+                    "msg": f"现金不一致: 本地${self.cash:.2f} vs Tiger${result['tiger_cash']:.2f}",
+                })
+
+            if result["matched"]:
+                logger.info(f"✅ Tiger 对账通过: {len(both)} 只持仓一致, 现金 ${self.cash:.2f}")
+            else:
+                logger.warning(f"⚠️ Tiger 对账发现 {len(result['differences'])} 处差异")
+                for diff in result["differences"][:10]:
+                    logger.warning(f"    {diff['msg']}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Tiger 对账失败: {e}")
+            result["matched"] = False
+            result["differences"].append({"type": "error", "msg": str(e)})
+            return result

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.quant.trader</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/miniconda3/envs/quant/bin/python</string>
+        <string>/Volumes/KINGSTON/workbuddyspace/Claw/quant-ai-trader/scripts/watchdog.py</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Volumes/KINGSTON/workbuddyspace/Claw/quant-ai-trader</string>
+
+    <key>StandardOutPath</key>
+    <string>/Volumes/KINGSTON/workbuddyspace/Claw/quant-ai-trader/logs/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Volumes/KINGSTON/workbuddyspace/Claw/quant-ai-trader/logs/launchd_stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/miniconda3/envs/quant/bin:/opt/miniconda3/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>Nice</key>
+    <integer>-5</integer>
+</dict>
+</plist>

@@ -1,0 +1,147 @@
+classDiagram
+    class TradingPipeline {
+        -FactorEngine engine
+        -InferenceEngine inference
+        -CircuitBreaker circuit_breaker
+        -RiskGate risk_gate
+        -ConstraintSystem constraints
+        -AlertManager alert_mgr
+        -PortfolioManager portfolio
+        -PipelineConfig config
+        +__init__(config)
+        +run_cycle() dict
+        +start(interval_seconds)
+        -_step_detect_market_state() int
+        -_step_fetch_data(tickers) dict
+        -_step_compute_factors(data) dict
+        -_step_model_inference(tickers, factor_data) list
+        -_step_risk_checks(signals, target_weights) list
+        -_step_portfolio_optimize(tickers, views) dict
+        -_step_execute_orders(trades) list
+        -_step_record_performance(results)
+    }
+
+    class PipelineConfig {
+        +int CYCLE_INTERVAL_SECONDS
+        +bool TRADING_HOURS_ONLY
+        +int MAX_TICKERS_PER_CYCLE
+        +float SIGNAL_THRESHOLD
+        +float MIN_CONFIDENCE
+        +float VAR_CONFIDENCE
+        +float VAR_LIMIT_PCT
+        +float CVAR_LIMIT_PCT
+        +float BARRA_EXPOSURE_MAX_Z
+        +bool ENABLE_RISK_CHECKS
+        +bool ENABLE_PORTFOLIO_OPT
+        +bool ENABLE_ALERTS
+        +dict SERVICE_BASE_URLS
+    }
+
+    class RiskGate {
+        -CircuitBreaker circuit_breaker
+        -str risk_service_url
+        -ConstraintSystem constraints
+        +check(ticker, quantity, price, current_weights, target_weights, nav) RiskResult
+    }
+
+    class RiskResult {
+        +bool passed
+        +str gate
+        +str reason
+        +list warnings
+        +dict sanitized_weights
+    }
+
+    class FactorEngine {
+        +dict factors
+        +register(factor)
+        +register_all()
+        +compute(df, factor_id) Series
+        +compute_all(df, factor_ids) DataFrame
+        +compute_all_multi(dfs, factor_ids) dict
+        +winsorize(series, pct) Series
+        +normalize_cross_sectional(series) Series
+        +neutralize_sector(factor_series, sectors) Series
+        +post_process(factor_series, sectors) Series
+    }
+
+    class InferenceEngine {
+        +ModelRegistry registry
+        +SignalBlender blender
+        +BayesianWeighting bayesian
+        +MarketStateDetector market_state
+        +dict models
+        +load_models() dict
+        +get_status() dict
+        +predict_single(ticker, factor_df) dict
+        +generate_signal(ticker, factor_df) dict
+        +generate_signals_batch(tickers, factor_dfs) list
+        +update_weights(model_predictions, realized_returns) dict
+        +set_market_state(returns) int
+    }
+
+    class BlackLittermanOptimizer {
+        +float tau
+        +float risk_aversion
+        +optimize(tickers, views) dict
+        -_get_prior(tickers) tuple
+        -_build_view_matrices(tickers, views, n) tuple
+    }
+
+    class CircuitBreaker {
+        +set_nav(nav)
+        +allow_order(ticker, quantity, price) bool
+        +record_trade(pnl)
+        +reset()
+        +status() dict
+    }
+
+    class ConstraintSystem {
+        +dict config
+        +build_cvxpy(w, n_assets, overrides) list
+        +validate_weights(weights, sectors, prev_weights) dict
+        +sanitize_weights(weights, prev_weights) dict
+    }
+
+    class AlertManager {
+        +send(message, severity, source, details) dict
+        +check_and_alert(order_result)
+        +get_recent(severity, max_count) list
+        +get_summary() dict
+    }
+
+    class MLflowManager {
+        +start_run(run_name) contextmanager
+        +log_params(params)
+        +log_metrics(metrics, step)
+        +log_model(model, artifact_path)
+        +register_model(run_id, model_name, stage) int
+        +promote_to_production(model_name, version) bool
+        +archive_production(model_name) int
+        +get_latest_production_model(model_name) str
+        +list_registered_models() list
+    }
+
+    class WalkForwardValidator {
+        +int train_window
+        +int val_window
+        +int test_window
+        +int step_size
+        +generate_splits(df, date_col) list
+        +run(df, train_fn, date_col) list
+    }
+
+    TradingPipeline --> PipelineConfig : uses
+    TradingPipeline --> RiskGate : uses
+    TradingPipeline --> FactorEngine : uses
+    TradingPipeline --> InferenceEngine : uses
+    TradingPipeline --> BlackLittermanOptimizer : HTTP calls
+    TradingPipeline --> CircuitBreaker : uses
+    TradingPipeline --> ConstraintSystem : uses
+    TradingPipeline --> AlertManager : uses
+    TradingPipeline --> MLflowManager : uses
+    RiskGate --> CircuitBreaker : delegates
+    RiskGate --> ConstraintSystem : delegates
+    RiskGate --> RiskResult : returns
+    BlackLittermanOptimizer --> ConstraintSystem : uses
+    MLflowManager --> WalkForwardValidator : logs results

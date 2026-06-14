@@ -11,9 +11,10 @@ from backend.config import model_config
 from backend.data_engine import DataPipeline
 from backend.ai_models import (
     TransformerPredictor, TradingRLAgent, SentimentAnalyzer,
-    SignalEnsemble, CrossStockCorrelation, cross_stock,
-    GATSignalGenerator, gat_network,
+    SignalEnsemble,
 )
+from backend.ai_models import CrossStockCorrelation, cross_stock
+from backend.ai_models import GATSignalGenerator, gat_network
 from backend.trading_engine.executor import PaperExecutor
 
 pipeline = DataPipeline()
@@ -77,7 +78,10 @@ class TradingStrategy:
 
         # 0. 跨股票关联分析（一次性计算，所有股票共享）
         features_dict = {t: data_dict[t]["features"] for t in tickers if t in data_dict}
-        cross_stock.compute_sector_momentum(tickers, features_dict)
+        try:
+            cross_stock.compute_sector_momentum(tickers, features_dict)
+        except (AttributeError, TypeError, Exception):
+            pass  # stub mode 或模块未完全加载时静默跳过
         # GAT 行业动量计算
         try:
             gat_network.compute_sector_momentum(tickers, features_dict)

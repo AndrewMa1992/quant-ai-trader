@@ -15,21 +15,48 @@ class DataPipeline:
     - 标准化/归一化
     - 序列化（用于 Transformer 输入）
     """
-    # 特征列定义
+    # ★ 量化基金级特征 (63个)
     FEATURE_COLUMNS = [
-        "returns_1d", "returns_5d", "returns_20d",
+        # === 收益 (7) ===
+        "returns_1d", "returns_5d", "returns_20d", "returns_60d",
         "high_minus_low", "close_minus_open", "body_pct",
-        "typical_price", "log_return",
-        "close_sma_5", "close_sma_10", "close_sma_20", "close_sma_50",
+        
+        # === 价格变换 (3) ===
+        "typical_price", "log_return", "price_position_20",
+        
+        # === 趋势 (10) ===
+        "close_sma_5", "close_sma_10", "close_sma_20", "close_sma_50", "close_sma_200",
+        "ema_12", "ema_26",
         "macd", "macd_signal", "macd_hist",
-        "rsi_14", "rsi_21", "stoch_k", "stoch_d",
-        "williams_r", "cci", "roc_10", "momentum_10",
+        
+        # === 动量 (10) ===
+        "rsi_14", "rsi_21",
+        "stoch_k", "stoch_d",
+        "williams_r", "cci", "roc_10", "momentum_10", "momentum_20",
+        "adx_14",
+        
+        # === 波动率 (8) ===
         "bb_width_20", "bb_pct_20",
-        "atr_14", "hist_vol_21",
-        "vol_ratio_5", "vol_ratio_20",
+        "atr_14", "atr_ratio",
+        "hist_vol_10", "hist_vol_21", "hist_vol_63",
+        "keltner_width",
+        
+        # === 成交量 (10) ===
+        "vol_ratio_5", "vol_ratio_20", "vol_ratio_60",
         "obv", "vpt", "mfi", "cmf_20",
+        "volume_trend_5", "volume_trend_20",
+        "volatility_of_volume",
+        
+        # === 价格形态 (7) ===
         "consecutive_ups", "consecutive_downs",
         "gap_up", "gap_down",
+        "doji", "hammer", "engulfing",
+        
+        # === 市场结构 (8) ===
+        "high_low_ratio",
+        "sar", "ichimoku_lead",
+        "close_vs_sma_20", "close_vs_sma_50", "close_vs_sma_200",
+        "sma_20_vs_50", "sma_50_vs_200",
     ]
 
     def __init__(self):
@@ -133,11 +160,13 @@ class DataPipeline:
         data["returns_1d"] = data["close"].pct_change(1)
         data["returns_5d"] = data["close"].pct_change(5)
         data["returns_20d"] = data["close"].pct_change(20)
+        data["returns_60d"] = data["close"].pct_change(60)
 
         # 价格位置
         data["high_minus_low"] = data["high"] - data["low"]
         data["close_minus_open"] = data["close"] - data["open"]
         data["body_pct"] = abs(data["close"] - data["open"]) / (data["high"] - data["low"] + 1e-8)
+        data["high_low_ratio"] = data["high"] / (data["low"] + 1e-8)
 
         # 典型价格
         data["typical_price"] = (data["high"] + data["low"] + data["close"]) / 3
@@ -165,6 +194,18 @@ class DataPipeline:
         for period in [5, 10, 20, 50, 200]:
             data[f"sma_{period}"] = close.rolling(period).mean()
             data[f"close_sma_{period}"] = (close - data[f"sma_{period}"]) / data[f"sma_{period}"]
+        
+        # Close vs SMA (percentage)
+        data["close_vs_sma_20"] = data["close"] / (data["sma_20"] + 1e-8) - 1
+        data["close_vs_sma_50"] = data["close"] / (data["sma_50"] + 1e-8) - 1  
+        data["close_vs_sma_200"] = data["close"] / (data["sma_200"] + 1e-8) - 1
+        
+        # SMA cross signals
+        data["sma_20_vs_50"] = data["sma_20"] / (data["sma_50"] + 1e-8) - 1
+        data["sma_50_vs_200"] = data["sma_50"] / (data["sma_200"] + 1e-8) - 1
+        
+        # Price position in 20-day range
+        data["price_position_20"] = (close - close.rolling(20).min()) / (close.rolling(20).max() - close.rolling(20).min() + 1e-8)
 
         # EMA - 指数移动平均
         for period in [12, 26, 50]:
@@ -177,12 +218,13 @@ class DataPipeline:
         data["macd_signal"] = data["macd"].ewm(span=9, adjust=False).mean()
         data["macd_hist"] = data["macd"] - data["macd_signal"]
 
-        # ADX - 平均趋向指数
-        data["adx"] = self._compute_adx(data["high"], data["low"], close, period=14)
-
         # Ichimoku Cloud（简化版）
         data["ichimoku_tenkan"] = (data["high"].rolling(9).max() + data["low"].rolling(9).min()) / 2
         data["ichimoku_kijun"] = (data["high"].rolling(26).max() + data["low"].rolling(26).min()) / 2
+        data["ichimoku_lead"] = (data["ichimoku_tenkan"] + data["ichimoku_kijun"]) / 2
+
+        # ADX
+        data["adx_14"] = self._compute_adx(data["high"], data["low"], close, period=14)
 
         # 抛物转向（SAR）
         data["sar"] = self._compute_parabolic_sar(data["high"], data["low"], close)
@@ -261,8 +303,14 @@ class DataPipeline:
             data[f"kc_lower_{period}"] = ema - 1.5 * atr
 
         # Historical Volatility
-        for period in [21, 63]:
+        for period in [10, 21, 63]:
             data[f"hist_vol_{period}"] = data["log_return"].rolling(period).std() * np.sqrt(252)
+        
+        # ATR ratio (ATR/Close)
+        data["atr_ratio"] = data["atr_14"] / (close + 1e-8)
+        
+        # Keltner Width
+        data["keltner_width"] = (data["kc_upper_20"] - data["kc_lower_20"]) / (data["kc_upper_20"] + data["kc_lower_20"] + 1e-8)
 
         return data
 
@@ -276,7 +324,7 @@ class DataPipeline:
         volume = data["volume"]
 
         # Volume SMA
-        for period in [5, 10, 20]:
+        for period in [5, 10, 20, 60]:
             data[f"vol_sma_{period}"] = volume.rolling(period).mean()
             data[f"vol_ratio_{period}"] = volume / (data[f"vol_sma_{period}"] + 1e-8)
 
@@ -299,6 +347,13 @@ class DataPipeline:
 
         # Volume Weighted Average Price (VWAP)
         data["vwap"] = (data["typical_price"] * volume).rolling(20).sum() / volume.rolling(20).sum()
+        
+        # Volume trend (rate of change)
+        data["volume_trend_5"] = volume.pct_change(5)
+        data["volume_trend_20"] = volume.pct_change(20)
+        
+        # Volatility of volume
+        data["volatility_of_volume"] = volume.pct_change().rolling(20).std()
 
         return data
 
@@ -311,7 +366,7 @@ class DataPipeline:
         data = df.copy()
 
         # Doji（十字星）
-        data["is_doji"] = (abs(data["close"] - data["open"]) <= (data["high"] - data["low"]) * 0.1).astype(float)
+        data["doji"] = (abs(data["close"] - data["open"]) <= (data["high"] - data["low"]) * 0.1).astype(float)
 
         # 锤子线 / 上吊线
         body = abs(data["close"] - data["open"])
@@ -333,6 +388,13 @@ class DataPipeline:
         # 缺口
         data["gap_up"] = (data["low"] > data["high"].shift(1)).astype(float)
         data["gap_down"] = (data["high"] < data["low"].shift(1)).astype(float)
+        
+        # Engulfing pattern
+        prev_open = data["open"].shift(1)
+        prev_close = data["close"].shift(1)
+        bullish_engulf = (data["close"] > prev_open) & (data["open"] < prev_close) & (data["close"] > data["open"])
+        bearish_engulf = (data["close"] < prev_open) & (data["open"] > prev_close) & (data["close"] < data["open"])
+        data["engulfing"] = (bullish_engulf.astype(int) - bearish_engulf.astype(int)).astype(float) + 1
 
         return data
 

@@ -16,6 +16,7 @@ from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from loguru import logger
 from backend.config import CACHE_DIR
+from pathlib import Path
 
 torch_cache = CACHE_DIR / "torch"
 torch_cache.mkdir(parents=True, exist_ok=True)
@@ -65,9 +66,12 @@ class GATLayer(nn.Module):
         alpha = F.softmax(e, dim=-1)  # (N, H, N)
         alpha = self.dropout(alpha)
 
-        # 聚合
-        out = torch.bmm(alpha, Wh)  # (N, H, D)
-        out = out.view(N, self.out_dim * self.n_heads)  # (N, H*D)
+        # 聚合: alpha (N, H, N) @ Wh (N, H, D)
+        # 使用 permute + bmm: (H, N, N) @ (H, N, D) = (H, N, D) → (N, H, D)
+        alpha_t = alpha.permute(1, 0, 2)  # (H, N, N)
+        Wh_t = Wh.permute(1, 0, 2)  # (H, N, D)
+        out = torch.bmm(alpha_t, Wh_t).permute(1, 0, 2)  # (N, H, D)
+        out = out.reshape(N, self.out_dim * self.n_heads)  # (N, H*D)
         return out
 
 
@@ -86,8 +90,8 @@ class StockGAT(nn.Module):
         self.layer_norm1 = nn.LayerNorm(hidden_dim * n_heads)
         self.layer_norm2 = nn.LayerNorm(hidden_dim * n_heads)
 
-        self.sector_proj = nn.Linear(out_dim * 2, 8)
-        self.market_proj = nn.Linear(out_dim * 2, 16)
+        self.sector_proj = nn.Linear(out_dim * 4, 8)  # 2 heads × 2 aggregations
+        self.market_proj = nn.Linear(out_dim * 4, 16)
 
     def forward(self, x: torch.Tensor, adj: torch.Tensor):
         """
@@ -138,12 +142,15 @@ class GATSignalGenerator:
         for t in ts:
             SECTOR_MAP[t] = s
 
-    def __init__(self, lookback: int = 20, device: str = "cpu"):
+    def __init__(self, lookback: int = 20, device: str = "cpu", auto_load: bool = True):
         self.device = device
         self.lookback = lookback
         self.model: Optional[StockGAT] = None
         self._sector_momentum: Dict[str, float] = {}
         self._last_embeddings: Dict[str, np.ndarray] = {}
+        # 自动加载已训练的模型
+        if auto_load:
+            self.load_model()
 
     def load_model(self, path: str = None):
         """加载预训练 GAT 模型"""

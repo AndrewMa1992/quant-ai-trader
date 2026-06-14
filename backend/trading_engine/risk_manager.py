@@ -6,8 +6,10 @@
 - 止损/止盈
 - 相关性风控
 - 流动性风控
+- P0-2: 组合级熔断机制 (Circuit Breaker)
 """
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 import numpy as np
 from loguru import logger
@@ -22,6 +24,7 @@ class RiskReport:
     total_risk_score: float = 0.0
     violations: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    circuit_breaker: bool = False
     details: Dict = field(default_factory=dict)
 
 
@@ -29,6 +32,11 @@ class RiskManager:
     """
     统一风控管理器
     下单前执行多层风控检查
+
+    P0-2: 新增组合级熔断机制
+    - 当日亏损 ≥ DAILY_LOSS_LIMIT (5%) → 触发熔断
+    - 回撤 ≥ MAX_DRAWDOWN (25%) → 触发熔断
+    - 熔断后平仓所有持仓 + 停止新交易
     """
 
     def __init__(self):
@@ -39,6 +47,173 @@ class RiskManager:
         self.trade_history: List[Dict] = []
         self.price_history: Dict[str, List[float]] = {}
         self.peak_value = trading_config.INITIAL_CAPITAL
+
+        # P0-2: 熔断相关状态
+        self.daily_start_value: float = trading_config.INITIAL_CAPITAL
+        self.circuit_breaker_triggered: bool = False
+        self.circuit_breaker_time: Optional[datetime] = None
+
+    # ================================================================
+    # P0-2: 组合级熔断
+    # ================================================================
+
+    def check_circuit_breaker(self) -> RiskReport:
+        """
+        组合级熔断检查（每个交易循环调用）。
+
+        检查逻辑：
+        1. 当日亏损 ≥ DAILY_LOSS_LIMIT (默认 5%) → 触发熔断
+        2. 最大回撤 ≥ MAX_DRAWDOWN (默认 25%) → 触发熔断
+        3. 已在熔断冷却期内 → 维持熔断
+
+        Returns:
+            RiskReport: 包含 circuit_breaker 标记的风控报告
+        """
+        report = RiskReport()
+
+        # 检查冷却期是否已过
+        if self.circuit_breaker_triggered and self.circuit_breaker_time is not None:
+            cooldown_seconds = (datetime.now() - self.circuit_breaker_time).total_seconds()
+            if cooldown_seconds < trading_config.CIRCUIT_BREAKER_COOLDOWN:
+                report.circuit_breaker = True
+                report.passed = False
+                report.violations.append(
+                    f"🚨 熔断冷却中: {cooldown_seconds:.0f}s / "
+                    f"{trading_config.CIRCUIT_BREAKER_COOLDOWN}s 剩余"
+                )
+                return report
+            else:
+                # 冷却期结束，自动解除熔断
+                logger.info("🟢 熔断冷却期结束，恢复交易")
+                self.circuit_breaker_triggered = False
+                self.circuit_breaker_time = None
+
+        # 检查当日亏损
+        daily_pnl = self.get_daily_pnl()
+        daily_pnl_pct = daily_pnl / (self.daily_start_value + 1e-8)
+
+        if daily_pnl_pct <= -trading_config.DAILY_LOSS_LIMIT:
+            report.circuit_breaker = True
+            report.passed = False
+            report.violations.append(
+                f"🚨 熔断触发! 当日亏损 {daily_pnl_pct:.2%} ≥ "
+                f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
+            )
+            self.circuit_breaker_triggered = True
+            self.circuit_breaker_time = datetime.now()
+            logger.error(
+                f"🚨 熔断触发! 当日亏损={daily_pnl_pct:.2%}, "
+                f"资产=${self.portfolio_value:,.0f}, 起始=${self.daily_start_value:,.0f}"
+            )
+
+        # 检查最大回撤
+        current_dd = self.get_current_drawdown()
+        # ★ 保护：跳过刚启动时的异常值
+        # 1) peak_value == portfolio_value 表示刚初始化，无历史峰值可参考
+        # 2) 回撤 > 90% 几乎肯定是数据同步问题（如 Tiger 断连后恢复导致峰值错位）
+        if (self.peak_value > self.portfolio_value
+                and self.portfolio_value > 0
+                and current_dd < 0.90):
+            if current_dd >= trading_config.MAX_DRAWDOWN:
+                report.circuit_breaker = True
+                report.passed = False
+                report.violations.append(
+                    f"🚨 熔断触发! 最大回撤 {current_dd:.2%} ≥ "
+                    f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
+                )
+                self.circuit_breaker_triggered = True
+                self.circuit_breaker_time = datetime.now()
+                logger.error(f"🚨 熔断触发! 回撤={current_dd:.2%}")
+        elif current_dd >= 0.90 and self.portfolio_value > 0:
+            # 回撤 ≥ 90% 是数据异常而非真实亏损 —— 输出警告但跳过熔断
+            logger.warning(
+                f"⚠️ 检测到异常回撤 {current_dd:.2%}，疑似数据同步问题，"
+                f"跳过熔断 (peak=${self.peak_value:,.0f}, pv=${self.portfolio_value:,.0f})"
+            )
+
+        if report.circuit_breaker:
+            report.total_risk_score = 1.0
+
+        report.details["daily_pnl_pct"] = daily_pnl_pct
+        report.details["daily_start_value"] = self.daily_start_value
+        report.details["current_drawdown"] = current_dd
+
+        return report
+
+    def liquidate_all(self, prices: Dict[str, float]) -> List[Dict]:
+        """
+        P0-2: 熔断后平仓所有持仓。
+
+        Args:
+            prices: {ticker: current_price} 用于计算平仓价值
+
+        Returns:
+            平仓交易记录列表，每条包含 ticker, shares, price, value
+        """
+        if not self.positions:
+            logger.info("📭 无持仓需要平仓")
+            return []
+
+        logger.warning(f"🚨 执行组合级平仓: {len(self.positions)} 只持仓")
+        liquidation_records = []
+
+        for ticker, shares in list(self.positions.items()):
+            if shares <= 0:
+                continue
+
+            price = prices.get(ticker, 0.0)
+            if price <= 0:
+                logger.warning(f"⚠️ {ticker} 无有效价格，跳过平仓")
+                continue
+
+            value = shares * price
+            self.cash += value
+            self.position_values.pop(ticker, None)
+            self.positions[ticker] = 0.0
+
+            record = {
+                "ticker": ticker,
+                "side": "sell",
+                "shares": shares,
+                "price": price,
+                "value": value,
+                "reason": "circuit_breaker_liquidation",
+                "timestamp": datetime.now().isoformat(),
+            }
+            liquidation_records.append(record)
+            logger.info(
+                f"  📉 平仓 {ticker}: {shares:.0f}股 @ ${price:.2f} = ${value:,.2f}"
+            )
+
+        # 更新组合价值
+        if self.positions:
+            remaining_value = sum(
+                self.positions.get(t, 0) * prices.get(t, 0)
+                for t in self.positions
+            )
+        else:
+            remaining_value = 0.0
+        self.portfolio_value = self.cash + remaining_value
+
+        logger.warning(
+            f"✅ 平仓完成: {len(liquidation_records)} 笔, "
+            f"现金 ${self.cash:,.2f}, 总资产 ${self.portfolio_value:,.2f}"
+        )
+
+        return liquidation_records
+
+    def reset_daily_state(self):
+        """
+        P0-2: 新交易日重置熔断状态和当日起始净值。
+        应在每个交易日开始时调用。
+        """
+        self.daily_start_value = self.portfolio_value
+        self.circuit_breaker_triggered = False
+        self.circuit_breaker_time = None
+        logger.info(
+            f"📅 新交易日重置: 起始净值=${self.daily_start_value:,.2f}, "
+            f"熔断状态=正常"
+        )
 
     # ================================================================
     # 主风控检查
@@ -64,6 +239,14 @@ class RiskManager:
             RiskReport: 风控报告
         """
         report = RiskReport()
+
+        # P0-2: 熔断状态下拒绝所有新开仓
+        if self.circuit_breaker_triggered:
+            report.passed = False
+            report.circuit_breaker = True
+            report.violations.append("🚨 熔断状态 — 拒绝所有新开仓")
+            return report
+
         order_value = quantity * price
 
         # 1. 资金检查
@@ -149,21 +332,30 @@ class RiskManager:
             return 0.0
         return (self.peak_value - self.portfolio_value) / self.peak_value
 
+    def get_daily_pnl(self) -> float:
+        """
+        P0-2: 获取当日盈亏（相对于当日起始净值）。
+
+        Returns:
+            当日盈亏金额（可正可负）
+        """
+        return self.portfolio_value - self.daily_start_value
+
     # ================================================================
     # 内部风控检查
     # ================================================================
 
     def _check_sufficient_cash(self, order_value: float) -> Dict:
         """资金检查 — 坚决不使用杠杆"""
-        from backend.config import trading_config
-        max_allowed = self.cash * trading_config.MAX_CASH_USAGE
+        from backend.config import trading_config as tcfg
+        max_allowed = self.cash * tcfg.MAX_CASH_USAGE
         if order_value > max_allowed:
             return {
                 "passed": False,
                 "reason": (
                     f"🚫 无杠杆原则 — 买入金额 ${order_value:,.2f} "
                     f"超过可用资金 ${max_allowed:,.2f} "
-                    f"(现金 ${self.cash:,.2f} × {trading_config.MAX_CASH_USAGE:.0%}) — "
+                    f"(现金 ${self.cash:,.2f} × {tcfg.MAX_CASH_USAGE:.0%}) — "
                     f"坚决不使用任何杠杆"
                 )
             }
@@ -245,6 +437,10 @@ class RiskManager:
         return {
             "max_drawdown": round(self.get_current_drawdown(), 4),
             "peak_value": round(self.peak_value, 2),
+            "daily_pnl": round(self.get_daily_pnl(), 2),
+            "daily_pnl_pct": round(self.get_daily_pnl() / (self.daily_start_value + 1e-8), 4),
+            "circuit_breaker_triggered": self.circuit_breaker_triggered,
+            "daily_start_value": round(self.daily_start_value, 2),
             "var_95": 0.0,  # 简化
             "position_concentration": {
                 t: round(v / (self.portfolio_value + 1e-8), 4)

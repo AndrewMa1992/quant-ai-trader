@@ -1,7 +1,8 @@
 """
 老虎证券 OpenAPI 客户端
-模拟/实盘双模式集成
+实盘交易
 """
+import time
 from typing import Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from backend.config import trading_config
 class TigerClient:
     """
     老虎证券 API 客户端
-    - 支持模拟账号（Paper Trading）和实盘账号
+    - 支持实盘交易
     - 行情获取、订单管理
     - 封装 tigeropen SDK
 
@@ -32,6 +33,20 @@ class TigerClient:
         self._config_path = config_path or str(Path.home() / ".tigeropen")
         self._simulation_account = None
         self._real_account = None
+        
+        # ★ API 调用频率控制 (Tiger 限制 10次/分钟)
+        self._last_account_call = 0.0
+        self._last_positions_call = 0.0
+        self._cached_account: Optional[Dict] = None
+        self._cached_positions: Optional[List[Dict]] = None
+        self._min_call_interval = 15.0  # 最小间隔 15 秒
+
+    @property
+    def _active_account(self) -> str:
+        """根据 SIMULATION_MODE 返回正确账户"""
+        if trading_config.SIMULATION_MODE:
+            return self._simulation_account or ""
+        return self._real_account or ""
 
     # ================================================================
     # 连接管理
@@ -64,7 +79,11 @@ class TigerClient:
                 self._config = TigerOpenClientConfig()
                 self._config.tiger_id = tc.TIGER_ID
                 self._config.account = tc.TIGER_ACCOUNT
-                self._config.private_key = tc.TIGER_PRIVATE_KEY
+                # ★ tigeropen 库要求纯 base64（无 PEM 头尾），否则 b64decode 直接炸
+                pk = tc.TIGER_PRIVATE_KEY
+                if "-----BEGIN" in pk:
+                    pk = "".join(pk.splitlines()[1:-1])
+                self._config.private_key = pk
                 logger.info("📄 从 config.py 加载配置")
 
             else:
@@ -80,8 +99,8 @@ class TigerClient:
             self._load_accounts()
 
             logger.info(f"✅ 老虎 API 连接成功！(tiger_id: {trading_config.TIGER_ID})")
-            if self._simulation_account:
-                logger.info(f"   📝 模拟账号: {self._simulation_account}")
+            if self._real_account:
+                logger.info(f"   📝 实盘账号: {self._real_account}")
             return True
 
         except ImportError:
@@ -92,7 +111,7 @@ class TigerClient:
             return False
 
     def _load_accounts(self):
-        """加载账号列表（实盘和模拟）"""
+        """加载账号列表（实盘）"""
         try:
             # 使用正确的API方法
             accounts = self._trade_client.get_managed_accounts() if self._trade_client else []
@@ -178,30 +197,26 @@ class TigerClient:
             return pd.DataFrame()
 
         try:
-            bars = self._quote_client.get_timeline_bars(
-                symbol=ticker,
+            bars = self._quote_client.get_bars(
+                symbols=[ticker],
                 period=period,
                 begin_time=begin_time,
                 end_time=end_time,
                 limit=limit,
             )
 
-            if not bars:
+            if bars is None or bars.empty:
                 return pd.DataFrame()
 
-            records = []
-            for bar in bars:
-                records.append({
-                    "timestamp": bar.time,
-                    "open": bar.open,
-                    "high": bar.high,
-                    "low": bar.low,
-                    "close": bar.close,
-                    "volume": bar.volume,
-                })
-
-            df = pd.DataFrame(records)
-            df.set_index("timestamp", inplace=True)
+            # get_bars returns DataFrame, rename columns to match our format
+            df = bars.copy()
+            col_map = {
+                'open': 'open', 'high': 'high', 'low': 'low',
+                'close': 'close', 'volume': 'volume'
+            }
+            if 'time' in df.columns:
+                df.set_index('time', inplace=True)
+            df = df[[c for c in col_map if c in df.columns]]
             return df
 
         except Exception as e:
@@ -244,8 +259,8 @@ class TigerClient:
             from tigeropen.trade.domain.contract import Contract
             from tigeropen.common.consts import SecurityType, Currency
 
-            # 确定账号（模拟优先）
-            target_account = self._simulation_account or self._real_account or trading_config.TIGER_ACCOUNT
+            # 确定账号（根据 SIMULATION_MODE 选择）
+            target_account = self._active_account or trading_config.TIGER_ACCOUNT
 
             # 确定市场和币种
             is_hk = ticker.endswith('.HK')
@@ -264,12 +279,36 @@ class TigerClient:
                 market = 'US'
                 currency = Currency.USD
                 symbol = ticker
+                # ★ 盘前/盘后不支持市价单，自动转为限价单
+                if order_type == 'MKT':
+                    if limit_price:
+                        order_type = 'LMT'
+                    else:
+                        logger.debug(f"⏸ {ticker} 盘前/盘后无价格，跳过市价单")
+                        # Fallback: 从 Tiger 获取实时价
+                        quote = self.get_quote(ticker)
+                        if quote and quote.get("price", 0) > 0:
+                            limit_price = quote["price"]
+                            order_type = 'LMT'
+                            logger.info(f"📡 Tiger实时价: {ticker} ${limit_price:.2f} (转为限价单)")
+                        else:
+                            # 无价格时用 last_price/pre_close 兜底
+                            limit_price = self._get_last_price_fallback(ticker)
+                            if limit_price and limit_price > 0:
+                                order_type = 'LMT'
+                                logger.info(f"📡 兜底价: {ticker} ${limit_price:.2f} (转为限价单)")
+                            else:
+                                logger.warning(f"⚠️ {ticker} 盘前/盘后无报价，跳过下单")
+                                return None
 
-            # 确保最小数量为 1 股
-            qty = int(quantity)
-            if qty < 1:
-                qty = 1
-                logger.warning(f"⚠️ 数量调整为 1 (原始: {quantity})")
+            # 港股/新加坡股买入：取整到整手（卖出不限制）
+            if action == "BUY":
+                qty = self.round_to_lot(ticker, quantity)
+                if qty < 1:
+                    logger.warning(f"⚠️ {ticker} 不足一手 (lot={self.get_hk_lot_size(ticker)}), 下单跳过")
+                    return None
+            else:
+                qty = int(quantity)
 
             # 构造 Contract 对象
             contract = Contract(
@@ -279,13 +318,17 @@ class TigerClient:
                 exchange=market,
             )
 
-            # 构造 Order 对象
+            # 构造 Order 对象 — ★ 支持盘前/盘后交易
+            kwargs = {}
+            if market == 'US':
+                kwargs['outside_rth'] = True  # 盘前(4:00-9:30) + 盘后(16:00-20:00) ET
             order = Order(
                 account=target_account,
                 contract=contract,
                 action=action,
                 order_type=order_type,
                 quantity=qty,
+                **kwargs,
             )
             if limit_price:
                 # HK 价格 tick size 对齐
@@ -293,9 +336,8 @@ class TigerClient:
                     limit_price = self._align_hk_tick(limit_price)
                 order.limit_price = limit_price
 
-            logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}")
-            if trading_config.TIGER_PAPER_TRADING:
-                logger.info(f"   📝 Paper Trading 模式 (账号: {target_account})")
+            extended_label = " [盘前/盘后]" if kwargs.get('outside_rth') else ""
+            logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}{extended_label} (账号: {target_account})")
 
             result_id = self._trade_client.place_order(order)
             # place_order 返回 global order id (int)，同时更新 order.id
@@ -334,56 +376,200 @@ class TigerClient:
             logger.error(f"❌ 撤单失败: {e}")
             return False
 
-    def get_positions(self) -> List[Dict]:
-        """获取持仓"""
+    def get_positions(self, force: bool = False) -> List[Dict]:
+        """获取持仓 — 带缓存避免 API 限流"""
+        now = time.time()
+        if not force and self._cached_positions is not None and (now - self._last_positions_call) < self._min_call_interval:
+            logger.debug(f"♻️ 使用缓存持仓 ({len(self._cached_positions)} 只, {now - self._last_positions_call:.0f}s 前)")
+            return self._cached_positions
+        
         if not self._connected:
+            self.connect()
+        if not self._connected:
+            if self._cached_positions:
+                logger.warning("⚠️ Tiger 离线，使用缓存持仓")
+                return self._cached_positions
             return []
 
         try:
             positions = self._trade_client.get_positions()
-            return [
-                {
-                    "ticker": p.symbol,
+            logger.info(f"🔍 Tiger get_positions: {len(positions) if hasattr(positions, '__len__') else 0} 只")
+            
+            result = []
+            for p in (positions or []):
+                # Tiger SDK: Position.contract.symbol, not Position.symbol
+                ticker = p.contract.symbol if hasattr(p.contract, 'symbol') else str(p.contract)
+
+                # ★ 货币转换：HK 持仓以 HKD 计价，需转为 USD
+                is_hk = ticker.isdigit() and len(ticker) <= 5  # HK ticker: 5-digit number
+                fx_rate = trading_config.CURRENCY_RATES.get("HKD", 0.128) if is_hk else 1.0
+
+                result.append({
+                    "ticker": ticker,
                     "shares": p.quantity,
-                    "avg_cost": p.average_cost,
-                    "market_value": p.market_value,
-                    "realized_pnl": p.realized_pnl,
-                    "unrealized_pnl": p.unrealized_pnl,
-                }
-                for p in (positions or [])
-            ]
+                    "avg_cost": float(p.average_cost) * fx_rate,
+                    "market_value": float(p.market_value) * fx_rate,
+                    "market_price": float(p.market_price) * fx_rate,
+                    "realized_pnl": float(p.realized_pnl) * fx_rate,
+                    "unrealized_pnl": float(p.unrealized_pnl) * fx_rate,
+                    "currency": "HKD" if is_hk else "USD",
+                })
+            # Save to cache
+            self._cached_positions = result
+            self._last_positions_call = now
+            return result
         except Exception as e:
             logger.error(f"❌ 获取持仓失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            if self._cached_positions:
+                return self._cached_positions
             return []
 
-    def get_account_info(self) -> Optional[Dict]:
-        """获取账户信息"""
+    def get_account_info(self, force: bool = False) -> Optional[Dict]:
+        """获取账户信息 — 带缓存避免 API 限流"""
+        now = time.time()
+        if not force and self._cached_account is not None and (now - self._last_account_call) < self._min_call_interval:
+            logger.debug(f"♻️ 使用缓存账户 ({now - self._last_account_call:.0f}s 前)")
+            return self._cached_account
         if not self._connected:
             return None
 
         try:
-            # 使用正确的API方法
-            assets = self._trade_client.get_assets(account=self._simulation_account or self._real_account)
+            assets = self._trade_client.get_assets(account=self._active_account or trading_config.TIGER_ACCOUNT)
+            if not assets:
+                logger.warning("⚠️ Tiger get_assets 返回空，尝试重连...")
+                self.connect()
+                assets = self._trade_client.get_assets(account=self._active_account or trading_config.TIGER_ACCOUNT)
+            
             if assets and isinstance(assets, list) and len(assets) > 0:
                 a = assets[0]
-                # 安全获取账户属性
                 summary = a.summary if hasattr(a, 'summary') and a.summary else None
-                return {
+                
+                # market_value 是方法（需调用），也有 market_values dict
+                mkt_val = 0.0
+                leverage = 1.0
+                gross_position = 0.0
+                
+                # Try calling market_value() method
+                if hasattr(a, 'market_value') and callable(a.market_value):
+                    try:
+                        mkt_val = a.market_value()
+                    except:
+                        pass
+                elif hasattr(a, 'market_value'):
+                    mkt_val = a.market_value
+                
+                # Extract from segments if available
+                if hasattr(a, 'segments') and a.segments:
+                    for seg_key, seg in a.segments.items():
+                        if hasattr(seg, 'gross_position_value'):
+                            gross_position += seg.gross_position_value or 0
+                        if hasattr(seg, 'leverage') and seg.leverage:
+                            leverage = max(leverage, seg.leverage)
+                
+                # Fallback: use gross_position_value as market_value
+                if mkt_val == 0 and gross_position > 0:
+                    mkt_val = gross_position
+                
+                result = {
                     "account": a.account if hasattr(a, 'account') else "",
                     "cash": summary.cash if summary and hasattr(summary, 'cash') else 0,
-                    "market_value": summary.stock_market_value if summary and hasattr(summary, 'stock_market_value') else 0,
+                    "market_value": round(mkt_val, 2),
                     "total_value": summary.net_liquidation if summary and hasattr(summary, 'net_liquidation') else 0,
                     "buying_power": summary.buying_power if summary and hasattr(summary, 'buying_power') else 0,
-                    "realized_pnl": 0,
-                    "unrealized_pnl": 0,
+                    "realized_pnl": summary.realized_pnl if summary and hasattr(summary, 'realized_pnl') else 0,
+                    "unrealized_pnl": summary.unrealized_pnl if summary and hasattr(summary, 'unrealized_pnl') else 0,
+                    "leverage": leverage,
+                    "gross_position_value": round(gross_position, 2),
                 }
+                # Save to cache
+                self._cached_account = result
+                self._last_account_call = now
+                return result
         except Exception as e:
             logger.error(f"❌ 获取账户信息失败: {e}")
+        
+        if self._cached_account:
+            logger.warning("⚠️ Tiger API 失败，使用缓存账户数据")
+            return self._cached_account
+        return None
+
+    def _get_last_price_fallback(self, ticker: str) -> Optional[float]:
+        """从缓存持仓中获取最近价格（盘前/盘后价格不可用时的兜底）"""
+        if self._cached_positions:
+            for p in self._cached_positions:
+                if p.get("ticker") == ticker:
+                    mp = p.get("market_price", 0)
+                    if mp > 0:
+                        return mp
+                    # fallback to avg_cost
+                    ac = p.get("avg_cost", 0)
+                    if ac > 0:
+                        return ac
         return None
 
     # ================================================================
-    # 价格精度对齐
+    # 港股整手 (Board Lot) 处理
     # ================================================================
+
+    # 港股每手股数对照表（HKEX 标准，未列出的默认 100 股）
+    HK_LOT_SIZES: Dict[str, int] = {
+        # 银行
+        "00939": 1000, "01288": 1000, "03968": 500,  "02388": 500,
+        "00005": 400,  "00011": 100,  "01658": 1000,
+        # 保险
+        "01299": 100,  "02318": 500,  "02628": 2000,
+        # 地产
+        "00016": 1000, "00017": 1000, "00012": 500,  "00101": 1000,
+        "00960": 1000, "01109": 500,  "00688": 500,
+        # 能源
+        "00857": 2000, "00883": 1000, "00386": 2000,
+        # 科技/互联网
+        "00700": 100,  "09988": 100,  "09618": 50,   "09888": 50,
+        "09899": 50,   "03690": 100,  "09999": 20,
+        # 消费
+        "00175": 1000, "00291": 2000, "00027": 500,  "00019": 500,
+        # 医疗
+        "01099": 400,  "00241": 1000, "01177": 1000, "01093": 2000, "02269": 500,
+        # 工业/制造
+        "00267": 1000, "00285": 500,  "00669": 100,  "00868": 500,
+        "00968": 2000, "00981": 500,  "00823": 100,  "00066": 500,
+        # 通讯
+        "00941": 500,  "00728": 2000, "00762": 500,
+        # 综合
+        "00288": 1000, "00001": 500,  "00002": 500,  "00003": 1000,
+        "00006": 500,  "00857": 2000, "00388": 100,  "00148": 1000,
+        # SG
+        "F83": 100, "Z74": 100, "D05": 100, "O39": 100,
+    }
+
+    @staticmethod
+    def get_hk_lot_size(ticker: str) -> int:
+        """获取港股每手股数（整手）"""
+        # 去掉后缀
+        clean = ticker.replace(".HK", "").replace(".SI", "").strip()
+        return TigerClient.HK_LOT_SIZES.get(clean.zfill(5), 100)
+
+    @staticmethod
+    def is_lot_market(ticker: str) -> bool:
+        """判断是否需要整手交易（港股/新加坡股）"""
+        clean = ticker.replace(".HK", "").replace(".SI", "").strip()
+        return ticker.endswith(".HK") or ticker.endswith(".SI") or (
+            len(clean) <= 5 and clean.isdigit()
+        )
+
+    @staticmethod
+    def round_to_lot(ticker: str, quantity: int) -> int:
+        """将数量取整到整手倍数（港股/新加坡股）"""
+        is_lot = TigerClient.is_lot_market(ticker)
+        if not is_lot:
+            return max(1, int(quantity))  # 美股至少 1 股
+
+        lot = TigerClient.get_hk_lot_size(ticker)
+        if quantity < lot:
+            return 0  # 不够一手，不买
+        return (int(quantity) // lot) * lot
 
     @staticmethod
     def _align_hk_tick(price: float) -> float:

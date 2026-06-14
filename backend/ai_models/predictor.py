@@ -113,21 +113,33 @@ class TransformerPredictor:
         logger.info(f"Transformer 预测器初始化 (device: {self.device})")
 
     def build_model(self, n_vars=40, seq_len=60, pred_len=5):
+        # ★ 量化基金级：更大的模型 (d_model 128→256, layers 4→6, d_ff 256→512)
+        d_model = getattr(model_config, 'TRANSFORMER_D_MODEL_LARGE', 256)
+        n_heads = getattr(model_config, 'TRANSFORMER_N_HEADS_LARGE', 8)
+        n_layers = getattr(model_config, 'TRANSFORMER_N_LAYERS_LARGE', 6)
+        d_ff = getattr(model_config, 'TRANSFORMER_D_FF_LARGE', 512)
+        
         self.model = PatchTST(
             n_vars=n_vars, seq_len=seq_len, pred_len=pred_len,
             patch_len=model_config.TRANSFORMER_LOOKBACK // 5,
             stride=model_config.TRANSFORMER_LOOKBACK // 8,
-            d_model=model_config.TRANSFORMER_D_MODEL,
-            n_heads=model_config.TRANSFORMER_N_HEADS,
-            n_layers=model_config.TRANSFORMER_N_LAYERS,
+            d_model=d_model, n_heads=n_heads,
+            n_layers=n_layers, d_ff=d_ff,
+            dropout=model_config.TRANSFORMER_DROPOUT,
         ).to(self.device)
         logger.info(f"模型构建: {sum(p.numel() for p in self.model.parameters()):,} 参数")
         return self.model
 
-    def train(self, X_train, y_train, X_val=None, y_val=None, n_vars=40):
+    def train(self, X_train, y_train, X_val=None, y_val=None, n_vars=40,
+              epochs=None, lr=None, return_val_loss=False):
+        """Transformer 训练 — 支持 Walk-forward 参数覆盖"""
         self.build_model(n_vars=n_vars)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
+
+        # 使用参数或默认配置
+        _epochs = epochs if epochs is not None else model_config.TRANSFORMER_EPOCHS
+        _lr = lr if lr is not None else model_config.TRANSFORMER_LEARNING_RATE
 
         # 清理 NaN/Inf
         X_train = np.nan_to_num(X_train, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -136,22 +148,21 @@ class TransformerPredictor:
         self.scaler_mean = X_train.mean(axis=(0, 1))
         self.scaler_std = X_train.std(axis=(0, 1)) + 1e-8
         X_norm = (X_train - self.scaler_mean) / self.scaler_std
-        X_norm = np.clip(X_norm, -10, 10)  # 限制异常值
+        X_norm = np.clip(X_norm, -10, 10)
 
         y_mean = y_train.mean()
         y_std = y_train.std() + 1e-8
         y_norm = (y_train - y_mean) / y_std
 
         X_t = torch.FloatTensor(X_norm).permute(0, 2, 1).to(self.device)
-        # 目标: (batch, pred_len, 3) 3个分位数
         y_t = torch.FloatTensor(y_norm).unsqueeze(-1).expand(-1, -1, 3).contiguous().to(self.device)
 
         loader = DataLoader(TensorDataset(X_t, y_t), batch_size=model_config.TRANSFORMER_BATCH_SIZE, shuffle=True)
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=model_config.TRANSFORMER_LEARNING_RATE)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=model_config.TRANSFORMER_EPOCHS)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=_lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=_epochs)
 
         self.model.train()
-        for epoch in range(model_config.TRANSFORMER_EPOCHS):
+        for epoch in range(_epochs):
             loss_total = 0
             for bx, by in loader:
                 optimizer.zero_grad()
@@ -162,10 +173,28 @@ class TransformerPredictor:
                 optimizer.step()
                 loss_total += loss.item()
             scheduler.step()
-            if (epoch + 1) % 10 == 0:
-                logger.info(f"  Epoch {epoch+1}/{model_config.TRANSFORMER_EPOCHS} Loss: {loss_total/len(loader):.6f}")
+            if (epoch + 1) % max(1, _epochs // 5) == 0:
+                logger.info(f"  Epoch {epoch+1}/{_epochs} Loss: {loss_total/len(loader):.6f}")
         self._is_trained = True
-        logger.info("Transformer 训练完成！")
+
+        # 计算验证损失（如果提供了验证集）
+        val_loss = None
+        if return_val_loss and X_val is not None and y_val is not None:
+            X_val = np.nan_to_num(X_val, nan=0.0, posinf=1.0, neginf=-1.0)
+            y_val = np.nan_to_num(y_val, nan=0.0, posinf=1.0, neginf=-1.0)
+            Xv_norm = np.clip((X_val - self.scaler_mean) / self.scaler_std, -10, 10)
+            yv_norm = (y_val - y_mean) / y_std
+            Xv_t = torch.FloatTensor(Xv_norm).permute(0, 2, 1).to(self.device)
+            yv_t = torch.FloatTensor(yv_norm).unsqueeze(-1).expand(-1, -1, 3).contiguous().to(self.device)
+            self.model.eval()
+            with torch.no_grad():
+                pred_val = self.model(Xv_t)
+                val_loss = F.smooth_l1_loss(pred_val[:, :, 1], yv_t[:, :, 1]).item()
+
+        if not return_val_loss:
+            logger.info("Transformer 训练完成！")
+
+        return val_loss if return_val_loss else None
 
     def predict(self, X):
         if self.model is None:

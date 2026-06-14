@@ -1,23 +1,39 @@
 {
   "name": "quant-ai-trader-frontend",
-  "version": "1.0.0",
   "private": true,
+  "version": "2.1.0",
   "type": "module",
+  "description": "Quant AI Trader v2.1 – Xiaomi-Styled Trading Dashboard",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.ts,.tsx --fix --ignore-path .gitignore",
+    "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "vue-router": "^4.2.0",
-    "pinia": "^2.1.0",
-    "echarts": "^5.4.0",
-    "vue-echarts": "^6.6.0",
-    "axios": "^1.6.0"
+    "@rollup/rollup-darwin-x64": "^4.61.1",
+    "@vueuse/core": "^10.9.0",
+    "axios": "^1.6.7",
+    "dayjs": "^1.11.10",
+    "echarts": "^5.5.0",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-echarts": "^6.7.2",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "vite": "^5.0.0"
+    "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.22.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.6",
+    "vue-tsc": "^2.0.6"
   }
 }

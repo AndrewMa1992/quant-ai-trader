@@ -28,9 +28,29 @@ def init(
 
 @router.get("/portfolio")
 async def get_portfolio():
-    """获取组合状态"""
+    """获取组合状态（优先展示老虎真实数据）"""
     if portfolio is None:
         return {"error": "组合管理器未初始化"}
+    
+    from backend.data_engine.tiger_client import tiger_client
+    
+    # ★ 每次查询 dashboard 时，自动从 Tiger 对齐 initial_capital
+    from backend.data_engine.tiger_client import tiger_client
+    tiger_synced = tiger_client.is_connected()
+    tiger_data = tiger_client.get_status() if tiger_synced else None
+    
+    if tiger_synced:
+        try:
+            tiger_acct = tiger_client.get_account_info()
+            if tiger_acct and tiger_acct.get("total_value", 0) > 0:
+                tiger_total = tiger_acct["total_value"]
+                gap = abs(tiger_total - portfolio.initial_capital) / max(portfolio.initial_capital, 1)
+                # ★ 差距超过 1% → 自动修正 initial_capital
+                if gap > 0.01:
+                    portfolio.initial_capital = tiger_total
+        except Exception:
+            pass
+
     # 从 realtime 获取价格
     from backend.data_engine.realtime import RealtimeEngine
     prices = {}
@@ -62,6 +82,8 @@ async def get_portfolio():
             {"time": t.isoformat(), "value": v}
             for t, v in portfolio.value_history[-100:]
         ] if hasattr(portfolio, 'value_history') else [],
+        "tiger_synced": tiger_synced,
+        "tiger_data": tiger_data,
     }
 
 
@@ -222,19 +244,159 @@ def _compute_calmar(value_history, max_dd_pct):
 # ============================================================
 @router.get("/tiger-account")
 async def get_tiger_account():
-    """查询老虎实盘/模拟账号状态"""
+    """查询老虎实盘账号状态（含实时持仓和账户信息）"""
     from backend.data_engine.tiger_client import tiger_client
     result = {
         "connected": tiger_client.is_connected(),
         "simulation_account": tiger_client._simulation_account,
         "real_account": tiger_client._real_account,
         "status": {},
+        "account_info": None,
+        "positions": [],
+        "position_count": 0,
         "timestamp": datetime.now().isoformat(),
     }
     if tiger_client.is_connected():
         try:
             status = tiger_client.get_status()
             result["status"] = status
+            
+            # 使用启动时已同步的本地状态（不重复查询 Tiger API）
+            result["position_count"] = len(portfolio.positions)
+            result["positions"] = [
+                {
+                    "ticker": t,
+                    "shares": round(s, 4),
+                    "avg_cost": round(portfolio.avg_costs.get(t, 0), 2),
+                    "market_value": round(s * portfolio.avg_costs.get(t, 0), 2),
+                    "unrealized_pnl": 0,
+                    "realized_pnl": 0,
+                }
+                for t, s in portfolio.positions.items()
+            ]
+            result["account_info"] = {
+                "cash": round(portfolio.cash, 2),
+                "market_value": round(portfolio.total_value - portfolio.cash, 2),
+                "total_value": round(portfolio.total_value, 2),
+                "buying_power": round(portfolio.cash, 2),
+            }
         except Exception as e:
             result["status"] = {"error": str(e)}
     return result
+
+
+@router.post("/tiger-refresh")
+async def refresh_from_tiger():
+    """★ 实时刷新：强制从老虎拉取真实资产数据"""
+    from backend.data_engine.tiger_client import tiger_client
+    from backend.config import trading_config
+    
+    if not tiger_client.is_connected():
+        tiger_client.connect()
+    if not tiger_client.is_connected():
+        return {"refreshed": False, "error": "Tiger 未连接"}
+    
+    # ★ 直接调用 Tiger SDK，指定实盘账户
+    tiger_client.connect()
+    try:
+        # 使用正确的实盘账户 (20874631) 而非模拟盘
+        real_account = trading_config.TIGER_ACCOUNT  # 20874631
+        assets = tiger_client._trade_client.get_assets(account=real_account)
+        
+        if assets and isinstance(assets, list) and len(assets) > 0:
+            a = assets[0]
+            summary = a.summary if hasattr(a, 'summary') and a.summary else None
+            cash = summary.cash if summary and hasattr(summary, 'cash') else 0
+            total = summary.net_liquidation if summary and hasattr(summary, 'net_liquidation') else 0
+        else:
+            # Fallback
+            cash = 0
+            total = 0
+    except Exception:
+        cash = 0
+        total = 0
+    
+    # Get positions  
+    positions = tiger_client.get_positions(force=True)
+    mkt_value = sum(p.get("market_value", 0) for p in positions)
+    
+    # Compute correct total if Tiger API failed
+    if total <= 0:
+        total = cash + mkt_value
+    
+    if total < 10 or cash < 0:
+        return {"refreshed": False, "error": f"Invalid data: cash={cash}, total={total}"}
+    
+    old_ic = portfolio.initial_capital
+    portfolio.cash = cash
+    portfolio.total_value = total
+    portfolio.initial_capital = total
+    portfolio.save_state()
+    
+    return {
+        "refreshed": True,
+        "cash": cash,
+        "total_value": total,
+        "market_value": mkt_value,
+        "initial_capital": total,
+        "initial_capital_was": old_ic,
+        "positions": len(positions),
+        "timestamp": datetime.now().isoformat(),
+    }
+    return result
+
+
+@router.post("/tiger-reconcile")
+async def reconcile_with_tiger():
+    """手动触发与老虎证券对账"""
+    result = portfolio.reconcile_with_tiger()
+    return result
+
+
+@router.post("/tiger-fix-shorts")
+async def fix_short_positions():
+    """★ 买回老虎账户上所有负持仓（空头修复）"""
+    from backend.data_engine.tiger_client import tiger_client
+    
+    if not tiger_client.is_connected():
+        tiger_client.connect()
+    if not tiger_client.is_connected():
+        return {"fixed": False, "error": "Tiger not connected"}
+    
+    # 强制重连获取最新数据
+    tiger_client.connect()
+    positions = tiger_client.get_positions()
+    
+    negatives = [p for p in positions if p["shares"] < 0]
+    if not negatives:
+        return {"fixed": True, "neg_count": 0, "message": "No negative positions"}
+    
+    results = []
+    for p in negatives:
+        ticker = p["ticker"]
+        shares = int(abs(p["shares"]))
+        try:
+            order = tiger_client.place_order(
+                ticker=ticker, action="BUY",
+                quantity=shares, order_type="MKT"
+            )
+            results.append({
+                "ticker": ticker, "shares": shares,
+                "order_id": order.get("order_id") if order else None,
+                "status": "SUBMITTED" if order else "FAILED"
+            })
+        except Exception as e:
+            results.append({
+                "ticker": ticker, "shares": shares,
+                "error": str(e), "status": "ERROR"
+            })
+    
+    # 重新同步本地状态
+    portfolio.sync_from_tiger(force=True)
+    
+    return {
+        "fixed": True,
+        "neg_count": len(negatives),
+        "orders": results,
+        "message": f"Submitted {len(results)} buy orders to cover shorts"
+    }

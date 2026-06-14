@@ -12,7 +12,7 @@ echo.
 
 echo [1/3] Backend (FastAPI) :8001
 cd /d G:\workbuddyspace\Claw\quant-ai-trader
-start "QuantTrader-Backend" /MIN python run_backend.py
+start "QuantTrader-Backend" /MIN "venv\Scripts\python.exe" run_backend.py
 
 :wait_backend
 timeout /t 5 /nobreak >nul
@@ -27,9 +27,12 @@ echo [2/3] Frontend (Vue Dev) :5180
 cd /d G:\workbuddyspace\Claw\quant-ai-trader\frontend
 start "QuantTrader-Frontend" /MIN npm run dev
 
-echo [3/3] Auto Trader (30min cycle)
+echo [3/3] Auto Trader (10min cycle, max 150 trades/day)
 cd /d G:\workbuddyspace\Claw\quant-ai-trader
-start "QuantTrader-Auto" /MIN python auto_trader.py --interval 180
+start "QuantTrader-Auto" /MIN "venv\Scripts\python.exe" auto_trader.py --interval 600
+
+echo [Guard] Starting watchdog (auto-restart if killed)
+start "QuantAI-Guard" /MIN cmd /c boot_guard.bat
 
 echo.
 echo ============================================

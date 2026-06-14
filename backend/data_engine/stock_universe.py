@@ -15,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from loguru import logger
 
 PROJ_ROOT = Path(__file__).parent.parent.parent
@@ -274,43 +273,37 @@ class StockUniverse:
 
         def _screen_one(ticker: str) -> Optional[Dict]:
             try:
-                stock = yf.Ticker(ticker)
-                info = stock.info
-
-                cap = info.get("marketCap", 0) or 0
-                vol = info.get("averageVolume", 0) or 0
-                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0
-                name = info.get("shortName") or info.get("longName") or ticker
-                sector = info.get("sector", "")
-                beta = info.get("beta", 1.0)
-
-                if cap < min_market_cap:
+                from backend.data_engine.china_adapter import china_data_adapter
+                quote = china_data_adapter.get_realtime_quote(ticker)
+                if not quote or not quote.get("price"):
                     return None
-                if vol < min_avg_volume:
-                    return None
+
+                price = quote["price"]
+                name = quote.get("name", ticker)
+
+                # 简化筛选：无 market_cap 信息时用价格和名称代替
                 if price < min_price:
                     return None
 
                 # 获取短期波动率
+                volatility = 0.3
                 try:
-                    hist = stock.history(period="1mo")
-                    if len(hist) >= 10:
-                        returns = hist["Close"].pct_change().dropna()
+                    df = china_data_adapter.get_historical_data(ticker, period="1mo", interval="1d")
+                    if len(df) >= 10 and "close" in df.columns:
+                        returns = df["close"].pct_change().dropna()
                         volatility = float(returns.std() * np.sqrt(252))
-                    else:
-                        volatility = 0.3
                 except Exception:
-                    volatility = 0.3
+                    pass
 
                 return {
                     "ticker": ticker,
                     "name": name,
-                    "market_cap": cap,
-                    "avg_volume": vol,
+                    "market_cap": 0,  # 中国 API 无此字段
+                    "avg_volume": quote.get("volume", 0),
                     "price": price,
                     "volatility": volatility,
-                    "beta": beta,
-                    "sector": sector,
+                    "beta": 1.0,
+                    "sector": "",
                 }
             except Exception:
                 return None
@@ -345,11 +338,9 @@ class StockUniverse:
 
         def _quick(ticker: str) -> Optional[str]:
             try:
-                stock = yf.Ticker(ticker)
-                info = stock.info
-                cap = info.get("marketCap", 0) or 0
-                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0
-                if cap >= 200_000_000 and price >= 0.50:
+                from backend.data_engine.china_adapter import china_data_adapter
+                quote = china_data_adapter.get_realtime_quote(ticker)
+                if quote and quote.get("price", 0) >= 0.50:
                     return ticker
             except Exception:
                 pass
