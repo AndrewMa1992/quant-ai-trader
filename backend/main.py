@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     routes_trade.init(executor, portfolio, risk_manager, store)
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
-    routes_portfolio_history.init(store)
+    portfolio_history_router.init(store)
 
     # Load models via trainer (优雅降级：缺少依赖不崩溃)
     trans_ready, rl_ready = False, False
