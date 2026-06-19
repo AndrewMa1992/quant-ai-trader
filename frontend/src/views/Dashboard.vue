@@ -11,6 +11,7 @@ import XmBadge from '@/components/ui/XmBadge.vue'
 import { usePortfolioStore } from '@/stores/usePortfolioStore'
 import { useRiskStore } from '@/stores/useRiskStore'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { tradeApi } from '@/api/tradeApi'
 
 use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -18,7 +19,8 @@ const portfolioStore = usePortfolioStore()
 const riskStore = useRiskStore()
 const execStore = useExecutionStore()
 
-const navHistory = ref<number[]>([100, 101, 103, 102, 105, 107, 106, 108, 110, 109])
+/** NAV history from real API data — populated on mount */
+const navHistory = ref<number[]>([])
 const signalHistory = ref<Array<{ time: string; buy: number; sell: number }>>([])
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
@@ -28,6 +30,7 @@ onMounted(async () => {
     portfolioStore.fetchPositions(),
     execStore.fetchAlerts(),
     execStore.fetchMarketStatus(),
+    fetchNavHistory(),
   ])
   refreshTimer = setInterval(() => {
     portfolioStore.fetchPositions()
@@ -37,6 +40,32 @@ onMounted(async () => {
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
+
+/** Fetch NAV history: primary source = /api/v2/analysis/portfolio-history, fallback = /api/trade/portfolio value_history */
+async function fetchNavHistory(): Promise<void> {
+  try {
+    const result = await tradeApi.getPortfolioHistory(90)
+    if (result.history && result.history.length > 0) {
+      navHistory.value = result.history.map((p) => p.nav)
+      return
+    }
+  } catch {
+    // Silent fallback — try the trade portfolio endpoint
+  }
+
+  // Fallback: use value_history from /api/trade/portfolio
+  try {
+    const portfolio = await tradeApi.getPortfolio()
+    if (portfolio.value_history && portfolio.value_history.length > 0) {
+      navHistory.value = portfolio.value_history.map((v) => v.value)
+      return
+    }
+  } catch {
+    // Ultimate fallback: empty chart
+  }
+
+  navHistory.value = []
+}
 
 // NAV chart option
 const navChartOption = computed(() => ({

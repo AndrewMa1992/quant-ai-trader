@@ -4,6 +4,7 @@ import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import XmStatusDot from '@/components/ui/XmStatusDot.vue'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { tradeApi, type TradeRecord } from '@/api/tradeApi'
 
 const execStore = useExecutionStore()
 
@@ -19,36 +20,53 @@ interface TradeLog {
   algo: string
 }
 
-const tradeLogs = ref<TradeLog[]>([
-  { id: 'T-001', ticker: 'AAPL', side: 'buy', quantity: 50, price: 195.20, value: 9760, status: 'filled', timestamp: '2025-06-08 10:32:15', algo: 'TWAP' },
-  { id: 'T-002', ticker: 'MSFT', side: 'sell', quantity: 20, price: 420.45, value: 8409, status: 'filled', timestamp: '2025-06-08 10:35:42', algo: 'VWAP' },
-  { id: 'T-003', ticker: 'NVDA', side: 'buy', quantity: 10, price: 875.30, value: 8753, status: 'partial', timestamp: '2025-06-08 10:38:01', algo: 'TWAP' },
-  { id: 'T-004', ticker: '0700.HK', side: 'buy', quantity: 200, price: 38.50, value: 7700, status: 'filled', timestamp: '2025-06-08 10:41:20', algo: 'Iceberg' },
-  { id: 'T-005', ticker: 'TSLA', side: 'sell', quantity: 30, price: 245.10, value: 7353, status: 'filled', timestamp: '2025-06-08 10:44:55', algo: 'TWAP' },
-  { id: 'T-006', ticker: 'GOOGL', side: 'buy', quantity: 25, price: 175.80, value: 4395, status: 'filled', timestamp: '2025-06-08 10:48:12', algo: 'VWAP' },
-  { id: 'T-007', ticker: 'META', side: 'buy', quantity: 15, price: 510.30, value: 7654, status: 'rejected', timestamp: '2025-06-08 10:51:30', algo: 'TWAP' },
-  { id: 'T-008', ticker: 'AMZN', side: 'sell', quantity: 40, price: 187.20, value: 7488, status: 'filled', timestamp: '2025-06-08 10:55:00', algo: 'Iceberg' },
-])
+const tradeLogs = ref<TradeLog[]>([])
 
 const todayStats = computed(() => {
-  const filled = tradeLogs.value.filter(t => t.status === 'filled')
-  const buys = filled.filter(t => t.side === 'buy')
-  const sells = filled.filter(t => t.side === 'sell')
+  const filled = tradeLogs.value.filter((t) => t.status === 'filled')
+  const buys = filled.filter((t) => t.side === 'buy')
+  const sells = filled.filter((t) => t.side === 'sell')
   const totalValue = filled.reduce((s, t) => s + t.value, 0)
   return {
     totalTrades: filled.length,
     buyCount: buys.length,
     sellCount: sells.length,
     totalValue,
-    rejectedCount: tradeLogs.value.filter(t => t.status === 'rejected').length,
+    rejectedCount: tradeLogs.value.filter((t) => t.status === 'rejected').length,
   }
 })
 
-onMounted(() => {
-  execStore.fetchAlerts()
+onMounted(async () => {
+  await Promise.all([
+    execStore.fetchAlerts(),
+    fetchTradeHistory(),
+  ])
 })
 
-function statusBadge(status: string) {
+/** Fetch trade history from /api/trade/history and map to TradeLog format */
+async function fetchTradeHistory(): Promise<void> {
+  try {
+    const result = await tradeApi.getTradeHistory(50)
+    const trades: TradeRecord[] = result.trades ?? []
+    if (trades.length > 0) {
+      tradeLogs.value = trades.map((t) => ({
+        id: `T-${String(t.id)}`,
+        ticker: t.ticker,
+        side: t.side,
+        quantity: t.quantity,
+        price: t.price,
+        value: t.value ?? t.quantity * t.price,
+        status: t.status ?? 'filled',
+        timestamp: t.timestamp,
+        algo: t.strategy ?? 'TWAP',
+      }))
+    }
+  } catch {
+    // Silent degradation — trade log remains empty
+  }
+}
+
+function statusBadge(status: string): string {
   switch (status) {
     case 'filled': return 'success'
     case 'partial': return 'warning'
@@ -60,7 +78,7 @@ function statusBadge(status: string) {
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Stats Row -->
+    <!-- Stats Row — computed from real trade data -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <XmCard class="!p-4">
         <div class="xm-metric-label">Today's Trades</div>
@@ -103,9 +121,12 @@ function statusBadge(status: string) {
       </div>
     </XmCard>
 
-    <!-- Trade Log Timeline -->
+    <!-- Trade Log Timeline — real data from API -->
     <XmCard title="Trade Log" subtitle="Real-time order timeline">
-      <div class="space-y-0">
+      <div v-if="tradeLogs.length === 0" class="text-center py-10 text-xm-text-tertiary text-sm">
+        No trade history available. Orders will appear here once executed.
+      </div>
+      <div v-else class="space-y-0">
         <div
           v-for="(log, idx) in tradeLogs"
           :key="log.id"
