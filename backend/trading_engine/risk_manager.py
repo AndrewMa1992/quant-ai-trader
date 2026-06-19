@@ -257,6 +257,31 @@ class RiskManager:
         self.breaker_mode = mode
         logger.info(f"🔧 断路器模式切换: {old_mode} → {mode}")
 
+    def sync_portfolio_value(self, total_value: float, cash: float = None):
+        """
+        从 Tiger/Portfolio 同步实际组合价值到风控系统。
+        解决 INITIAL_CAPITAL 与实际账户资金不匹配导致误报亏损的问题。
+
+        首次调用时校准 daily_start_value 和 peak_value；
+        后续调用只更新 portfolio_value（用于熔断判断）。
+        """
+        is_first_sync = (self.portfolio_value == trading_config.INITIAL_CAPITAL
+                         and self.daily_start_value == trading_config.INITIAL_CAPITAL)
+
+        if is_first_sync:
+            logger.info(
+                f"🔄 风控首次同步: 资产 ${self.portfolio_value:,.0f} → ${total_value:,.2f}"
+            )
+            self.portfolio_value = total_value
+            self.daily_start_value = total_value
+            self.peak_value = total_value
+            if cash is not None:
+                self.cash = cash
+        else:
+            self.portfolio_value = total_value
+            if cash is not None:
+                self.cash = cash
+
     def reset_daily_state(self):
         """
         P0-2: 新交易日重置熔断状态和当日起始净值。

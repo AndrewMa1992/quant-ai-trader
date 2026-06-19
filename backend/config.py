@@ -196,7 +196,9 @@ class ModelConfig:
 # ============================================================
 @dataclass
 class TradingConfig:
-    INITIAL_CAPITAL: float = 1_000_000.0
+    INITIAL_CAPITAL: float = field(default_factory=lambda: float(
+        os.getenv("INITIAL_CAPITAL", os.getenv("TIGER_INITIAL_CAPITAL", "10000"))
+    ))
     BASE_CURRENCY: str = "USD"
     SIMULATION_MODE: bool = False
 

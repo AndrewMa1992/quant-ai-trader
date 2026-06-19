@@ -85,16 +85,20 @@ class AutoTrader:
                 if not local_state:
                     logger.info("使用默认初始资金 $1,000,000")
 
-        # ★ 修复：Tiger 同步后，将 trading_config.INITIAL_CAPITAL 校准为实际账户值
+        # ★ 修复：Tiger 同步后，校准风控系统的组合价值
         # 避免 $1M 默认值导致风控系统误判 99% 回撤
         if self.tiger_ready:
             trading_config.INITIAL_CAPITAL = self.portfolio.initial_capital
             logger.info(f"📐 INITIAL_CAPITAL 已校准: ${trading_config.INITIAL_CAPITAL:,.2f}")
-
-        # 更新风控状态（基于最新 PortfolioManager 状态）
-        self.risk.portfolio_value = self.portfolio.total_value
-        self.risk.cash = self.portfolio.cash
-        self.risk.positions = dict(self.portfolio.positions)
+            # 同步风控：校准 daily_start_value / peak_value / portfolio_value
+            self.risk.sync_portfolio_value(
+                self.portfolio.total_value, self.portfolio.cash
+            )
+        else:
+            # 无 Tiger 连接时也做一次校准（用本地 portfolio 值代替默认 $1M）
+            self.risk.sync_portfolio_value(
+                self.portfolio.total_value, self.portfolio.cash
+            )
         self.risk.peak_value = self.portfolio.total_value
 
         # P0-2: 初始化当日起始净值为当前资产
