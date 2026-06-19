@@ -446,14 +446,15 @@ class StockUniverse:
                 with open(UNIVERSE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self._all_stocks = data.get("stocks", [])
-                def _by_suffix(suffix):
-                    return [s for s in self._all_stocks if s.get("ticker","").endswith(suffix)]
-                self._us_stocks = [s for s in self._all_stocks if not any(
-                    s.get("ticker","").endswith(x) for x in (".HK",".SI",".AX",".NZ"))]
-                self._hk_stocks = _by_suffix(".HK")
-                self._sg_stocks = _by_suffix(".SI")
-                self._au_stocks = _by_suffix(".AX")
-                self._nz_stocks = _by_suffix(".NZ")
+                # Use sector field from cached data, fallback to suffix heuristic
+                def _by_sector(sector_val):
+                    return [s for s in self._all_stocks if s.get("sector","") == sector_val]
+                self._hk_stocks = _by_sector("HK")
+                self._sg_stocks = _by_sector("SG")
+                self._au_stocks = _by_sector("AU")
+                self._nz_stocks = _by_sector("NZ")
+                hk_sg_au_nz = set().union(*[set(s.get("ticker","") for s in lst) for lst in [self._hk_stocks, self._sg_stocks, self._au_stocks, self._nz_stocks]])
+                self._us_stocks = [s for s in self._all_stocks if s.get("ticker","") not in hk_sg_au_nz]
                 if data.get("last_update"):
                     self._last_update = datetime.fromisoformat(data["last_update"])
                 logger.info(f"📦 加载缓存: {len(self._all_stocks)} 只 "
