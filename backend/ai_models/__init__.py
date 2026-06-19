@@ -61,7 +61,7 @@ def __getattr__(name):
             "is_ready": lambda self: False,
             "model": None,  # ★ GAT stub 必须暴露 .model 属性，防止 AttributeError
             "predict_signal": lambda self, *a, **kw: {},
-            "fuse_signals": lambda self, *a, **kw: {},
+            "fuse_signals": lambda self, *a, **kw: {"decision": "hold", "strength": 0.0, "confidence": 0.0, "position_size": 0.0, "ensemble_score": 0.0, "details": {}},
             "analyze_and_trade": lambda self, *a, **kw: {},
             "load_or_retrain": lambda self: (False, False),
             "get_signal": lambda self, *a, **kw: {"signal": "neutral", "strength": 0.0, "confidence": 0.0},

@@ -34,6 +34,7 @@ from backend.api import (
 )
 from backend.api.routes_factors import router as factors_router
 from backend.api.routes_portfolio_history import router as portfolio_history_router
+from backend.api.routes_portfolio_history import init as portfolio_history_init
 
 
 # ================================================================
@@ -82,7 +83,7 @@ async def lifespan(app: FastAPI):
     routes_trade.init(executor, portfolio, risk_manager, store)
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
-    portfolio_history_router.init(store)
+    portfolio_history_init(store)
 
     # Load models via trainer (优雅降级：缺少依赖不崩溃)
     trans_ready, rl_ready = False, False
