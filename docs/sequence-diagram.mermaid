@@ -1,114 +1,115 @@
 sequenceDiagram
-    participant AT as AutoTrader
-    participant MD as MarketDataEngine
-    participant DP as DataPipeline
-    participant ST as TradingStrategy
-    participant TP as TransformerPredictor
-    participant RL as TradingRLAgent
-    participant SE as SentimentAnalyzer
-    participant EN as SignalEnsemble
+    participant VF as FactorResearch.vue
+    participant SF as useFactorStore
+    participant AF as factorApi
+    participant RF as routes_factors.py
+    participant HS as HistoricalStore
+    participant DB as SQLite DB
+
+    VF->>VF: onMounted()
+    VF->>SF: fetchFactors()
+    SF->>AF: GET /api/v2/factors/factors
+    AF->>RF: HTTP request
+    RF->>HS: get_factors()
+    HS->>DB: SELECT * FROM factor_definitions
+    DB-->>HS: rows
+    HS-->>RF: FactorDef[]
+    RF-->>AF: {factors: [...], categories: {...}}
+    AF-->>SF: update factors, categories
+    SF-->>VF: reactive render
+
+    VF->>SF: fetchCorrelation(factorNames)
+    SF->>AF: GET /api/v2/factors/correlation?factor_names=...
+    AF->>RF: HTTP request
+    RF->>HS: get_factor_correlation(names)
+    HS->>DB: SELECT * FROM factor_correlation WHERE factor_1 IN (...) AND factor_2 IN (...)
+    DB-->>HS: rows
+    HS-->>RF: matrix + redundant pairs
+    RF-->>AF: {correlation_matrix: {...}, redundant_pairs: [...]}
+    AF-->>SF: update correlationMatrix, redundantPairs
+    SF-->>VF: heatmap render
+
+    ---
+
+    participant VD as Dashboard.vue
+    participant PS as usePortfolioStore
+    participant EE as executionApi
+    participant RT as routes_trade.py
+    participant PM as PortfolioManager
+
+    VD->>VD: onMounted()
+    par parallel fetch
+        VD->>PS: fetchDashboard()
+        PS->>EE: getDashboard() → GET /api/trade/dashboard
+        EE->>RT: HTTP request
+        RT->>PM: get_metrics() + compute sharpe/max_dd/wr
+        PM-->>RT: metrics + value_history
+        RT-->>EE: DashboardMetrics
+        EE-->>PS: update dashboardMetrics, navHistory
+    and
+        VD->>PS: fetchPositions()
+        PS->>EE: GET /api/trade/positions
+        EE->>RT: HTTP request
+        RT->>PM: positions + cash
+        PM-->>RT: positions list
+        RT-->>EE: {positions: [...], cash: ...}
+        EE-->>PS: update positions
+    end
+    PS-->>VD: reactive render AccountSummary + NAV chart
+
+    ---
+
+    participant VB as BacktestAnalysis.vue
+    participant RP as routes_portfolio_history.py
+
+    VB->>VB: onMounted()
+    VB->>PS: fetchPortfolioHistory()
+    PS->>EE: GET /api/v2/analysis/portfolio-history
+    EE->>RP: HTTP request
+    RP->>HS: get_portfolio_snapshots(limit=1008)
+    HS->>DB: SELECT * FROM portfolio_snapshots ORDER BY timestamp DESC LIMIT 1008
+    DB-->>HS: rows
+    HS-->>RP: PortfolioSnapshot[]
+    RP-->>EE: {nav_history: [...], drawdown_history: [...], summary: {...}}
+    EE-->>PS: update portfolioHistory
+
+    VB->>PS: fetchYearlyReturns()
+    PS->>EE: GET /api/v2/analysis/yearly-returns
+    EE->>RP: HTTP request
+    RP->>HS: get_yearly_returns()
+    HS->>DB: SELECT strftime('%Y',timestamp) as year, (last/first-1) as ret FROM portfolio_snapshots GROUP BY year
+    DB-->>HS: yearly aggregations
+    HS-->>RP: YearlyReturn[]
+    RP-->>EE: {yearly_returns: [...]}
+    EE-->>PS: update yearlyReturns
+    PS-->>VB: reactive render equity curve + metrics + yearly bar chart
+
+    ---
+
+    participant VR as RiskDashboard.vue
+    participant RS as useRiskStore
+    participant RA as riskApi
+    participant RC as risk_v2_router
     participant RM as RiskManager
-    participant EX as PaperExecutor
-    participant PF as PortfolioManager
 
-    Note over AT: 🚀 run_cycle() — 每10分钟执行一次
-
-    alt 📅 新交易日
-        AT->>RM: reset_daily_state()
-        RM->>RM: daily_start_value = portfolio_value
-        RM->>RM: circuit_breaker_triggered = false
-        RM->>RM: trades_today = 0
-        RM-->>AT: ✅ 新交易日已重置
+    VR->>VR: onMounted()
+    par parallel fetch
+        VR->>RS: fetchBreakerStatus()
+        RS->>RA: GET /api/v2/risk/circuit_breaker
+        RA->>RC: HTTP request
+        RC->>RM: get_status()
+        RM-->>RC: breaker state
+        RC-->>RA: CircuitBreakerStatus
+        RA-->>RS: update breaker fields
+    and
+        VR->>RS: fetchDrawdownHistory()
+        RS->>RA: GET /api/v2/risk/drawdown-history
+        RA->>RP: HTTP request
+        RP->>HS: get_portfolio_snapshots(drawdown_from_peak)
+        HS->>DB: SELECT timestamp, drawdown_from_peak FROM portfolio_snapshots ORDER BY timestamp
+        DB-->>HS: rows
+        HS-->>RP: drawdown timeline
+        RP-->>RA: {drawdown_timeline: [...], max_drawdown, current_drawdown}
+        RA-->>RS: update drawdownHistory
     end
-
-    AT->>RM: check_circuit_breaker()
-    alt 🚨 熔断已触发 (当日亏损 ≥ 5%)
-        RM-->>AT: RiskReport(circuit_breaker=true)
-        AT->>AT: 跳过交易，仅更新估值
-    else ✅ 熔断未触发
-        RM-->>AT: RiskReport(passed=true)
-
-        AT->>AT: _get_candidate_tickers()
-        Note over AT: 候选池 = 持仓 + 高波动Top35 + 市值Top25
-
-        AT->>MD: get_multi_ticker_data(candidates)
-        loop 每个 ticker
-            MD->>MD: normalize_ticker() ★ P0-1 修复
-            MD->>MD: get_yfinance_symbol()
-            Note over MD: 00700 → 0700.HK
-            MD->>MD: yf.Ticker(symbol).history()
-        end
-        MD-->>AT: data_dict: Dict[str, DataFrame]
-
-        loop 每个 ticker
-            AT->>DP: process(df)
-            DP->>DP: 63 FEATURE_COLUMNS 提取
-            DP-->>AT: features: ndarray (N, 63)
-        end
-
-        AT->>ST: analyze_and_trade(tickers, data_dict, prices)
-
-        par AI 模型并行推理
-            ST->>TP: predict(features)
-            TP->>TP: PatchTST forward pass
-            TP-->>ST: price_forecast (5-day)
-        and
-            loop 每个 ticker
-                ST->>RL: predict_signal(features, ticker, price, position_pct)
-                Note over RL: ★ P1-2 重构：均值投影替代随机噪声
-                RL->>RL: _detect_device() ★ P1-1 GPU自动检测
-                RL->>RL: model.predict(state)
-                RL-->>ST: {signal, strength, confidence}
-            end
-        and
-            ST->>SE: analyze(headlines)
-            SE->>SE: FinBERT inference
-            SE-->>ST: sentiment_score: float
-        end
-
-        ST->>EN: combine(transformer_signal, rl_signal, sentiment, technical)
-        EN->>EN: _adjust_weights()
-        EN-->>ST: ensemble_signal: Dict
-
-        loop 每个交易决策
-            ST->>RM: check_order(ticker, side, quantity, price)
-            RM->>RM: _check_sufficient_cash()
-            RM->>RM: _check_position_concentration()
-            RM->>RM: _check_max_drawdown()
-            RM->>RM: _check_var()
-            RM->>RM: _check_liquidity()
-            RM->>RM: _check_stop_loss()
-            alt ❌ 风控拒绝
-                RM-->>ST: RiskReport(passed=false, violations=[...])
-            else ✅ 风控通过
-                RM-->>ST: RiskReport(passed=true)
-                ST->>EX: execute_signal(ticker, decision, strength, price, confidence)
-                EX->>PF: update_position(ticker, side, quantity, price)
-                PF->>PF: recalculate total_value
-                PF-->>EX: ok
-                EX-->>ST: {trade_id, status: "filled"}
-            end
-        end
-
-        ST-->>AT: {signals, trades, portfolio_snapshot}
-    end
-
-    AT->>RM: update_portfolio_state(pv, cash, positions, prices)
-    RM->>RM: update position_values
-    RM->>RM: update price_history (max 252 days)
-    RM->>RM: update peak_value
-
-    AT->>RM: check_circuit_breaker()
-    alt 🚨 当日亏损 ≥ 5%
-        RM->>RM: circuit_breaker_triggered = true
-        RM->>EX: liquidate_all(prices) ★ P0-2 核心
-        EX->>PF: close_position(ticker, price) × N
-        PF->>PF: positions = {}
-        PF->>PF: save_state()
-        EX-->>RM: liquidation_complete
-        Note over RM: 🔴 熔断触发！全部平仓完成
-        Note over RM: 系统暂停交易 15 分钟 (冷却期)
-    end
-
-    AT->>PF: save_state()
-    AT->>AT: _push_to_backend(WebSocket)
+    RS-->>VR: reactive render circuit breaker + drawdown chart + gauge

@@ -1,271 +1,150 @@
 classDiagram
-    direction TB
-
-    %% ── 数据层 ──
-
-    class MarketDataEngine {
-        +cache: Dict~str,DataFrame~
-        +_last_fetch: Dict~str,datetime~
-        +detect_market(ticker: str) str$
-        +normalize_ticker(ticker: str) str$
-        +get_yfinance_symbol(ticker: str) str$
-        +get_display_symbol(ticker: str) str$
-        +get_historical_data(ticker, period, interval, force_refresh) DataFrame
-        +get_multi_ticker_data(tickers, period, interval) Dict
-        +get_realtime_quote(ticker) Dict
-        +get_market_status() Dict
+    class FactorDef {
+        +String id
+        +String name
+        +String category
+        +String subcategory
+        +String description
+        +int lookback_default
+        +String frequency
+        +float direction
     }
 
-    class DataPipeline {
-        +FEATURE_COLUMNS: List~str~
-        +process(df: DataFrame) DataFrame
-        +add_technical_indicators(df) DataFrame
-        +add_financial_ratios(df) DataFrame
+    class ICAnalysis {
+        +float rank_ic_mean
+        +float rank_ic_std
+        +float information_ratio
+        +float ic_t_stat
+        +float positive_ic_ratio
+        +List~ICPoint~ ic_series
+        +List~CumICPoint~ ic_cumulative
+        +List~MonthlyIC~ monthly_ic
     }
 
-    class StockUniverse {
-        +us_tickers: List~str~
-        +hk_tickers: List~str~
-        +all_tickers: List~str~
-        +_all_stocks: List~Dict~
-        +build(force: bool)
-        +get_high_volatility(n: int) List
-        +get_top_by(metric: str, n: int) List
-        +summary() Dict
+    class ICPoint {
+        +String date
+        +float ic
     }
 
-    %% ── AI 模型层 ──
-
-    class TransformerPredictor {
-        +model: PatchTST
-        +_is_ready: bool
-        +train(X_train, y_train, X_val, y_val, n_vars)
-        +predict(features: ndarray) ndarray
-        +save(path: str)
-        +load(path: str) bool
-        +is_ready() bool
+    class CumICPoint {
+        +String date
+        +float cumulative_ic
     }
 
-    class TradingRLAgent {
-        +model: PPO
-        +env: TradingEnv
-        +_is_trained: bool
-        +_device: str
-        +_detect_device() str$
-        +create_env(df_dict, close_dict, feature_dim, lookback, initial_balance) TradingEnv
-        +build_model() PPO
-        +train(total_timesteps: int)
-        +predict(state, deterministic) tuple
-        +predict_signal(features, ticker, price, position_pct) dict
-        +save(name: str)
-        +load(name: str) bool
-        +is_ready() bool
+    class MonthlyIC {
+        +int year
+        +int month
+        +float ic
     }
 
-    class TradingEnv {
-        +df_dict: Dict
-        +close_dict: Dict
-        +tickers: List~str~
-        +n_tickers: int
-        +action_space: Box
-        +observation_space: Box
-        +lookback: int
-        +initial_balance: float
-        +reset(seed, options) tuple
-        +step(actions) tuple
-        -_get_state() ndarray
-        -_get_prices(offset: int) dict
-        -_get_portfolio_value(prices) float
-        -_execute_trades(actions, prices)
+    class CorrMatrix {
+        +Dict~String,Dict~ correlation_matrix
+        +List~RedundantPair~ redundant_pairs
     }
 
-    class SentimentAnalyzer {
-        +model: FinBERT
-        +tokenizer: AutoTokenizer
-        +analyze(headlines: List~str~) float
-        +batch_analyze(headlines_list) List~float~
+    class RedundantPair {
+        +String factor_1
+        +String factor_2
+        +float correlation
     }
 
-    class SignalEnsemble {
-        +weights: Dict~str,float~
-        +combine(signals: Dict~str,Dict~) Dict
-        -_adjust_weights(performance: Dict)
-        -_normalize(signals: Dict) Dict
+    class PortfolioSnapshot {
+        +String timestamp
+        +float total_value
+        +float cash
+        +float positions_value
+        +float daily_pnl
+        +float total_pnl
+        +float cumulative_return
+        +float drawdown_from_peak
+        +float sharpe_ratio
     }
 
-    class ModelTrainer {
-        +transformer: TransformerPredictor
-        +rl_agent: TradingRLAgent
-        +training_history: List~Dict~
-        +train_all(tickers: List~str~)
-        +load_or_retrain() tuple
-        -_train_transformer(processed_dict, tickers, min_length)
-        -_train_rl_agent(processed_dict, tickers, min_length)
-        +get_training_summary() Dict
+    class PortfolioHistoryResponse {
+        +List~NavPoint~ nav_history
+        +List~DrawdownPoint~ drawdown_history
+        +PortfolioSummary summary
+        +int snapshot_count
     }
 
-    %% ── 交易层 ──
-
-    class RiskManager {
-        +portfolio_value: float
-        +cash: float
-        +positions: Dict~str,float~
-        +position_values: Dict~str,float~
-        +peak_value: float
-        +daily_start_value: float
-        +circuit_breaker_triggered: bool
-        +circuit_breaker_time: datetime
-        +trade_history: List~Dict~
-        +check_order(ticker, side, quantity, price) RiskReport
-        +check_circuit_breaker() RiskReport
-        +liquidate_all(prices: Dict) List~Dict~
-        +update_portfolio_state(pv, cash, positions, prices)
-        +get_current_drawdown() float
-        +get_daily_pnl() float
-        +get_status() Dict
-        +reset_daily_state()
-        -_check_sufficient_cash(order_value) Dict
-        -_check_position_concentration(ticker, add_value) Dict
-        -_check_max_drawdown() Dict
-        -_check_var(ticker, order_value) Dict
-        -_check_liquidity(ticker, order_value) Dict
-        -_check_stop_loss(ticker, price) Dict
-        -_get_avg_cost(ticker) float
+    class NavPoint {
+        +String time
+        +float value
+        +float cumulative_return
     }
 
-    class RiskReport {
-        +passed: bool
-        +total_risk_score: float
-        +violations: List~str~
-        +warnings: List~str~
-        +circuit_breaker: bool
-        +details: Dict
+    class DrawdownPoint {
+        +String time
+        +float drawdown
     }
 
-    class PortfolioManager {
-        +total_value: float
-        +cash: float
-        +positions: Dict~str,float~
-        +avg_costs: Dict~str,float~
-        +save_state()
-        +load_state() bool
-        +update_value(prices: Dict)
-        +update_position(ticker, side, quantity, price)
-        +get_metrics() Dict
-        +sync_from_tiger(force: bool) Dict
-        +reconcile_with_tiger() Dict
+    class YearlyReturnsResponse {
+        +List~YearlyReturn~ yearly_returns
     }
 
-    class PaperExecutor {
-        +portfolio: PortfolioManager
-        +risk: RiskManager
-        +execute_signal(ticker, decision, strength, price, confidence) Dict
-        +on_order_filled(callback: Callable)
+    class YearlyReturn {
+        +int year
+        +float return_pct
     }
 
-    class TradingStrategy {
-        +transformer: TransformerPredictor
-        +rl_agent: TradingRLAgent
-        +sentiment: SentimentAnalyzer
-        +ensemble: SignalEnsemble
-        +executor: PaperExecutor
-        +last_signals: Dict
-        +analyze_and_trade(tickers, data_dict, prices) Dict
-        +on_analysis(callback: Callable)
+    class ModelVersionWithMetrics {
+        +String name
+        +String type
+        +int version
+        +String stage
+        +String status
+        +float sharpe
+        +float pnl
+        +float win_rate
+        +String last_trained
     }
 
-    %% ── 配置层 ──
-
-    class TradingConfig {
-        +INITIAL_CAPITAL: float
-        +MAX_POSITION_SIZE: float
-        +MAX_DRAWDOWN: float
-        +DAILY_LOSS_LIMIT: float
-        +CIRCUIT_BREAKER_COOLDOWN: int
-        +STOP_LOSS_PCT: float
-        +VAR_CONFIDENCE: float
-        +SIMULATION_MODE: bool
-        +NO_LEVERAGE: bool
-        +MAX_CASH_USAGE: float
-        +MAX_DAILY_TRADES: int
+    class TradeLogEntry {
+        +int id
+        +String ticker
+        +String side
+        +float quantity
+        +float price
+        +float value
+        +float commission
+        +String timestamp
+        +float signal_strength
+        +String strategy
+        +String status
     }
 
-    class ModelConfig {
-        +TRANSFORMER_LOOKBACK: int
-        +TRANSFORMER_D_MODEL_LARGE: int
-        +TRANSFORMER_N_HEADS_LARGE: int
-        +TRANSFORMER_N_LAYERS_LARGE: int
-        +RL_LEARNING_RATE: float
-        +RL_TOTAL_TIMESTEPS: int
-        +ENSEMBLE_WEIGHTS: dict
+    class DashboardMetrics {
+        +float total_value
+        +float cash
+        +float positions_value
+        +float total_pnl
+        +float total_return_pct
+        +float sharpe_ratio
+        +float max_drawdown
+        +float max_drawdown_pct
+        +float win_rate
+        +float profit_factor
+        +float calmar_ratio
+        +int num_positions
+        +int total_trades
+        +int snapshot_count
+        +String timestamp
     }
 
-    %% ── 编排层 ──
-
-    class AutoTrader {
-        +market: MarketDataEngine
-        +pipeline: DataPipeline
-        +transformer: TransformerPredictor
-        +rl_agent: TradingRLAgent
-        +sentiment: SentimentAnalyzer
-        +ensemble: SignalEnsemble
-        +portfolio: PortfolioManager
-        +risk: RiskManager
-        +executor: PaperExecutor
-        +strategy: TradingStrategy
-        +cycle: int
-        +trades_today: int
-        +run_cycle()
-        +start(interval_seconds: int)
-        -_get_candidate_tickers() list
-        -_fetch_batch_data(tickers) tuple
-        -_check_circuit_breaker_and_liquidate(prices) bool
-        -_update_portfolio_valuation()
-        -_push_to_backend(result, prices)
+    class HistoricalStore {
+        +get_factors(category?) List~FactorDef~
+        +get_factor_ic(factor_name, window) ICAnalysis
+        +get_factor_correlation(factor_names) CorrMatrix
+        +get_portfolio_snapshots(limit, since) List~PortfolioSnapshot~
+        +get_yearly_returns() List~YearlyReturn~
+        +get_model_versions_with_metrics() List~ModelVersionWithMetrics~
+        +get_trades(ticker, limit, since) DataFrame
     }
 
-    class FastAPIApp {
-        +market_data: MarketDataEngine
-        +portfolio: PortfolioManager
-        +risk_manager: RiskManager
-        +transformer: TransformerPredictor
-        +rl_agent: TradingRLAgent
-        +active_connections: Set~WebSocket~
-        +lifespan(app: FastAPI)
-    }
-
-    %% ── 关系 ──
-
-    AutoTrader --> MarketDataEngine : uses
-    AutoTrader --> DataPipeline : uses
-    AutoTrader --> TradingStrategy : orchestrates
-    AutoTrader --> RiskManager : uses
-    AutoTrader --> PortfolioManager : uses
-
-    TradingStrategy --> TransformerPredictor : calls
-    TradingStrategy --> TradingRLAgent : calls
-    TradingStrategy --> SentimentAnalyzer : calls
-    TradingStrategy --> SignalEnsemble : calls
-    TradingStrategy --> PaperExecutor : delegates
-
-    TradingRLAgent --> TradingEnv : creates
-    TradingRLAgent ..> TradingConfig : reads
-    TradingRLAgent ..> ModelConfig : reads
-
-    PaperExecutor --> PortfolioManager : mutates
-    PaperExecutor --> RiskManager : checks
-
-    RiskManager --> RiskReport : returns
-    RiskManager ..> TradingConfig : reads
-
-    ModelTrainer --> TransformerPredictor : trains
-    ModelTrainer --> TradingRLAgent : trains
-    ModelTrainer --> MarketDataEngine : fetches data
-    ModelTrainer --> DataPipeline : processes
-
-    MarketDataEngine --> StockUniverse : references
-
-    FastAPIApp --> MarketDataEngine : serves
-    FastAPIApp --> PortfolioManager : serves
-    FastAPIApp --> RiskManager : serves
-    FastAPIApp --> ModelTrainer : serves
+    HistoricalStore --> FactorDef : queries factor_definitions
+    HistoricalStore --> ICAnalysis : queries factor_ic
+    HistoricalStore --> CorrMatrix : queries factor_correlation
+    HistoricalStore --> PortfolioSnapshot : queries portfolio_snapshots
+    HistoricalStore --> YearlyReturn : aggregates portfolio_snapshots
+    HistoricalStore --> ModelVersionWithMetrics : joins model_versions+model_metrics
+    HistoricalStore --> TradeLogEntry : queries trades
