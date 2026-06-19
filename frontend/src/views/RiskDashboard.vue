@@ -26,9 +26,35 @@ const maxDrawdown = 0.25
 const var95 = ref(28500)
 const portfolioValue = 1000000
 
-onMounted(() => {
+// P0-3: Breaker control loading states
+const resetLoading = ref(false)
+const toggleLoading = ref(false)
+
+onMounted(async () => {
   riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
+  await riskStore.fetchBreakerStatus()
 })
+
+// P0-3: Reset circuit breaker
+async function handleResetBreaker() {
+  resetLoading.value = true
+  try {
+    await riskStore.resetCircuitBreaker()
+  } finally {
+    resetLoading.value = false
+  }
+}
+
+// P0-3: Toggle breaker mode
+async function handleToggleBreaker() {
+  toggleLoading.value = true
+  try {
+    const newMode = riskStore.breakerMode === 'hard' ? 'warn' : 'hard'
+    await riskStore.toggleBreakerMode(newMode)
+  } finally {
+    toggleLoading.value = false
+  }
+}
 
 const drawdownChartOption = computed(() => ({
   grid: { top: 8, right: 16, bottom: 4, left: 50 },
@@ -108,6 +134,39 @@ const riskMetrics = computed(() => [
         <p class="text-xs text-xm-text-tertiary mt-1">95% Confidence</p>
       </XmCard>
     </div>
+
+    <!-- P0-3: Breaker Controls -->
+    <XmCard title="⚡ Circuit Breaker Controls" class="!p-5">
+      <div class="flex flex-wrap items-center gap-4">
+        <!-- Breaker Mode Display -->
+        <div class="flex items-center gap-2 px-4 py-2 rounded-lg" :class="riskStore.breakerMode === 'hard' ? 'bg-risk-red/10 border border-risk-red/30' : 'bg-risk-yellow/10 border border-risk-yellow/30'">
+          <span class="text-sm font-semibold">当前模式:</span>
+          <span class="text-sm font-mono font-bold" :class="riskStore.breakerMode === 'hard' ? 'text-risk-red' : 'text-risk-yellow'">
+            {{ riskStore.breakerMode === 'hard' ? '🔴 硬熔断' : '🟡 仅告警' }}
+          </span>
+        </div>
+
+        <!-- Toggle Mode Button -->
+        <button
+          class="xm-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50"
+          :class="riskStore.breakerMode === 'hard' ? 'bg-risk-yellow text-white' : 'bg-risk-red text-white'"
+          :disabled="toggleLoading"
+          @click="handleToggleBreaker"
+        >
+          {{ toggleLoading ? '⏳ 切换中...' : (riskStore.breakerMode === 'hard' ? '🔧 切换至仅告警' : '🔧 切换至硬熔断') }}
+        </button>
+
+        <!-- Reset Breaker Button -->
+        <button
+          class="xm-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50"
+          style="background-color: #FF6700; color: white;"
+          :disabled="resetLoading"
+          @click="handleResetBreaker"
+        >
+          {{ resetLoading ? '⏳ 重置中...' : '⚡ 重置断路器' }}
+        </button>
+      </div>
+    </XmCard>
 
     <!-- Risk Metrics Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

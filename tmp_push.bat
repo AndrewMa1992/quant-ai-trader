@@ -1,5 +1,9 @@
 @echo off
-cd /d "G:\workbuddyspace\quant-ai-trader"
-"C:\Program Files\Git\bin\git.exe" remote set-url origin https://AndrewMa1992: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@github.com/AndrewMa1992/quant-ai-trader.git
-"C:\Program Files\Git\bin\git.exe" push -u origin master --force
+:: Quant AI Trader - Quick Push (safe: uses git credential manager)
+cd /d "E:\workbuddyspace\Claw\quant-ai-trader"
+"C:\Program Files\Git\bin\git.exe" push -u origin dev-20260522
+@echo off
+if errorlevel 1 (
+    echo Push failed. Ensure git credential is configured.
+)
 pause

@@ -305,7 +305,9 @@ class AutoTrader:
 
     def _check_circuit_breaker_and_liquidate(self, prices: dict) -> bool:
         """
-        P0-2: 检查熔断状态，若触发则自动平仓所有持仓。
+        P0-2/P0-3: 检查熔断状态，若触发则自动平仓所有持仓。
+
+        P0-3: warn 模式下断路器仅告警，不阻断交易。
 
         Args:
             prices: {ticker: price} 当前价格字典
@@ -314,6 +316,13 @@ class AutoTrader:
             True 如果熔断已触发（本轮应跳过交易），False 表示正常
         """
         cb_report = self.risk.check_circuit_breaker()
+
+        # P0-3: warn 模式 — 断路器触发但仅告警，不阻断
+        if self.risk.breaker_mode == "warn" and cb_report.circuit_breaker:
+            logger.warning(f"⚠️ 断路器告警（warn模式，未阻断）：{cb_report.violations}")
+            # warn模式下不禁用交易，继续执行
+            self._circuit_broken = False
+            return False
 
         if cb_report.circuit_breaker:
             if not self._circuit_broken:
@@ -358,6 +367,11 @@ class AutoTrader:
         # ★ 每轮交易前从 Tiger 实时同步资产数据
         if self.tiger_ready:
             self._sync_tiger_state()
+            # ★ Issue 4: Tiger 数据全量同步到本地 DB（报价/订单/交易记录）
+            try:
+                tiger_client.sync_all_to_db()
+            except Exception:
+                pass  # 静默降级，不阻塞交易循环
 
         # ★ P0-1: 无杠杆铁律 — 每轮交易前强制检查
         if self.tiger_ready:
@@ -402,6 +416,10 @@ class AutoTrader:
             self.full_scan_cycle += 1
             logger.info(f"🔄 全量刷新 #{self.full_scan_cycle}...")
             stock_universe.build(force=False)
+
+        # ★ Issue 3: 每 6 个周期（~1小时）执行一次 git 自动同步
+        if self.cycle % 6 == 1:
+            self._git_sync()
 
         # 1. 获取候选股票池
         tickers = self._get_candidate_tickers()
@@ -585,6 +603,43 @@ class AutoTrader:
             )
         except Exception:
             pass  # 静默失败，不阻塞交易循环
+
+    def _git_sync(self):
+        """
+        Git 自动同步：add → commit → pull --rebase → push
+        每 6 个交易周期（~1 小时）执行一次，静默失败不阻塞。
+        """
+        import subprocess
+        try:
+            proj_root = str(PROJ_ROOT)
+            # 1. stage all changes
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=proj_root, capture_output=True, timeout=15,
+            )
+            # 2. commit (may fail if no changes — expected)
+            result = subprocess.run(
+                ["git", "commit", "-m", f"auto: cycle sync {datetime.now().strftime('%Y-%m-%d %H:%M')}"],
+                cwd=proj_root, capture_output=True, timeout=15,
+            )
+            # 3. pull with rebase
+            subprocess.run(
+                ["git", "pull", "--rebase", "origin", "dev-20260522"],
+                cwd=proj_root, capture_output=True, timeout=30,
+            )
+            # 4. push
+            push_result = subprocess.run(
+                ["git", "push", "origin", "dev-20260522"],
+                cwd=proj_root, capture_output=True, timeout=30,
+            )
+            if push_result.returncode == 0:
+                logger.debug("✅ Git 自动同步完成")
+            else:
+                logger.debug(f"⚠️ Git push 未成功 (可能无网络或无新提交)")
+        except FileNotFoundError:
+            pass  # git 不可用
+        except Exception:
+            pass  # 静默降级，不阻塞交易循环
 
     def start(self, interval_seconds=300):
         """开始自动循环"""

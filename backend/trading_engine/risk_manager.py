@@ -53,6 +53,9 @@ class RiskManager:
         self.circuit_breaker_triggered: bool = False
         self.circuit_breaker_time: Optional[datetime] = None
 
+        # P0-3: 断路器模式 — "hard" = 熔断+平仓, "warn" = 仅日志告警
+        self.breaker_mode: str = "warn"
+
     # ================================================================
     # P0-2: 组合级熔断
     # ================================================================
@@ -66,10 +69,15 @@ class RiskManager:
         2. 最大回撤 ≥ MAX_DRAWDOWN (默认 25%) → 触发熔断
         3. 已在熔断冷却期内 → 维持熔断
 
+        P0-3: 支持 breaker_mode
+        - "hard" = 熔断并平仓所有持仓
+        - "warn" = 仅日志告警，不阻断交易
+
         Returns:
             RiskReport: 包含 circuit_breaker 标记的风控报告
         """
         report = RiskReport()
+        is_warn_mode = self.breaker_mode == "warn"
 
         # 检查冷却期是否已过
         if self.circuit_breaker_triggered and self.circuit_breaker_time is not None:
@@ -81,6 +89,7 @@ class RiskManager:
                     f"🚨 熔断冷却中: {cooldown_seconds:.0f}s / "
                     f"{trading_config.CIRCUIT_BREAKER_COOLDOWN}s 剩余"
                 )
+                report.details["breaker_mode"] = self.breaker_mode
                 return report
             else:
                 # 冷却期结束，自动解除熔断
@@ -95,16 +104,26 @@ class RiskManager:
         if daily_pnl_pct <= -trading_config.DAILY_LOSS_LIMIT:
             report.circuit_breaker = True
             report.passed = False
-            report.violations.append(
-                f"🚨 熔断触发! 当日亏损 {daily_pnl_pct:.2%} ≥ "
-                f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
-            )
-            self.circuit_breaker_triggered = True
-            self.circuit_breaker_time = datetime.now()
-            logger.error(
-                f"🚨 熔断触发! 当日亏损={daily_pnl_pct:.2%}, "
-                f"资产=${self.portfolio_value:,.0f}, 起始=${self.daily_start_value:,.0f}"
-            )
+            if is_warn_mode:
+                report.violations.append(
+                    f"⚠️ 断路器告警（未阻断）: 当日亏损 {daily_pnl_pct:.2%} ≥ "
+                    f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
+                )
+                logger.warning(
+                    f"⚠️ 断路器告警（warn模式，未阻断）: 当日亏损={daily_pnl_pct:.2%}, "
+                    f"资产=${self.portfolio_value:,.0f}, 起始=${self.daily_start_value:,.0f}"
+                )
+            else:
+                report.violations.append(
+                    f"🚨 熔断触发! 当日亏损 {daily_pnl_pct:.2%} ≥ "
+                    f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
+                )
+                self.circuit_breaker_triggered = True
+                self.circuit_breaker_time = datetime.now()
+                logger.error(
+                    f"🚨 熔断触发! 当日亏损={daily_pnl_pct:.2%}, "
+                    f"资产=${self.portfolio_value:,.0f}, 起始=${self.daily_start_value:,.0f}"
+                )
 
         # 检查最大回撤
         current_dd = self.get_current_drawdown()
@@ -117,13 +136,22 @@ class RiskManager:
             if current_dd >= trading_config.MAX_DRAWDOWN:
                 report.circuit_breaker = True
                 report.passed = False
-                report.violations.append(
-                    f"🚨 熔断触发! 最大回撤 {current_dd:.2%} ≥ "
-                    f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
-                )
-                self.circuit_breaker_triggered = True
-                self.circuit_breaker_time = datetime.now()
-                logger.error(f"🚨 熔断触发! 回撤={current_dd:.2%}")
+                if is_warn_mode:
+                    report.violations.append(
+                        f"⚠️ 断路器告警（未阻断）: 最大回撤 {current_dd:.2%} ≥ "
+                        f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
+                    )
+                    logger.warning(
+                        f"⚠️ 断路器告警（warn模式，未阻断）: 回撤={current_dd:.2%}"
+                    )
+                else:
+                    report.violations.append(
+                        f"🚨 熔断触发! 最大回撤 {current_dd:.2%} ≥ "
+                        f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
+                    )
+                    self.circuit_breaker_triggered = True
+                    self.circuit_breaker_time = datetime.now()
+                    logger.error(f"🚨 熔断触发! 回撤={current_dd:.2%}")
         elif current_dd >= 0.90 and self.portfolio_value > 0:
             # 回撤 ≥ 90% 是数据异常而非真实亏损 —— 输出警告但跳过熔断
             logger.warning(
@@ -137,6 +165,7 @@ class RiskManager:
         report.details["daily_pnl_pct"] = daily_pnl_pct
         report.details["daily_start_value"] = self.daily_start_value
         report.details["current_drawdown"] = current_dd
+        report.details["breaker_mode"] = self.breaker_mode
 
         return report
 
@@ -201,6 +230,32 @@ class RiskManager:
         )
 
         return liquidation_records
+
+    def force_reset_circuit(self):
+        """
+        P0-3: 强制重置断路器并校准峰值。
+
+        用途: Dashboard 手动重置按钮，或自动化恢复流程。
+        重置后断路器状态恢复为正常，峰值校准为当前组合价值。
+        """
+        self.circuit_breaker_triggered = False
+        self.circuit_breaker_time = None
+        self.peak_value = max(self.peak_value, self.portfolio_value)
+        logger.info(f"🔄 断路器已重置，峰值校准至 ${self.peak_value:,.2f}")
+
+    def toggle_breaker_mode(self, mode: str):
+        """
+        P0-3: 切换断路器模式。
+
+        Args:
+            mode: "hard" = 熔断+平仓, "warn" = 仅日志告警
+        """
+        if mode not in ("hard", "warn"):
+            logger.error(f"❌ 无效断路器模式: {mode}，仅支持 'hard' 或 'warn'")
+            raise ValueError(f"Invalid breaker mode: {mode}. Must be 'hard' or 'warn'.")
+        old_mode = self.breaker_mode
+        self.breaker_mode = mode
+        logger.info(f"🔧 断路器模式切换: {old_mode} → {mode}")
 
     def reset_daily_state(self):
         """
@@ -440,6 +495,7 @@ class RiskManager:
             "daily_pnl": round(self.get_daily_pnl(), 2),
             "daily_pnl_pct": round(self.get_daily_pnl() / (self.daily_start_value + 1e-8), 4),
             "circuit_breaker_triggered": self.circuit_breaker_triggered,
+            "breaker_mode": self.breaker_mode,
             "daily_start_value": round(self.daily_start_value, 2),
             "var_95": 0.0,  # 简化
             "position_concentration": {

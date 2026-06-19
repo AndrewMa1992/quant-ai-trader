@@ -57,7 +57,9 @@ def __getattr__(name):
         _lg.debug("AI 模型 %s 不可用 (torch 缺失)，返回 stub", name)
         _stub_cache[name] = type(name, (), {
             "__init__": lambda self, *a, **kw: None,
+            "load": lambda self: False,
             "is_ready": lambda self: False,
+            "model": None,  # ★ GAT stub 必须暴露 .model 属性，防止 AttributeError
             "predict_signal": lambda self, *a, **kw: {},
             "fuse_signals": lambda self, *a, **kw: {},
             "analyze_and_trade": lambda self, *a, **kw: {},

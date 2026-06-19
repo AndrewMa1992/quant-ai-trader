@@ -614,6 +614,111 @@ class TigerClient:
             "has_trade_client": self._trade_client is not None,
         }
 
+    # ================================================================
+    # 全量同步到本地数据库
+    # ================================================================
+
+    def sync_all_to_db(self) -> Dict:
+        """
+        将 Tiger 最新数据全量同步到本地 SQLite 数据库。
+        - 持仓、账户、订单历史、实时报价
+        - 非阻塞，失败时静默降级
+
+        Returns:
+            {"synced": bool, "positions": int, "account": bool, "quotes": int, "orders": int, "error": str}
+        """
+        result = {"synced": False, "positions": 0, "account": False, "quotes": 0, "orders": 0, "error": ""}
+        if not self._connected:
+            result["error"] = "not_connected"
+            return result
+
+        try:
+            from backend.data_engine.historical_store import HistoricalStore
+            store = HistoricalStore()
+        except Exception as e:
+            result["error"] = f"store_init_failed: {e}"
+            logger.warning(f"⚠️ sync_all_to_db: HistoricalStore 不可用: {e}")
+            return result
+
+        try:
+            # 1. 同步持仓
+            positions = self.get_positions(force=True)
+            if positions:
+                for pos in positions:
+                    snapshot = {
+                        "ticker": pos.get("ticker", ""),
+                        "shares": pos.get("shares", 0),
+                        "avg_cost": pos.get("avg_cost", 0),
+                        "market_value": pos.get("market_value", 0),
+                        "market_price": pos.get("market_price", 0),
+                        "unrealized_pnl": pos.get("unrealized_pnl", 0),
+                        "realized_pnl": pos.get("realized_pnl", 0),
+                        "currency": pos.get("currency", "USD"),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    store.save_snapshot(snapshot)
+                result["positions"] = len(positions)
+
+            # 2. 同步账户信息
+            account = self.get_account_info(force=True)
+            if account:
+                acct_snapshot = {
+                    "ticker": "_ACCOUNT_",
+                    "cash": account.get("cash", 0),
+                    "market_value": account.get("market_value", 0),
+                    "total_value": account.get("total_value", 0),
+                    "buying_power": account.get("buying_power", 0),
+                    "leverage": account.get("leverage", 1.0),
+                    "unrealized_pnl": account.get("unrealized_pnl", 0),
+                    "realized_pnl": account.get("realized_pnl", 0),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                store.save_snapshot(acct_snapshot)
+                result["account"] = True
+
+            # 3. 同步实时报价（对有持仓的股票）
+            if positions:
+                quote_count = 0
+                for pos in positions[:30]:  # 限制 30 只避免超频
+                    ticker = pos.get("ticker", "")
+                    if not ticker:
+                        continue
+                    quote = self.get_quote(ticker)
+                    if quote and quote.get("price", 0) > 0:
+                        store.save_price_ticks_batch({ticker: quote["price"]})
+                        quote_count += 1
+                result["quotes"] = quote_count
+
+            # 4. 同步当日订单（如有 get_open_orders 方法可用）
+            try:
+                open_orders = self._trade_client.get_open_orders() if self._trade_client else []
+                if open_orders:
+                    orders_list = []
+                    for o in (open_orders or []):
+                        orders_list.append({
+                            "order_id": getattr(o, "id", ""),
+                            "ticker": getattr(o.contract, "symbol", "") if hasattr(o, "contract") else "",
+                            "action": getattr(o, "action", ""),
+                            "quantity": getattr(o, "quantity", 0),
+                            "status": str(getattr(o, "status", "")),
+                            "price": getattr(o, "limit_price", 0) or 0,
+                            "timestamp": datetime.now().isoformat(),
+                        })
+                    if orders_list:
+                        store.save_trades_batch(orders_list)
+                        result["orders"] = len(orders_list)
+            except Exception:
+                pass  # 无 open orders 或方法不可用
+
+            result["synced"] = True
+            logger.debug(f"📥 sync_all_to_db: {result['positions']} 持仓, 账户{'✓' if result['account'] else '✗'}, "
+                         f"{result['quotes']} 报价, {result['orders']} 订单")
+        except Exception as e:
+            result["error"] = str(e)
+            logger.warning(f"⚠️ sync_all_to_db 失败: {e}")
+
+        return result
+
 
 # 全局单例
 tiger_client = TigerClient()

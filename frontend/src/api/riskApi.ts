@@ -52,6 +52,18 @@ export const riskApi = {
   // P0-2: Circuit breaker status
   async getCircuitBreakerStatus() {
     const { data } = await apiClient.get(`${BASE}/circuit_breaker`)
-    return data.data
+    return data
+  },
+
+  // P0-3: Reset circuit breaker (force reset + calibrate peak)
+  async resetCircuitBreaker() {
+    const { data } = await apiClient.post(`${BASE}/circuit_breaker/reset`)
+    return data
+  },
+
+  // P0-3: Toggle breaker mode (hard / warn)
+  async toggleBreakerMode(mode: string) {
+    const { data } = await apiClient.post(`${BASE}/circuit_breaker/toggle`, { mode })
+    return data
   },
 }

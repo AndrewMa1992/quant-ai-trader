@@ -256,7 +256,7 @@ class PaperExecutor:
         # 按信号强度排序，优先执行高置信度信号
         sorted_signals = sorted(
             signals.items(),
-            key=lambda x: x[1].get("confidence", 0) * abs(x[1].get("strength", 0)),
+            key=lambda x: (x[1].get("confidence") or 0) * abs(x[1].get("strength") or 0),
             reverse=True,
         )
 
@@ -267,10 +267,10 @@ class PaperExecutor:
 
             trade = self.execute_signal(
                 ticker=ticker,
-                decision=signal["decision"],
-                strength=signal["strength"],
+                decision=signal.get("decision") or "hold",
+                strength=signal.get("strength") or 0.0,
                 price=price,
-                confidence=signal.get("confidence", 0.5),
+                confidence=signal.get("confidence") or 0.5,
             )
 
             if trade:

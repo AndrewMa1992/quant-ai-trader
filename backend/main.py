@@ -166,6 +166,7 @@ app.add_middleware(
 # Register API routes
 app.include_router(routes_data.router)
 app.include_router(routes_trade.router)
+app.include_router(routes_trade.risk_v2_router)
 app.include_router(routes_analysis.router)
 app.include_router(routes_models.router)
 

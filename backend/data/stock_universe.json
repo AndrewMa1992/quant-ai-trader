@@ -1,5 +1,5 @@
 {
-  "last_update": "2026-06-14T19:48:18.849649",
+  "last_update": "2026-06-19T16:40:54.970659",
   "us_count": 200,
   "hk_count": 157,
   "sg_count": 97,
@@ -2547,46 +2547,6 @@
       "sector": "SG"
     },
     {
-      "ticker": "NAB.AX",
-      "name": "NAB.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "BHP.AX",
-      "name": "BHP.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "CAR.AX",
-      "name": "CAR.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "RHC.AX",
-      "name": "RHC.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
       "ticker": "CBA.AX",
       "name": "CBA.AX",
       "market_cap": 10000000000.0,
@@ -2597,118 +2557,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "QBE.AX",
-      "name": "QBE.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "CPU.AX",
-      "name": "CPU.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "CSL.AX",
-      "name": "CSL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "MQG.AX",
-      "name": "MQG.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "TLS.AX",
-      "name": "TLS.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "ALL.AX",
-      "name": "ALL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "XRO.AX",
-      "name": "XRO.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "ANZ.AX",
-      "name": "ANZ.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "STO.AX",
-      "name": "STO.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "REA.AX",
-      "name": "REA.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "GMG.AX",
-      "name": "GMG.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "FMG.AX",
-      "name": "FMG.AX",
+      "ticker": "ORG.AX",
+      "name": "ORG.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -2737,28 +2587,18 @@
       "sector": "AU"
     },
     {
-      "ticker": "SEK.AX",
-      "name": "SEK.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "WES.AX",
-      "name": "WES.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
       "ticker": "RIO.AX",
       "name": "RIO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NAB.AX",
+      "name": "NAB.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -2777,8 +2617,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "WOW.AX",
-      "name": "WOW.AX",
+      "ticker": "CAR.AX",
+      "name": "CAR.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -2787,38 +2627,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "SUN.AX",
-      "name": "SUN.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "COL.AX",
-      "name": "COL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "NCM.AX",
-      "name": "NCM.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "SHL.AX",
-      "name": "SHL.AX",
+      "ticker": "MQG.AX",
+      "name": "MQG.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -2837,8 +2647,198 @@
       "sector": "AU"
     },
     {
-      "ticker": "ORG.AX",
-      "name": "ORG.AX",
+      "ticker": "RHC.AX",
+      "name": "RHC.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NCM.AX",
+      "name": "NCM.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CPU.AX",
+      "name": "CPU.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "ALL.AX",
+      "name": "ALL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SHL.AX",
+      "name": "SHL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WES.AX",
+      "name": "WES.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SUN.AX",
+      "name": "SUN.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CSL.AX",
+      "name": "CSL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "STO.AX",
+      "name": "STO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "BHP.AX",
+      "name": "BHP.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WOW.AX",
+      "name": "WOW.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "XRO.AX",
+      "name": "XRO.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "GMG.AX",
+      "name": "GMG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SEK.AX",
+      "name": "SEK.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "COL.AX",
+      "name": "COL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "REA.AX",
+      "name": "REA.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "FMG.AX",
+      "name": "FMG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "QBE.AX",
+      "name": "QBE.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "TLS.AX",
+      "name": "TLS.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "ANZ.AX",
+      "name": "ANZ.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
