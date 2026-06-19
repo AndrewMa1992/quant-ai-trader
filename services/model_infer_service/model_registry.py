@@ -49,9 +49,9 @@ class ModelRegistry:
                     "model_type": model_type,
                 }
             else:
-                # Check staging
-                import mlflow
+                # Check staging (mlflow may not be installed)
                 try:
+                    import mlflow
                     client = mlflow.tracking.MlflowClient()
                     versions = client.get_latest_versions(
                         f"quant-{model_type}", stages=["staging"]
