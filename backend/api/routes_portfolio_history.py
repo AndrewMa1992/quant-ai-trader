@@ -3,7 +3,6 @@
 从 portfolio_snapshots 表读取真实数据
 """
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Query
 import sqlite3

@@ -142,7 +142,7 @@ async def get_risk_status():
 # ============================================================
 @router.get("/dashboard")
 async def get_dashboard_metrics():
-    """获取实时仪表盘指标"""
+    """获取实时仪表盘指标（含DB真实数据）"""
     if portfolio is None:
         return {"error": "组合管理器未初始化"}
 
@@ -155,11 +155,14 @@ async def get_dashboard_metrics():
     # 计算最大回撤
     max_dd, max_dd_pct = _compute_max_drawdown(value_history)
 
-    # 计算胜率
+    # 计算胜率（从 trades 表真实数据）
     win_rate, profit_factor = _compute_wr_pf()
 
     # 计算 Calmar Ratio
     calmar = _compute_calmar(value_history, max_dd_pct)
+
+    # ★ 从 portfolio_snapshots 表读取真实快照计数
+    snapshot_count = _get_snapshot_count()
 
     return {
         **metrics,
@@ -169,7 +172,7 @@ async def get_dashboard_metrics():
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 4),
         "calmar_ratio": round(calmar, 4),
-        "snapshot_count": len(value_history),
+        "snapshot_count": snapshot_count,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -241,6 +244,22 @@ def _compute_calmar(value_history, max_dd_pct):
     days = len(values)
     annual_return = (1 + total_return) ** (252 / max(days, 1)) - 1
     return float(annual_return / abs(max_dd_pct + 1e-8))
+
+
+def _get_snapshot_count() -> int:
+    """从 portfolio_snapshots 表读取真实快照计数"""
+    try:
+        import sqlite3
+        from pathlib import Path
+        db_path = Path(__file__).parent.parent / "data" / "quant_trader.db"
+        if store is not None and hasattr(store, "db_path"):
+            db_path = store.db_path
+        conn = sqlite3.connect(str(db_path))
+        count = conn.execute("SELECT COUNT(*) FROM portfolio_snapshots").fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
 
 
 # ============================================================

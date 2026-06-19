@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
     routes_trade.init(executor, portfolio, risk_manager, store)
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
+    routes_portfolio_history.init(store)
 
     # Load models via trainer (优雅降级：缺少依赖不崩溃)
     trans_ready, rl_ready = False, False
@@ -188,6 +189,8 @@ app.include_router(routes_trade.router)
 app.include_router(routes_trade.risk_v2_router)
 app.include_router(routes_analysis.router)
 app.include_router(routes_models.router)
+app.include_router(factors_router, prefix="/api/v2/factors", tags=["factors"])
+app.include_router(portfolio_history_router, prefix="/api/v2", tags=["analysis-v2"])
 
 # Mount frontend static files (production build)
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
