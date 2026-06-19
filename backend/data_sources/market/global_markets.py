@@ -88,33 +88,13 @@ class GlobalMarketDataSource:
         return {"error": "Unknown error"}
     
     def _get_yahoo_quote(self, symbol: str) -> Dict:
-        """Yahoo Finance行情"""
+        """中国境内实时行情（替代 Yahoo Finance）"""
         try:
-            import yfinance as yf
-            
-            # 转换symbol格式
-            if ".T" in symbol:  # 日本
-                ticker = symbol
-            elif "." not in symbol and symbol.isupper():  # 美国
-                ticker = symbol
-            else:
-                ticker = symbol
-            
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            
-            return {
-                "symbol": symbol,
-                "name": info.get("shortName", symbol),
-                "price": info.get("currentPrice", 0),
-                "open": info.get("open", 0),
-                "high": info.get("dayHigh", 0),
-                "low": info.get("dayLow", 0),
-                "volume": info.get("volume", 0),
-                "pctChg": info.get("regularMarketChangePercent", 0),
-                "marketCap": info.get("marketCap", 0),
-                "last": info.get("currentPrice", 0)
-            }
+            from backend.data_engine.china_adapter import china_data_adapter
+            quote = china_data_adapter.get_realtime_quote(symbol)
+            if quote:
+                return quote
+            return {"error": "No data from China data sources"}
         except Exception as e:
             return {"error": str(e)}
     
@@ -175,12 +155,10 @@ class GlobalMarketDataSource:
         return pd.DataFrame()
     
     def _get_yahoo_history(self, symbol: str, start, end) -> pd.DataFrame:
-        """获取Yahoo历史数据"""
+        """获取历史数据（中国境内数据源）"""
         try:
-            import yfinance as yf
-            stock = yf.Ticker(symbol)
-            df = stock.history(start=start, end=end)
-            return df
+            from backend.data_engine.china_adapter import china_data_adapter
+            return china_data_adapter.get_historical_data(symbol, period="2y", interval="1d")
         except Exception as e:
             print(f"获取历史数据失败: {e}")
             return pd.DataFrame()

@@ -1,0 +1,48 @@
+"""
+Pipeline Configuration — Trading Pipeline 专用配置
+==================================================
+替代 v1 auto_trader.py 的硬编码常量，集中管理交易管线参数。
+"""
+from dataclasses import dataclass, field
+
+
+@dataclass
+class PipelineConfig:
+    """交易管线全局配置"""
+
+    # ── 调度参数 ──────────────────────────────────────────────
+    CYCLE_INTERVAL_SECONDS: int = 300          # 每轮间隔（秒），默认5分钟
+    TRADING_HOURS_ONLY: bool = True            # 仅交易时段运行
+    MAX_TICKERS_PER_CYCLE: int = 50            # 每轮最多分析标的数
+
+    # ── 信号阈值 ──────────────────────────────────────────────
+    SIGNAL_THRESHOLD: float = 0.3              # 信号强度下限 |signal| >= 阈值才生成 view
+    MIN_CONFIDENCE: float = 0.5                # 置信度下限
+
+    # ── 风控参数 ──────────────────────────────────────────────
+    VAR_CONFIDENCE: float = 0.95               # VaR 置信水平
+    VAR_LIMIT_PCT: float = 0.02                # 日 VaR 上限（组合价值百分比）
+    CVAR_LIMIT_PCT: float = 0.03               # CVaR 上限（组合价值百分比）
+    BARRA_EXPOSURE_MAX_Z: float = 3.0          # Barra 因子暴露 Z-score 上限
+    ENABLE_RISK_CHECKS: bool = True            # 是否启用四道风控
+    ENABLE_PORTFOLIO_OPT: bool = True          # 是否启用组合优化
+    ENABLE_ALERTS: bool = True                 # 是否启用告警
+
+    # ── 交易参数 ──────────────────────────────────────────────
+    MIN_TRADE_VALUE: float = 1000.0            # 最小交易金额（USD）
+
+    # ── v2 微服务地址 ─────────────────────────────────────────
+    SERVICE_BASE_URLS: dict = field(default_factory=lambda: {
+        "data": "http://localhost:8011",
+        "factor": "http://localhost:8012",
+        "risk": "http://localhost:8015",
+        "execution": "http://localhost:8016",
+    })
+
+    # ── HTTP 客户端超时 ───────────────────────────────────────
+    HTTP_TIMEOUT: float = 30.0                 # httpx 请求超时（秒）
+    HTTP_RETRIES: int = 3                      # 重试次数
+
+
+# 全局单例（方便直接 import）
+pipeline_config = PipelineConfig()

@@ -1,0 +1,89 @@
+"""
+GAT 图注意力网络训练脚本 v2
+使用本地 parquet 数据训练跨股票关联模型
+"""
+import sys
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+PROJ_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJ_ROOT))
+
+from loguru import logger
+from backend.data_engine import DataPipeline
+from backend.ai_models.gat_network import GATSignalGenerator
+
+logger.remove()
+logger.add(sys.stderr, level="INFO", format="<green>{time:HH:mm:ss}</green> | {message}")
+
+DATA_DIR = PROJ_ROOT / "data" / "daily"
+
+
+def main():
+    logger.info("=" * 50)
+    logger.info("  GAT 图注意力网络训练 (本地 Parquet)")
+    logger.info("=" * 50)
+
+    # 1. 加载本地 parquet 数据
+    logger.info("📂 加载本地数据...")
+    pipeline = DataPipeline()
+    features_dict = {}
+    tickers = []
+
+    for parquet_file in sorted(DATA_DIR.glob("*.parquet")):
+        ticker = parquet_file.stem
+        try:
+            df = pd.read_parquet(parquet_file)
+            if len(df) < 60:
+                continue
+            # 标准化列名
+            if 'Close' in df.columns:
+                df = df.rename(columns={'Close': 'close', 'High': 'high',
+                                        'Low': 'low', 'Open': 'open', 'Volume': 'volume'})
+            processed = pipeline.process(df)
+            fcols = [c for c in pipeline.FEATURE_COLUMNS if c in processed.columns]
+            features = processed[fcols].values
+            if features.shape[0] < 20:
+                continue
+            features_dict[ticker] = features
+            tickers.append(ticker)
+            logger.debug(f"  {ticker:6s}: {features.shape}")
+        except Exception as e:
+            logger.warning(f"  {ticker}: 加载失败 - {e}")
+            continue
+
+    logger.info(f"📊 有效股票: {len(tickers)}")
+
+    if len(tickers) < 3:
+        logger.error("❌ 有效股票不足")
+        return
+
+    # 2. 训练 GAT
+    logger.info("🧠 训练 GAT (50 epochs)...")
+    gat = GATSignalGenerator(lookback=20, device="cpu")
+    gat.train_gat(tickers=tickers, features_dict=features_dict, epochs=50, lr=1e-3)
+
+    # 3. 验证
+    logger.info("✅ 验证 GAT 推理...")
+    gat.load_model()
+    for ticker in tickers[:8]:
+        signal = gat.get_cross_stock_signal(ticker, tickers, features_dict)
+        logger.info(f"  {ticker:6s} → boost={signal['boost_factor']:.2f} "
+                    f"sector={signal['sector']:12s} momentum={signal['sector_momentum']:.3f} "
+                    f"signal={signal['signal']}")
+
+    # 4. 检查模型文件
+    from backend.config import MODELS_DIR
+    model_path = MODELS_DIR / "gat_model.pt"
+    if model_path.exists():
+        logger.info(f"✅ GAT 模型已保存: {model_path} ({model_path.stat().st_size / 1024:.1f} KB)")
+    else:
+        logger.error("❌ 模型保存失败")
+
+    logger.info("")
+    logger.info("✅ GAT 训练完成！跨股票关联已从 Pearson → GAT 图注意力网络")
+
+
+if __name__ == "__main__":
+    main()

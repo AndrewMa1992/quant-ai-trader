@@ -51,7 +51,7 @@ risk_manager = RiskManager()
 executor = PaperExecutor(portfolio, risk_manager)
 strategy_engine = TradingStrategy(transformer, rl_agent, sentiment, ensemble, executor)
 backtester = Backtester()
-trainer = ModelTrainer()
+trainer = ModelTrainer(transformer=transformer, rl_agent=rl_agent)
 
 realtime = RealtimeEngine(market_data, data_pipeline)
 
@@ -76,30 +76,49 @@ async def lifespan(app: FastAPI):
     routes_analysis.init(strategy_engine, ensemble, backtester)
     routes_models.init(trainer)
 
-    # Load models via trainer
-    trans_ready, rl_ready = trainer.load_or_retrain()
-    logger.info(f"Model load: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
-    if not trans_ready or not rl_ready:
-        logger.info("Models not trained, starting background training...")
-        import threading
-        t = threading.Thread(target=trainer.train_all, daemon=True)
-        t.start()
+    # Load models via trainer (优雅降级：缺少依赖不崩溃)
+    trans_ready, rl_ready = False, False
+    try:
+        trans_ready, rl_ready = trainer.load_or_retrain()
+        logger.info(f"Model load: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
+    except Exception as e:
+        logger.warning(f"⚠️ 模型加载失败 (非关键): {e}")
+        logger.info("Model load: skipped (依赖缺失，非关键)")
+    # ★ 禁用自动训练：训练应手动执行 python -c "ModelTrainer().train_all()"
+    # 避免阻塞 API 响应和消耗资源
 
-    # Connect Tiger API
-    logger.info("Connecting to Tiger API...")
-    tiger_connected = tiger_client.connect()
-    if tiger_connected:
-        tiger_status = tiger_client.get_status()
-        logger.info(f"Tiger API connected! Account: {tiger_status['simulation_account']}")
-    else:
-        logger.info("Tiger API not configured, using simulation mode (yfinance)")
+    # Connect Tiger API (优雅降级)
+    tiger_connected = False
+    try:
+        logger.info("Connecting to Tiger API...")
+        tiger_connected = tiger_client.connect()
+        if tiger_connected:
+            tiger_status = tiger_client.get_status()
+            logger.info(f"Tiger API 已连接! 实盘账号: {tiger_status['real_account']}")
+        else:
+            logger.warning("⚠️ Tiger API 未连接，将无法获取实盘数据")
+    except Exception as e:
+        logger.warning(f"⚠️ Tiger API 连接异常 (非关键): {e}")
 
-    # Restore portfolio state
+    # Restore portfolio state (local fallback)
     state_loaded = portfolio.load_state()
     if state_loaded:
-        logger.info("Portfolio state restored from database")
+        logger.info("Portfolio state restored from database (local)")
     else:
         logger.info("No history, using default initial capital")
+
+    # ★ 关键：Tiger 连接成功后，同步真实持仓覆盖本地
+    if tiger_connected:
+        logger.info("🔄 从老虎证券同步真实持仓...")
+        portfolio._tiger_initial_capital_synced = False  # ★ 强制重置，确保 initial_capital 从 Tiger 获取
+        sync_result = portfolio.sync_from_tiger(force=True)
+        if sync_result["synced"]:
+            logger.info(
+                f"✅ Tiger 同步成功: {sync_result['positions']} 只持仓, "
+                f"现金 ${sync_result['cash']:,.2f}, 总资产 ${sync_result['total_value']:,.2f}"
+            )
+        else:
+            logger.warning(f"⚠️ Tiger 同步未完成: {sync_result['source']}")
 
     # Save state after each trade
     executor.on_order_filled(lambda trade: portfolio.save_state())
@@ -298,6 +317,27 @@ async def push_cycle_data(data: Dict):
 
     except Exception as e:
         logger.error(f"Push error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/push/tiger-snapshot")
+async def push_tiger_snapshot(data: Dict):
+    """接收 Tiger 实时快照，广播到所有 WebSocket 前端"""
+    try:
+        await broadcast(json.dumps({
+            "type": "tiger_snapshot",
+            "data": {
+                "portfolio_value": data.get("portfolio_value", 0),
+                "cash": data.get("cash", 0),
+                "positions": data.get("positions", {}),
+                "pnl": data.get("pnl", 0),
+                "pnl_pct": data.get("pnl_pct", 0),
+                "timestamp": datetime.now().isoformat(),
+            }
+        }))
+        return {"status": "ok", "connections": len(active_connections)}
+    except Exception as e:
+        logger.error(f"Tiger push error: {e}")
         return {"status": "error", "message": str(e)}
 
 

@@ -14,12 +14,12 @@ class SignalEnsemble:
         self.weights = model_config.ENSEMBLE_WEIGHTS.copy()
         self._performance: Dict[str, List[float]] = {
             "transformer": [], "rl_agent": [], "sentiment": [],
-            "technical": [], "cross_stock": [],
+            "technical": [], "cross_stock": [], "macro": [],
         }
         self._total_calls = 0
         self._profit_attribution: Dict[str, float] = {
             "transformer": 0.0, "rl_agent": 0.0, "sentiment": 0.0,
-            "technical": 0.0, "cross_stock": 0.0,
+            "technical": 0.0, "cross_stock": 0.0, "macro": 0.0,
         }
 
     def fuse_signals(self, signals: Dict[str, Dict], cross_stock_boost: float = 1.0) -> Dict:
@@ -121,7 +121,7 @@ class SignalEnsemble:
                     entry["score"] = 0.0
                 entry["confidence"] = 0.35  # Moderate confidence for GNN signals
 
-            elif name in ("sentiment", "technical"):
+            elif name in ("sentiment", "technical", "macro"):
                 val = 1.0 if signal.get("signal") == "buy" else (
                     -1.0 if signal.get("signal") == "sell" else 0.0)
                 entry["score"] = val * signal.get("strength", 0.5)
@@ -133,22 +133,21 @@ class SignalEnsemble:
         return normalized
 
     def _adjust_weights(self):
-        """Dynamic weight adjustment based on profit contribution"""
+        """Dynamic weight adjustment based on profit contribution (single-pass normalization)"""
         recent = {}
-        for name, perf in self._performance.items():
+        for name in self._performance.keys():
+            perf = self._performance[name]
             if len(perf) >= 10:
-                # Profit-weighted: prefer models with positive contribution
                 avg_profit = np.mean(perf[-30:])
-                recent[name] = max(avg_profit + 0.5, 0.1)  # Floor at 0.1
+                recent[name] = max(avg_profit + 0.5, 0.1)
             else:
                 recent[name] = 0.5
 
-        total = sum(recent.values())
-        if total > 0:
-            for name in self.weights:
-                self.weights[name] = recent.get(name, 0.25) / total
+        # Apply raw weights to all tracked models, defaulting for untracked
+        for name in self.weights:
+            self.weights[name] = recent.get(name, 0.25)
 
-        # Normalize
+        # Single-pass normalization (eliminates redundant second pass)
         ws = sum(self.weights.values())
         if ws > 0:
             for name in self.weights:

@@ -9,14 +9,14 @@ echo ============================================
 echo   Quant AI Trader - 系统监控
 echo ============================================
 echo.
-netstat -ano 2>nul | findstr ":8000 " >nul
-if %errorlevel% equ 0 (echo   [BACKEND]  :8000  ^| Running) else (echo   [BACKEND]  :8000  ^| Stopped)
+netstat -ano 2>nul | findstr ":8001 " >nul
+if %errorlevel% equ 0 (echo   [BACKEND]  :8001  ^| Running) else (echo   [BACKEND]  :8001  ^| Stopped)
 
 netstat -ano 2>nul | findstr ":5173 " >nul
 if %errorlevel% equ 0 (echo   [FRONTEND] :5173  ^| Running) else (echo   [FRONTEND] :5173  ^| Stopped)
 echo.
-curl -s http://localhost:8000/api/models/status 2>nul
-curl -s http://localhost:8000/api/trade/portfolio 2>nul
+curl -s http://localhost:8001/api/models/status 2>nul
+curl -s http://localhost:8001/api/trade/portfolio 2>nul
 echo.
 echo   1 - Start all services
 echo   2 - Stop all services
@@ -30,7 +30,7 @@ if "%choice%"=="3" goto MENU
 exit /b
 
 :START
-start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --app-dir "%CD%"
+start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001 --app-dir "%CD%"
 cd frontend
 start "QuantTrader-Frontend" /MIN npm run dev
 cd ..

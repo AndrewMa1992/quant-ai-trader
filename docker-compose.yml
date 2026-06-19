@@ -1,42 +1,165 @@
-version: "3.8"
+# ============================================================
+# Quant AI Trader v2 – Docker Compose (Single-Machine Deploy)
+# Nine containers: postgres, redis, api-gateway, 6 services, mlflow
+# ============================================================
+version: "3.9"
+
+x-common-service: &common-service
+  restart: unless-stopped
+  env_file:
+    - .env
+  networks:
+    - qat-network
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 
 services:
-  backend:
-    build:
-      context: .
-      target: production
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend/data:/app/backend/data
-      - ./backend/ai_models/models:/app/backend/ai_models/models
-      - ./logs:/app/logs
-      - cache:/app/cache
-    environment:
-      - TORCH_HOME=/app/cache/torch
-      - HF_HOME=/app/cache/huggingface
+  # ── Infrastructure ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: qat-postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${QAT_POSTGRES_USER:-qat}
+      POSTGRES_PASSWORD: ${QAT_POSTGRES_PASSWORD:-qat_secret}
+      POSTGRES_DB: ${QAT_POSTGRES_DB:-quant_trader}
+    ports:
+      - "${QAT_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${QAT_POSTGRES_USER:-qat} -d ${QAT_POSTGRES_DB:-quant_trader}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - qat-network
 
-  trainer:
+  redis:
+    image: redis:7-alpine
+    container_name: qat-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${QAT_REDIS_PASSWORD:-redis_secret}
+    ports:
+      - "${QAT_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - qat-network
+
+  # ── API Gateway ─────────────────────────────────────────────
+  api-gateway:
+    <<: *common-service
     build:
       context: .
-      target: trainer
-    profiles:
-      - train
+      dockerfile: Dockerfile.api
+    container_name: qat-api-gateway
+    ports:
+      - "${QAT_API_PORT:-8001}:8001"
     volumes:
-      - ./backend/data:/app/backend/data
-      - ./backend/ai_models/models:/app/backend/ai_models/models
-      - cache:/app/cache
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Microservices ──────────────────────────────────────────
+  data-service:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.data
+    container_name: qat-data-service
+    ports:
+      - "${QAT_DATA_PORT:-8011}:8011"
+    volumes:
+      - ./cache:/app/cache
+
+  factor-service:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.factor
+    container_name: qat-factor-service
+    ports:
+      - "${QAT_FACTOR_PORT:-8012}:8012"
+    volumes:
+      - ./cache:/app/cache
+
+  model-train:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.model-train
+    container_name: qat-model-train
+    ports:
+      - "${QAT_MODEL_TRAIN_PORT:-8013}:8013"
+    volumes:
+      - ./cache:/app/cache
+      - mlruns:/app/mlruns
     environment:
-      - TORCH_HOME=/app/cache/torch
-      - HF_HOME=/app/cache/huggingface
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+
+  model-infer:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.model-infer
+    container_name: qat-model-infer
+    ports:
+      - "${QAT_MODEL_INFER_PORT:-8014}:8014"
+    volumes:
+      - ./cache:/app/cache
+      - mlruns:/app/mlruns
+
+  risk-service:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.risk
+    container_name: qat-risk-service
+    ports:
+      - "${QAT_RISK_PORT:-8015}:8015"
+
+  execution-service:
+    <<: *common-service
+    build:
+      context: .
+      dockerfile: Dockerfile.execution
+    container_name: qat-execution-service
+    ports:
+      - "${QAT_EXEC_PORT:-8016}:8016"
+
+  # ── MLflow Tracking ─────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.0
+    container_name: qat-mlflow
+    restart: unless-stopped
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://${QAT_POSTGRES_USER:-qat}:${QAT_POSTGRES_PASSWORD:-qat_secret}@postgres:5432/${QAT_POSTGRES_DB:-quant_trader} --default-artifact-root file:///mlflow/artifacts
+    ports:
+      - "${QAT_MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlruns:/mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - qat-network
 
 volumes:
-  cache:
+  pgdata:
+  redisdata:
+  mlruns:
+
+networks:
+  qat-network:
+    driver: bridge

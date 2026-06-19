@@ -146,15 +146,28 @@ class RealtimeEngine:
             self._emit("tick", ticks)
 
     async def _load_initial_data(self):
-        """加载初始数据作为模拟基准"""
+        """加载初始数据作为模拟基准（非阻塞）"""
+        import concurrent.futures
+        loop = asyncio.get_running_loop()
+
+        async def _load_one(ticker):
+            try:
+                df = await loop.run_in_executor(
+                    None,
+                    lambda: self.market_data.get_historical_data(ticker, period="2y", interval="1d"),
+                )
+                if not df.empty:
+                    df = await loop.run_in_executor(None, lambda: self.pipeline.process(df))
+                    self._base_data[ticker] = df
+                    self._current_prices[ticker] = float(df["close"].iloc[-1])
+                    logger.info(f"📊 {ticker}: 基础数据加载完成 (当前价格: ${self._current_prices[ticker]:.2f})")
+            except Exception as e:
+                logger.warning(f"⚠️ {ticker} 数据加载失败: {e}")
+
         for ticker in data_config.ALL_TICKERS:
-            df = self.market_data.get_historical_data(ticker, period="2y", interval="1d")
-            if not df.empty:
-                # 计算特征
-                df = self.pipeline.process(df)
-                self._base_data[ticker] = df
-                self._current_prices[ticker] = float(df["close"].iloc[-1])
-                logger.info(f"📊 {ticker}: 基础数据加载完成 (当前价格: ${self._current_prices[ticker]:.2f})")
+            await _load_one(ticker)
+            # 让出事件循环，避免阻塞 HTTP 请求
+            await asyncio.sleep(0)
 
         logger.info(f"✅ 共加载 {len(self._base_data)} 只股票的基础数据")
 

@@ -133,38 +133,62 @@ class DataConfig:
 # ============================================================
 @dataclass
 class ModelConfig:
-    TRANSFORMER_LOOKBACK: int = 60
+    # ★ 量化基金级模型配置
+    TRANSFORMER_LOOKBACK: int = 60         # 快速验证：60天
     TRANSFORMER_PREDICTION_DAYS: List[int] = field(default_factory=lambda: [1, 5, 20])
+
+    # 大模型参数 (用于训练)
+    TRANSFORMER_D_MODEL_LARGE: int = 256       # 快速验证：256
+    TRANSFORMER_N_HEADS_LARGE: int = 8         # 8头
+    TRANSFORMER_N_LAYERS_LARGE: int = 6        # 6层
+    TRANSFORMER_D_FF_LARGE: int = 512          # 512
+
+    # 小模型参数 (兼容旧的推理)
     TRANSFORMER_D_MODEL: int = 128
     TRANSFORMER_N_HEADS: int = 8
     TRANSFORMER_N_LAYERS: int = 4
+
     TRANSFORMER_DROPOUT: float = 0.1
-    TRANSFORMER_EPOCHS: int = 20
-    TRANSFORMER_BATCH_SIZE: int = 64
+    TRANSFORMER_EPOCHS: int = 30               # 快速验证
+    TRANSFORMER_BATCH_SIZE: int = 128          # 128→256
     TRANSFORMER_LEARNING_RATE: float = 1e-4
+    TRANSFORMER_PATIENCE: int = 8              # 早停
+
+    TRAIN_TICKERS: int = 50                    # 快速验证：50只
+    TRAIN_PERIOD: str = "2y"                   # 2年数据快速训练
+    WALK_FORWARD_SPLITS: int = 3               # Walk-forward 分割数
 
     RL_LEARNING_RATE: float = 3e-4
     RL_N_STEPS: int = 2048
-    RL_BATCH_SIZE: int = 64
+    RL_BATCH_SIZE: int = 128                   # 64→128
     RL_GAMMA: float = 0.99
     RL_GAE_LAMBDA: float = 0.95
     RL_CLIP_RANGE: float = 0.2
     RL_ENT_COEF: float = 0.01
-    RL_TOTAL_TIMESTEPS: int = 30000
+    RL_TOTAL_TIMESTEPS: int = 30000            # 快速验证：30K步
     RL_MAX_TRADE_PERCENT: float = 0.2
 
-    SENTIMENT_MODEL: str = "ProsusAI/finbert"
+    SENTIMENT_MODEL: str = "yiyanghkust/finbert-tone"  # FinBERT→FinGPT 升级
     SENTIMENT_MAX_LENGTH: int = 512
 
     ENSEMBLE_WEIGHTS: dict = field(default_factory=lambda: {
-        "transformer": 0.35, "rl_agent": 0.25,
-        "sentiment": 0.10, "technical": 0.20,
+        "transformer": 0.35,                   # 0.40→0.35 (释放给 macro)
+        "rl_agent": 0.25,
+        "sentiment": 0.05,
+        "technical": 0.15,                     # 0.20→0.15 (释放给 macro)
         "cross_stock": 0.10,
+        "macro": 0.10,                          # 新增: 宏观数据
     })
 
-    RETRAIN_INTERVAL_DAYS: int = 7
+    RETRAIN_INTERVAL_DAYS: int = 3             # 7→3天重训
     WALK_FORWARD_WINDOW: int = 252
     VALIDATION_SPLIT: float = 0.2
+
+    # 宏观数据配置
+    MACRO_ENABLED: bool = True
+    MACRO_UPDATE_INTERVAL: int = 600            # 宏观数据刷新间隔(秒)
+    MACRO_VIX_BEARISH: float = 30.0             # VIX > 此值视为熊市
+    MACRO_VIX_BULLISH: float = 15.0             # VIX < 此值视为牛市
 
 
 # ============================================================
@@ -174,7 +198,7 @@ class ModelConfig:
 class TradingConfig:
     INITIAL_CAPITAL: float = 1_000_000.0
     BASE_CURRENCY: str = "USD"
-    SIMULATION_MODE: bool = True
+    SIMULATION_MODE: bool = False
 
     # Multi-currency conversion rates to USD
     CURRENCY_RATES: dict = field(default_factory=lambda: {
@@ -185,7 +209,7 @@ class TradingConfig:
         "NZD": 0.62,    # 1 NZD ≈ 0.62 USD
     })
 
-    MAX_POSITION_SIZE: float = 0.20
+    MAX_POSITION_SIZE: float = 0.50           # 单股最大仓位 50% (港股整手适配)
     MAX_PORTFOLIO_RISK: float = 0.03
     STOP_LOSS_PCT: float = 0.05
     TAKE_PROFIT_PCT: float = 0.15
@@ -194,13 +218,32 @@ class TradingConfig:
     COMMISSION_RATE: float = 0.001
     SLIPPAGE: float = 0.0005
     MIN_CONFIDENCE: float = 0.15
-    MIN_TRADE_VALUE: float = 1000.0
+    MIN_TRADE_VALUE: float = 300.0
     MIN_SHARES: int = 1
+    NO_LEVERAGE: bool = True       # 坚决不使用杠杆：买入金额不超过可用现金
+    MAX_CASH_USAGE: float = 0.95   # 最多使用 95% 现金，预留 5% 缓冲
+    MAX_DAILY_TRADES: int = 0      # 0 = 不限制，按 Tiger API 规则 (10次/分钟)
+    CYCLE_INTERVAL: int = 600      # 自动交易周期(秒)，默认10分钟
+
+    # P0-2: 熔断配置
+    DAILY_LOSS_LIMIT: float = 0.05             # 5% 单日亏损 → 触发熔断
+    CIRCUIT_BREAKER_COOLDOWN: int = 900         # 15 分钟冷却期（秒）
 
     TIGER_ID: str = field(default_factory=lambda: os.getenv("TIGER_ID", ""))
     TIGER_PRIVATE_KEY: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY", ""))
+    TIGER_PRIVATE_KEY_PATH: str = field(default_factory=lambda: os.getenv("TIGER_PRIVATE_KEY_PATH", ""))
     TIGER_ACCOUNT: str = field(default_factory=lambda: os.getenv("TIGER_ACCOUNT", ""))
-    TIGER_PAPER_TRADING: bool = field(default_factory=lambda: os.getenv("TIGER_PAPER_TRADING", "true").lower() == "true")
+
+    def __post_init__(self):
+        # If TIGER_PRIVATE_KEY_PATH is set and TIGER_PRIVATE_KEY is empty, read from file
+        if self.TIGER_PRIVATE_KEY_PATH and not self.TIGER_PRIVATE_KEY:
+            from pathlib import Path
+            key_path = Path(self.TIGER_PRIVATE_KEY_PATH)
+            if not key_path.is_absolute():
+                key_path = Path(__file__).parent.parent / key_path
+            if key_path.exists():
+                self.TIGER_PRIVATE_KEY = key_path.read_text().strip()
+    TIGER_PAPER_TRADING: bool = field(default_factory=lambda: os.getenv("TIGER_PAPER_TRADING", "false").lower() == "true")
     TIGER_CONFIG_DIR: str = field(default_factory=lambda: os.getenv("TIGER_CONFIG_DIR", "~/.tigeropen"))
 
 
@@ -211,7 +254,7 @@ class TradingConfig:
 class APIConfig:
     HOST: str = "0.0.0.0"
     PORT: int = 8001
-    RELOAD: bool = True
+    RELOAD: bool = False
     CORS_ORIGINS: List[str] = field(default_factory=lambda: [
         "http://localhost:5180", "http://localhost:3000",
     ])

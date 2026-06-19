@@ -2,7 +2,7 @@
 import json
 import urllib.request
 
-BASE = "http://localhost:8000"
+BASE = "http://localhost:8001"
 
 def get(path):
     try:

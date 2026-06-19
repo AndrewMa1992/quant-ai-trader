@@ -128,7 +128,7 @@ Write-Host "  Frontend launching on :5180" -ForegroundColor Green
 
 # 自动交易引擎（延迟5秒等前端就绪）
 Start-Sleep -Seconds 5
-Start-Process python -ArgumentList "auto_trader.py --interval 1800" -WorkingDirectory $ProjectRoot -WindowStyle Minimized
+Start-Process python -ArgumentList "auto_trader.py --interval 180" -WorkingDirectory $ProjectRoot -WindowStyle Minimized
 Write-Host "  Auto Trader launching (30min cycle)" -ForegroundColor Green
 
 Write-Host ""

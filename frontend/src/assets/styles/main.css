@@ -1,0 +1,63 @@
+/* ── Import Xiaomi Design System ────────────────────────── */
+@import './xiaomi.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base Layer Overrides ───────────────────────────────── */
+@layer base {
+  body {
+    @apply bg-xm-bg-page text-xm-text-primary antialiased;
+    font-family: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  /* Number formatting for financial data */
+  .num-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ── Component Layer ────────────────────────────────────── */
+@layer components {
+  /* Metric value display */
+  .metric-value {
+    @apply text-2xl font-bold num-mono;
+  }
+
+  .metric-label {
+    @apply text-xs text-xm-text-tertiary uppercase tracking-wider font-medium;
+  }
+
+  .metric-change-positive {
+    @apply text-sm text-profit num-mono;
+  }
+
+  .metric-change-negative {
+    @apply text-sm text-loss num-mono;
+  }
+
+  /* Page transition */
+  .page-enter-active {
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .page-enter-from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* ── Utility Layer ──────────────────────────────────────── */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

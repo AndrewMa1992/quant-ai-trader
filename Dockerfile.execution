@@ -1,0 +1,29 @@
+# ── Quant AI Trader v2 – Execution Service Dockerfile ────────
+FROM python:3.11-slim-bookworm AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+RUN pip install -e ".[dev]" --no-cache-dir
+
+COPY shared/ ./shared/
+COPY configs/ ./configs/
+COPY services/execution/ ./services/execution/
+
+EXPOSE 8016
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8016/health || exit 1
+
+CMD ["uvicorn", "services.execution.main:app", "--host", "0.0.0.0", "--port", "8016", "--workers", "1", "--log-level", "info"]

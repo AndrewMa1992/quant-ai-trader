@@ -1,7 +1,6 @@
 """
 订单执行器
 - 实盘：调用 Tiger Brokers API 下单
-- 模拟：本地 Paper Trading 撮合
 - 风控前置检查
 - 交易记录持久化
 """
@@ -11,7 +10,7 @@ from loguru import logger
 from backend.config import trading_config
 from backend.trading_engine.risk_manager import RiskManager
 from backend.trading_engine.portfolio import PortfolioManager
-from backend.data_engine.tiger_client import tiger_client
+from backend.data_engine.tiger_client import tiger_client, TigerClient
 
 
 class PaperExecutor:
@@ -30,9 +29,9 @@ class PaperExecutor:
         # 是否使用老虎实盘下单（动态检查，在 execute_signal 中判断）
         self._tiger_account = trading_config.TIGER_ACCOUNT
         if self._tiger_account:
-            logger.info(f"📝 老虎账号已配置: {self._tiger_account}（将在下单时动态检查连接）")
+            logger.info(f"📝 老虎实盘账号: {self._tiger_account}")
         else:
-            logger.info("📝 老虎账号未配置，使用模拟模式")
+            logger.warning("⚠️ 老虎账号未配置，无法实盘交易")
 
     # ================================================================
     # 订单执行
@@ -65,11 +64,52 @@ class PaperExecutor:
         if decision == "hold":
             return None
 
+        side = decision  # buy or sell
+
+        # 坚决不使用杠杆 — 两层验证
+        if trading_config.NO_LEVERAGE and side == "buy":
+            # 第1层：本地资金检查
+            max_buy_value = self.portfolio.cash * trading_config.MAX_CASH_USAGE
+            estimated_value = self.portfolio.cash * min(strength, trading_config.MAX_POSITION_SIZE)
+            if estimated_value > max_buy_value:
+                logger.warning(
+                    f"🚫 无杠杆原则拒绝(本地): {ticker} buy | "
+                    f"预估金额 ${estimated_value:,.0f} > 可用 ${max_buy_value:,.0f}"
+                )
+                return None
+            
+            # 第2层：Tiger 实盘资金验证 — 确保老虎账户也无杠杆
+            if self._tiger_account and tiger_client.is_connected():
+                try:
+                    tiger_acct = tiger_client.get_account_info()
+                    if tiger_acct:
+                        tiger_cash = tiger_acct.get("cash", 0)
+                        tiger_total = tiger_acct.get("total_value", 0)
+                        tiger_leverage = tiger_acct.get("leverage", 1.0)
+                        tiger_mkt = tiger_acct.get("market_value", 0)
+                        
+                        # 杠杆检测：leverage > 1.001 说明在借钱
+                        if tiger_leverage > 1.001:
+                            logger.warning(
+                                f"🚫 无杠杆原则拒绝(Tiger): {ticker} buy | "
+                                f"Tiger杠杆率 {tiger_leverage:.4f} > 1.0 | "
+                                f"必须先消除杠杆才能买入"
+                            )
+                            return None
+                        
+                        # 买入金额不得超 Tiger 实际现金
+                        if estimated_value > tiger_cash * trading_config.MAX_CASH_USAGE:
+                            logger.warning(
+                                f"🚫 无杠杆原则拒绝(Tiger): {ticker} buy | "
+                                f"预估${estimated_value:,.0f} > Tiger现金${tiger_cash:,.0f}×{trading_config.MAX_CASH_USAGE:.0%}"
+                            )
+                            return None
+                except Exception as e:
+                    logger.warning(f"⚠️ Tiger杠杆检查异常，采用本地保守策略: {e}")
+
         # 置信度门槛
         if confidence < trading_config.MIN_CONFIDENCE:
             return None
-
-        side = decision  # buy or sell
 
         # 1. 风控检查
         if side == "buy":
@@ -85,10 +125,73 @@ class PaperExecutor:
             quantity = shares * strength
             if quantity < trading_config.MIN_SHARES:
                 quantity = shares  # 少于最小量则全卖
+            
+            # ★ 防空头：用 Tiger 实际持仓修正卖出数量
+            if self._tiger_account and tiger_client.is_connected():
+                try:
+                    tiger_positions = tiger_client.get_positions()
+                    tiger_dict = {p["ticker"]: p for p in tiger_positions}
+                    if ticker in tiger_dict:
+                        tiger_shares = tiger_dict[ticker]["shares"]
+                        if tiger_shares <= 0:
+                            logger.warning(
+                                f"🚫 拒绝卖出: {ticker} | Tiger持仓 {tiger_shares:.2f} ≤ 0, "
+                                f"本地误以为有 {shares:.2f} 股 — 数据不同步！"
+                            )
+                            return None
+                        if quantity > tiger_shares:
+                            old_qty = quantity
+                            quantity = tiger_shares
+                            logger.warning(
+                                f"⚠️ 卖出量修正: {ticker} | "
+                                f"本地 {shares:.2f}股 → Tiger实际 {tiger_shares:.2f}股 | "
+                                f"卖出量 {old_qty:.0f} → {quantity:.0f}"
+                            )
+                    else:
+                        # Tiger 中没有该持仓
+                        logger.warning(
+                            f"🚫 拒绝卖出: {ticker} | "
+                            f"本地有 {shares:.2f} 股但 Tiger 无此持仓 — 数据不同步！"
+                        )
+                        return None
+                except Exception as e:
+                    logger.warning(f"⚠️ Tiger持仓验证异常: {e}")
 
         # 最小交易额检查
         if quantity * price < trading_config.MIN_TRADE_VALUE:
             return None
+
+        # 港股/新加坡股买入：整手对齐（卖出不限制整手）
+        is_hk = ticker.endswith(".HK") or (len(ticker) <= 5 and ticker.isdigit())
+        is_sg = ticker.endswith(".SI")
+        if side == "buy" and (is_hk or is_sg):
+            lot = TigerClient.get_hk_lot_size(ticker)
+            proposed_qty = int(quantity)
+
+            # 不够一手时：尝试按 1 手最低量买（不超过仓位上限）
+            if proposed_qty < lot:
+                min_qty = lot
+                min_value = min_qty * price
+                max_allowed = self.portfolio.cash * trading_config.MAX_CASH_USAGE
+                if min_value <= max_allowed and min_value >= trading_config.MIN_TRADE_VALUE:
+                    quantity = float(min_qty)
+                    logger.info(f"📐 {ticker} 升档至 1 手: {proposed_qty} → {min_qty} 股 (${min_value:.0f})")
+                else:
+                    logger.debug(f"⏸ {ticker} 不足一手 (lot={lot}, need=${min_value:.0f}, avail=${max_allowed:.0f}), 跳过")
+                    return None
+            else:
+                # 向下取整到整手
+                round_qty = (proposed_qty // lot) * lot
+                if round_qty < lot:
+                    logger.debug(f"⏸ {ticker} 取整后不足一手 (lot={lot}), 跳过")
+                    return None
+                if round_qty != proposed_qty:
+                    logger.info(f"📐 {ticker} 整手对齐: {proposed_qty} → {round_qty} 股")
+                    quantity = float(round_qty)
+                # 整手对齐后重新检查交易额
+                if quantity * price < trading_config.MIN_TRADE_VALUE:
+                    logger.debug(f"⏸ {ticker} 整手对齐后交易额不足: ${quantity * price:.0f}")
+                    return None
 
         report = self.risk_manager.check_order(ticker, side, quantity, price)
 
@@ -120,7 +223,7 @@ class PaperExecutor:
                         action=action,
                         quantity=int(quantity),
                         order_type="MKT",
-                        limit_price=price,  # HK 需 LMT，自动转换
+                        limit_price=price,
                     )
                     if order_result:
                         logger.info(f"✅ 实盘下单成功: {ticker} {action} | 订单ID: {order_result.get('order_id')}")
