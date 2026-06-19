@@ -22,26 +22,41 @@ interface FactorRow {
   rank: number
 }
 
-const factors = ref<FactorRow[]>([
-  { name: 'momentum_20d', category: 'Momentum', icMean: 0.045, icStd: 0.12, ir: 0.375, rank: 1 },
-  { name: 'rsi_14', category: 'Technical', icMean: 0.038, icStd: 0.10, ir: 0.380, rank: 2 },
-  { name: 'volume_ratio', category: 'Volume', icMean: 0.032, icStd: 0.14, ir: 0.229, rank: 3 },
-  { name: 'bb_width', category: 'Technical', icMean: 0.028, icStd: 0.09, ir: 0.311, rank: 4 },
-  { name: 'macd_divergence', category: 'Technical', icMean: 0.025, icStd: 0.11, ir: 0.227, rank: 5 },
-  { name: 'turnover', category: 'Volume', icMean: 0.022, icStd: 0.13, ir: 0.169, rank: 6 },
-  { name: 'volatility_30d', category: 'Risk', icMean: -0.018, icStd: 0.08, ir: -0.225, rank: 7 },
-  { name: 'pe_ratio', category: 'Value', icMean: -0.015, icStd: 0.10, ir: -0.150, rank: 8 },
-  { name: 'pb_ratio', category: 'Value', icMean: -0.012, icStd: 0.09, ir: -0.133, rank: 9 },
-  { name: 'short_interest', category: 'Sentiment', icMean: -0.010, icStd: 0.07, ir: -0.143, rank: 10 },
-])
-
-const selectedFactor = ref<string | null>(null)
-
-onMounted(() => {
-  // factorStore.fetchFactors() — would fetch from API
+/** Map store factors to display rows, sorted by IC mean descending. */
+const factors = computed<FactorRow[]>(() => {
+  const raw = [...factorStore.factors]
+  const sorted = raw.sort((a, b) => (b.ic_mean ?? 0) - (a.ic_mean ?? 0))
+  return sorted.map((f, i) => ({
+    name: f.name,
+    category: f.category,
+    icMean: f.ic_mean ?? 0,
+    icStd: f.ic_std ?? 0,
+    ir: f.ir ?? 0,
+    rank: i + 1,
+  }))
 })
 
-// IC Rank bar chart
+const selectedFactor = ref<string | null>(null)
+const loading = ref(false)
+const noData = computed(() => !loading.value && factorStore.factors.length === 0)
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    await factorStore.fetchFactors()
+    if (factorStore.factors.length > 0) {
+      // Request correlation for top 20 factors to keep matrix manageable
+      const names = factorStore.factors.slice(0, 20).map((f) => f.name)
+      await factorStore.fetchCorrelation(names)
+    }
+  } catch {
+    // Silent degrade — store error is already set
+  } finally {
+    loading.value = false
+  }
+})
+
+// ── IC Rank bar chart ──
 const icChartOption = computed(() => ({
   grid: { top: 8, right: 16, bottom: 4, left: 120 },
   tooltip: {
@@ -58,29 +73,40 @@ const icChartOption = computed(() => ({
   },
   yAxis: {
     type: 'category' as const,
-    data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map(f => f.name),
+    data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map((f) => f.name),
     axisLabel: { fontSize: 10, color: '#666666' },
     inverse: true,
   },
-  series: [{
-    type: 'bar',
-    data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map(f => ({
-      value: f.icMean,
-      itemStyle: { color: f.icMean >= 0 ? '#16A34A' : '#DC2626', borderRadius: [0, 3, 3, 0] },
-    })),
-    barWidth: 14,
-  }],
+  series: [
+    {
+      type: 'bar',
+      data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map((f) => ({
+        value: f.icMean,
+        itemStyle: { color: f.icMean >= 0 ? '#16A34A' : '#DC2626', borderRadius: [0, 3, 3, 0] },
+      })),
+      barWidth: 14,
+    },
+  ],
 }))
 
-// Correlation heatmap
-const corrNames = factors.value.slice(0, 8).map(f => f.name)
-const corrData: Array<[number, number, number]> = []
-for (let i = 0; i < corrNames.length; i++) {
-  for (let j = 0; j < corrNames.length; j++) {
-    const val = i === j ? 1 : (0.5 + Math.random() * 0.4) * (Math.random() > 0.5 ? 1 : -1)
-    corrData.push([j, i, parseFloat(val.toFixed(2))])
+// ── Correlation heatmap from store correlationMatrix ──
+const corrNames = computed<string[]>(() => {
+  return Object.keys(factorStore.correlationMatrix).slice(0, 12)
+})
+
+const corrData = computed<Array<[number, number, number]>>(() => {
+  const names = corrNames.value
+  const matrix = factorStore.correlationMatrix
+  if (names.length === 0) return []
+  const data: Array<[number, number, number]> = []
+  for (let i = 0; i < names.length; i++) {
+    for (let j = 0; j < names.length; j++) {
+      const val = matrix[names[i]]?.[names[j]] ?? (i === j ? 1 : 0)
+      data.push([j, i, parseFloat(val.toFixed(2))])
+    }
   }
-}
+  return data
+})
 
 const heatmapOption = computed(() => ({
   grid: { top: 4, right: 4, bottom: 50, left: 100 },
@@ -91,12 +117,12 @@ const heatmapOption = computed(() => ({
   },
   xAxis: {
     type: 'category' as const,
-    data: corrNames,
+    data: corrNames.value,
     axisLabel: { fontSize: 9, color: '#666666', rotate: 45 },
   },
   yAxis: {
     type: 'category' as const,
-    data: corrNames,
+    data: corrNames.value,
     axisLabel: { fontSize: 9, color: '#666666' },
   },
   visualMap: {
@@ -105,12 +131,14 @@ const heatmapOption = computed(() => ({
     inRange: { color: ['#DC2626', '#FFFFFF', '#16A34A'] },
     show: false,
   },
-  series: [{
-    type: 'heatmap',
-    data: corrData,
-    label: { show: false },
-    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.15)' } },
-  }],
+  series: [
+    {
+      type: 'heatmap',
+      data: corrData.value,
+      label: { show: false },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.15)' } },
+    },
+  ],
 }))
 </script>
 
@@ -118,12 +146,24 @@ const heatmapOption = computed(() => ({
   <div class="space-y-6 xm-fade-in">
     <!-- IC Rank Chart -->
     <XmCard title="Factor IC Ranking" subtitle="Information Coefficient — higher = better predictive power">
-      <VChart :option="icChartOption" style="height: 340px" autoresize />
+      <div v-if="loading" class="flex items-center justify-center h-[340px] text-xm-text-tertiary text-sm">
+        Loading factor data...
+      </div>
+      <div v-else-if="noData" class="flex items-center justify-center h-[340px] text-xm-text-tertiary text-sm">
+        No factor data available. Run data sync first.
+      </div>
+      <VChart v-else :option="icChartOption" style="height: 340px" autoresize />
     </XmCard>
 
     <!-- Factor Table -->
     <XmCard title="Factor Details">
-      <table class="xm-table">
+      <div v-if="loading" class="text-center py-8 text-xm-text-tertiary text-sm">
+        Loading...
+      </div>
+      <div v-else-if="noData" class="text-center py-8 text-xm-text-tertiary text-sm">
+        No factor data available. Run data sync first.
+      </div>
+      <table v-else class="xm-table">
         <thead>
           <tr>
             <th>#</th>
@@ -165,7 +205,10 @@ const heatmapOption = computed(() => ({
 
     <!-- Correlation Heatmap -->
     <XmCard title="Factor Correlation Matrix">
-      <VChart :option="heatmapOption" style="height: 380px" autoresize />
+      <div v-if="corrNames.length === 0" class="flex items-center justify-center h-[380px] text-xm-text-tertiary text-sm">
+        Correlation data not yet available — load factor data first
+      </div>
+      <VChart v-else :option="heatmapOption" style="height: 380px" autoresize />
     </XmCard>
   </div>
 </template>

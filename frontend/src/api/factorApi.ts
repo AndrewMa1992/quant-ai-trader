@@ -12,6 +12,10 @@ export interface FactorDef {
   lookback_default: number
   frequency: string
   direction: number
+  /** Performance statistics populated by /api/v2/factors/factors */
+  ic_mean?: number
+  ic_std?: number
+  ir?: number
 }
 
 export interface ICAnalysis {

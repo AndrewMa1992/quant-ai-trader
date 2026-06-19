@@ -66,4 +66,10 @@ export const riskApi = {
     const { data } = await apiClient.post(`${BASE}/circuit_breaker/toggle`, { mode })
     return data
   },
+
+  /** GET /api/v2/risk/drawdown-history — full drawdown timeline */
+  async getDrawdownHistory(): Promise<{ drawdown_history: Array<{ date: string; drawdown: number }> }> {
+    const { data } = await apiClient.get(`${BASE}/drawdown-history`)
+    return data
+  },
 }
