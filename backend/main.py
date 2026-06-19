@@ -28,6 +28,7 @@ from backend.trading_engine import (
     TradingStrategy, Backtester,
 )
 from backend.data_engine.tiger_client import tiger_client
+from backend.data_engine.china_adapter import china_data_adapter
 from backend.api import (
     routes_data, routes_trade, routes_analysis, routes_models
 )
@@ -119,6 +120,14 @@ async def lifespan(app: FastAPI):
             )
         else:
             logger.warning(f"⚠️ Tiger 同步未完成: {sync_result['source']}")
+
+    # ★ 启动时探测各数据源可达性
+    try:
+        source_status = china_data_adapter.health_check()
+        available_sources = [k for k, v in source_status.items() if v and k != "primary"]
+        logger.info(f"数据源健康检查: {source_status['primary']} (可用源: {available_sources})")
+    except Exception as e:
+        logger.debug(f"数据源健康检查跳过: {e}")
 
     # Save state after each trade
     executor.on_order_filled(lambda trade: portfolio.save_state())
@@ -348,6 +357,15 @@ async def push_tiger_snapshot(data: Dict):
 
 @app.get("/health")
 async def health():
+    # Tiger API 状态 — 包在 try/except 内防止报错影响整体健康检查
+    tiger_status: Dict = {"connected": False, "account": ""}
+    try:
+        status = tiger_client.get_status()
+        tiger_status["connected"] = status.get("connected", False)
+        tiger_status["account"] = status.get("real_account", "") or status.get("simulation_account", "")
+    except Exception as e:
+        logger.debug(f"Tiger get_status() 调用失败: {e}")
+
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -355,6 +373,8 @@ async def health():
             "transformer": transformer.is_ready(),
             "rl_agent": rl_agent.is_ready(),
         },
+        "tiger_api": tiger_status,
+        "data_source": "china_adapter",
         "portfolio_value": portfolio.total_value,
         "ws_connections": len(active_connections),
     }
