@@ -58,6 +58,10 @@ realtime = RealtimeEngine(market_data, data_pipeline)
 
 active_connections: Set[WebSocket] = set()
 
+# 数据源状态缓存（启动时探测，/health 端点读取）
+_data_source_status: Dict = {"primary": "unknown", "eastmoney": False, "efinance": False, "tencent": False, "yfinance": False}
+_data_source_checked_at: str = ""
+
 
 # ================================================================
 # Lifespan
@@ -125,7 +129,11 @@ async def lifespan(app: FastAPI):
     try:
         source_status = china_data_adapter.health_check()
         available_sources = [k for k, v in source_status.items() if v and k != "primary"]
-        logger.info(f"数据源健康检查: {source_status['primary']} (可用源: {available_sources})")
+        logger.info(f"数据源健康检查: primary={source_status.get('primary', 'unknown')}, 可用源: {available_sources}")
+        # 缓存到全局变量供 /health 端点读取
+        global _data_source_status, _data_source_checked_at
+        _data_source_status = dict(source_status)
+        _data_source_checked_at = datetime.now().isoformat()
     except Exception as e:
         logger.debug(f"数据源健康检查跳过: {e}")
 
@@ -366,6 +374,12 @@ async def health():
     except Exception as e:
         logger.debug(f"Tiger get_status() 调用失败: {e}")
 
+    # 数据源状态 — 使用启动时缓存的结果
+    ds_status = dict(_data_source_status)
+    # 如果缓存为空（启动时健康检查失败），补充降级状态
+    if not ds_status or ds_status.get("primary", "unknown") == "unknown":
+        ds_status.update({"primary": "pending", "yfinance": True, "note": "health_check_not_run"})
+
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -374,7 +388,16 @@ async def health():
             "rl_agent": rl_agent.is_ready(),
         },
         "tiger_api": tiger_status,
-        "data_source": "china_adapter",
+        "data_sources": {
+            "checked_at": _data_source_checked_at or datetime.now().isoformat(),
+            "primary": ds_status.get("primary", "unknown"),
+            "sources": {
+                "eastmoney": ds_status.get("eastmoney", False),
+                "efinance": ds_status.get("efinance", False),
+                "tencent": ds_status.get("tencent", False),
+                "yfinance": ds_status.get("yfinance", False),
+            },
+        },
         "portfolio_value": portfolio.total_value,
         "ws_connections": len(active_connections),
     }
