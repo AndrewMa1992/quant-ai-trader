@@ -247,8 +247,8 @@ class AutoTrader:
             if isinstance(t, str) and t:
                 candidates.add(t)
 
-        # 确保美股/港股/新加坡股都有代表
-        for market_suffix, count in [("", 5), (".HK", 5), (".SI", 3)]:
+        # 确保美股/港股/新加坡股/澳股/新西兰股都有代表
+        for market_suffix, count in [("", 5), (".HK", 5), (".SI", 3), (".AX", 2), (".NZ", 2)]:
             market_stocks = [s.get("ticker","") for s in stock_universe._all_stocks
                            if isinstance(s, dict) and s.get("ticker","").endswith(market_suffix) if market_suffix
                            or (isinstance(s, dict) and not any(x in s.get("ticker","") for x in [".HK",".SI",".AX",".NZ"]))]
