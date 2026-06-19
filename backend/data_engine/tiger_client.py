@@ -321,7 +321,7 @@ class TigerClient:
             # 构造 Order 对象 — ★ 支持盘前/盘后交易
             kwargs = {}
             if market == 'US':
-                kwargs['outside_rth'] = True  # 盘前(4:00-9:30) + 盘后(16:00-20:00) ET
+                kwargs['outside_rth'] = True  # 24h: 盘前+盘中+盘后+夜盘 (4:00-次日4:00 ET)
             order = Order(
                 account=target_account,
                 contract=contract,
@@ -336,7 +336,7 @@ class TigerClient:
                     limit_price = self._align_hk_tick(limit_price)
                 order.limit_price = limit_price
 
-            extended_label = " [盘前/盘后]" if kwargs.get('outside_rth') else ""
+            extended_label = " [24h扩展]" if kwargs.get('outside_rth') else ""
             logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}{extended_label} (账号: {target_account})")
 
             result_id = self._trade_client.place_order(order)

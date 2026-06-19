@@ -146,24 +146,26 @@ class AutoTrader:
 
     @staticmethod
     def _is_market_open() -> dict:
-        """检查各市场是否在交易时段（含盘前/盘后/夜盘）"""
+        """检查各市场是否在交易时段（含盘前/盘后/夜盘 — 24h覆盖）"""
         import pytz
         now = datetime.now()
-        result = {"US": False, "HK": False, "US_regular": False, "US_extended": False}
+        result = {"US": False, "HK": False, "US_regular": False, "US_extended": False, "US_overnight": False}
 
         try:
-            # US: 支持盘前(4:00-9:30) + 正常(9:30-16:00) + 盘后(16:00-20:00) ET
-            # Tiger API outside_rth=True 覆盖全部扩展时段
+            # US: 24小时全天覆盖
+            #   夜盘: 20:00-4:00  → overnight (Tiger API 另需 session=OVERNIGHT)
+            #   盘前: 4:00-9:30   → extended
+            #   盘中: 9:30-16:00  → regular  
+            #   盘后: 16:00-20:00 → extended
             us_tz = pytz.timezone('US/Eastern')
             us_now = now.astimezone(us_tz)
             if us_now.weekday() < 5:
                 us_hour = us_now.hour + us_now.minute / 60
-                # 正常时段: 9:30-16:00
                 result["US_regular"] = 9.5 <= us_hour < 16.0
-                # 扩展时段: 盘前 4:00-9:30 + 盘后 16:00-20:00
                 result["US_extended"] = (4.0 <= us_hour < 9.5) or (16.0 <= us_hour < 20.0)
-                # 总交易时段（含夜盘支持）
-                result["US"] = 4.0 <= us_hour < 20.0
+                result["US_overnight"] = us_hour >= 20.0 or us_hour < 4.0
+                # 总交易时段: 全天24h
+                result["US"] = True
         except Exception:
             pass
 
@@ -648,7 +650,10 @@ class AutoTrader:
     def start(self, interval_seconds=300):
         """开始自动循环"""
         mk_status = self._is_market_open()
-        us_status = "🟢盘前" if mk_status["US_extended"] and not mk_status["US_regular"] else ("🟢盘中" if mk_status["US_regular"] else ("🟢盘后" if mk_status["US_extended"] else "🔴休市"))
+        us_status = ("🌙夜盘" if mk_status.get("US_overnight") 
+                     else ("🟢盘前" if mk_status["US_extended"] and not mk_status["US_regular"] 
+                     else ("🟢盘中" if mk_status["US_regular"] 
+                     else ("🟢盘后" if mk_status["US_extended"] else "🔴休市"))))
         logger.info(f"\n🚀 全市场自动交易引擎 v2.1 启动")
         logger.info(f"   全市场: {len(self.universe_tickers)} 只")
         logger.info(f"   每轮分析: ~{self.batch_size} 只")
