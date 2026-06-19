@@ -19,11 +19,11 @@ RUN pip install -e ".[dev]" --no-cache-dir
 
 COPY shared/ ./shared/
 COPY configs/ ./configs/
-COPY services/execution/ ./services/execution/
+COPY services/execution_service/ ./services/execution_service/
 
 EXPOSE 8016
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8016/health || exit 1
 
-CMD ["uvicorn", "services.execution.main:app", "--host", "0.0.0.0", "--port", "8016", "--workers", "1", "--log-level", "info"]
+CMD ["uvicorn", "services.execution_service.main:app", "--host", "0.0.0.0", "--port", "8016", "--workers", "1", "--log-level", "info"]

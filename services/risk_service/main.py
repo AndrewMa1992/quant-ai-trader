@@ -1,6 +1,7 @@
 """services/risk_service/main.py – Risk microservice FastAPI application.
 
-Mounted at /api/v2/risk. Provides risk analytics and stress testing.
+Mounted at /api/v2/risk. Provides risk analytics, stress testing,
+and order-level risk checks.
 """
 
 from __future__ import annotations
@@ -17,19 +18,34 @@ from shared.core.logger import setup_logger
 
 _START_TIME: float = time.time()
 
+# Global risk checker instance — set during lifespan
+risk_checker = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global risk_checker
     setup_logger()
     logger.info(f"Starting {risk_config.SERVICE_NAME} on port {risk_config.PORT}")
+
+    # Attempt to initialise RiskChecker (CircuitBreaker + RiskLimits)
+    try:
+        from services.risk_service.risk_checker import RiskChecker
+        risk_checker = RiskChecker()
+        logger.info("RiskChecker initialised successfully")
+    except Exception as e:
+        risk_checker = None
+        logger.warning(f"RiskChecker could not be initialised (development mode): {e}")
+
     yield
+
     logger.info(f"Shutting down {risk_config.SERVICE_NAME}")
 
 
 app = FastAPI(
     title="Quant AI Trader – Risk Service",
     version="2.0.0",
-    description="Barra risk model, VaR/CVaR, stress testing, Brinson attribution",
+    description="Barra risk model, VaR/CVaR, stress testing, Brinson attribution, and pre-trade checks",
     lifespan=lifespan,
 )
 

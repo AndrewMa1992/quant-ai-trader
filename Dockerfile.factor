@@ -19,11 +19,11 @@ RUN pip install -e ".[dev]" --no-cache-dir
 
 COPY shared/ ./shared/
 COPY configs/ ./configs/
-COPY services/factor/ ./services/factor/
+COPY services/factor_service/ ./services/factor_service/
 
 EXPOSE 8012
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8012/health || exit 1
 
-CMD ["uvicorn", "services.factor.main:app", "--host", "0.0.0.0", "--port", "8012", "--workers", "1", "--log-level", "info"]
+CMD ["uvicorn", "services.factor_service.main:app", "--host", "0.0.0.0", "--port", "8012", "--workers", "1", "--log-level", "info"]

@@ -14,6 +14,7 @@ Trading Pipeline — v2 核心交易编排器
   7. Record Performance — 写入 shared database
 """
 import asyncio
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -27,9 +28,23 @@ from shared.risk_gate import RiskGate, RiskResult
 from shared.signal_to_views import signals_to_bl_views, validate_views
 
 # ── v2 服务模块（已有，不改动） ──────────────────────────────
-from services.factor_service.engine.factor_engine import FactorEngine
-from services.model_infer_service.inference_engine import InferenceEngine
-from services.execution_service.live.circuit_breaker import CircuitBreaker
+try:
+    from services.factor_service.engine.factor_engine import FactorEngine
+except ImportError as e:
+    logger.warning(f"FactorEngine import failed ({e}), using stub")
+    FactorEngine = None  # type: ignore[assignment]
+
+try:
+    from services.model_infer_service.inference_engine import InferenceEngine
+except ImportError as e:
+    logger.warning(f"InferenceEngine import failed ({e}), using stub")
+    InferenceEngine = None  # type: ignore[assignment]
+
+try:
+    from services.execution_service.live.circuit_breaker import CircuitBreaker
+except ImportError as e:
+    logger.warning(f"CircuitBreaker import failed ({e}), using stub")
+    CircuitBreaker = None  # type: ignore[assignment]
 
 # ── v1 → v2 桥接（v1 模块保留用于过渡） ─────────────────────
 from backend.data_engine.tiger_client import tiger_client as _tiger_client
@@ -48,15 +63,30 @@ class TradingPipeline:
         self.config: PipelineConfig = config
         self.service_urls: Dict[str, str] = config.SERVICE_BASE_URLS
 
-        # ── 本地引擎（v2 已有，不改动） ──────────────────────
+        # ── 本地引擎（v2 已有，导入失败时降级为 stub） ──────
         logger.info("初始化本地引擎...")
-        self.factor_engine: FactorEngine = FactorEngine()
-        self.inference_engine: InferenceEngine = InferenceEngine()
-        logger.info("  ✅ FactorEngine + InferenceEngine 已就绪")
+        if FactorEngine is not None:
+            self.factor_engine: FactorEngine = FactorEngine()
+            logger.info("  ✅ FactorEngine 已就绪")
+        else:
+            self.factor_engine = None  # type: ignore[assignment]
+            logger.warning("  ⚠️ FactorEngine 不可用 — stub 模式")
+
+        if InferenceEngine is not None:
+            self.inference_engine: InferenceEngine = InferenceEngine()
+            logger.info("  ✅ InferenceEngine 已就绪")
+        else:
+            self.inference_engine = None  # type: ignore[assignment]
+            logger.warning("  ⚠️ InferenceEngine 不可用 — stub 模式")
 
         # ── 风控组件 ─────────────────────────────────────────
         logger.info("初始化风控组件...")
-        self.circuit_breaker: CircuitBreaker = CircuitBreaker()
+        if CircuitBreaker is not None:
+            self.circuit_breaker: CircuitBreaker = CircuitBreaker()
+            logger.info("  ✅ CircuitBreaker 已就绪")
+        else:
+            self.circuit_breaker = None  # type: ignore[assignment]
+            logger.warning("  ⚠️ CircuitBreaker 不可用 — stub 模式")
         self.risk_gate: RiskGate = RiskGate(
             circuit_breaker=self.circuit_breaker,
             risk_service_url=self.service_urls["risk"],
@@ -366,6 +396,11 @@ class TradingPipeline:
             DataFrame with factor values indexed by ticker.
         """
         t0: float = time.time()
+        if self.factor_engine is None:
+            logger.warning("  Step 2: FactorEngine stub — returning empty DataFrame")
+            import pandas as pd
+            return pd.DataFrame({"ticker": list(data.keys())})
+
         try:
             # v2 FactorEngine.compute_all_multi accepts dict of data
             factor_df = self.factor_engine.compute_all_multi(data)
@@ -376,9 +411,8 @@ class TradingPipeline:
             return factor_df
         except Exception as e:
             logger.error(f"Step 2 因子计算失败: {e}")
-            # Return empty DataFrame-like structure
             import pandas as pd
-            return pd.DataFrame()
+            return pd.DataFrame({"ticker": list(data.keys())})
 
     # ═══════════════════════════════════════════════════════════════
     # Step 3: Run Inference
@@ -395,6 +429,13 @@ class TradingPipeline:
             List of signal dicts: [{"ticker": "AAPL", "signal": 0.6, "confidence": 0.8}, ...]
         """
         t0: float = time.time()
+        if self.inference_engine is None:
+            logger.warning("  Step 3: InferenceEngine stub — returning HOLD for all tickers")
+            return [
+                {"ticker": t, "signal": 0.0, "confidence": 0.0, "direction": "HOLD"}
+                for t in tickers
+            ]
+
         try:
             # v2 InferenceEngine.generate_signals_batch returns signals
             signals: List[Dict] = self.inference_engine.generate_signals_batch(factor_df)
@@ -675,14 +716,13 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _record_performance(self, orders: List[Dict]) -> None:
-        """绩效记录 — 写入 shared database (PostgreSQL via asyncpg)。
+        """绩效记录 — 写入 cache/cycle_history.jsonl + 可选 PostgreSQL。
 
         Args:
             orders: Executed orders from Step 6.
         """
         t0: float = time.time()
         try:
-            # 更新组合估值（如有新价格）
             metrics: Dict = self.portfolio.get_metrics()
 
             logger.info(
@@ -692,12 +732,105 @@ class TradingPipeline:
                 f"持仓 {metrics.get('num_positions', 0)} 只"
             )
 
-            # v2: 写入 PostgreSQL via shared database models
+            # ── CycleSummary 持久化到 cache/cycle_history.jsonl（追加模式）──
+            cycle_summary = {
+                "cycle": self.cycle_count,
+                "timestamp": datetime.now().isoformat(),
+                "trade_date": self.trade_date,
+                "orders": len(orders),
+                "trades_today": self.trades_today,
+                "total_value": metrics.get("total_value", 0),
+                "total_return_pct": metrics.get("total_return_pct", 0),
+                "num_positions": metrics.get("num_positions", 0),
+                "order_ids": [o.get("order_id", "") for o in orders if o.get("order_id")],
+            }
             try:
-                # Attempt v2 shared DB write
-                pass  # Placeholder — shared database engine imported when available
-            except Exception:
-                logger.debug("shared database write skipped (module not available)")
+                cache_dir = Path("cache")
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                history_path = cache_dir / "cycle_history.jsonl"
+                with open(history_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(cycle_summary, ensure_ascii=False) + "\n")
+                logger.debug(f"Cycle summary appended to {history_path}")
+            except Exception as e:
+                logger.warning(f"Failed to write cycle_history.jsonl: {e}")
+
+            # ── PostgreSQL 写入（optional，try/except 包裹）──
+            try:
+                from shared.database import SessionLocal
+                from shared.database.models import CyclePerformance
+
+                db = SessionLocal()
+                try:
+                    record = CyclePerformance(
+                        cycle=self.cycle_count,
+                        trade_date=self.trade_date,
+                        order_count=len(orders),
+                        trades_today=self.trades_today,
+                        total_value=metrics.get("total_value", 0),
+                        total_return_pct=metrics.get("total_return_pct", 0),
+                        num_positions=metrics.get("num_positions", 0),
+                        created_at=datetime.utcnow(),
+                    )
+                    db.add(record)
+                    db.commit()
+                    logger.debug(f"Cycle #{self.cycle_count} written to PostgreSQL")
+                except Exception as e:
+                    db.rollback()
+                    logger.debug(f"PostgreSQL write skipped: {e}")
+                finally:
+                    db.close()
+            except ImportError:
+                logger.debug("PostgreSQL not configured — skipping DB write")
+            except Exception as e:
+                logger.debug(f"PostgreSQL write failed (non-critical): {e}")
 
         except Exception as e:
             logger.error(f"Step 7 绩效记录异常: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 命令行入口
+# ═══════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Quant AI Trader v2 — Trading Pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=300,
+        help="循环间隔（秒），默认 300 (5分钟)",
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="运行一次交易循环后退出（开发/测试用）",
+    )
+    args = parser.parse_args()
+
+    pipeline = TradingPipeline(config=pipeline_config)
+
+    async def _main() -> None:
+        try:
+            if args.once:
+                logger.info("🚀 单次运行模式（--once）")
+                result = await pipeline.run_cycle()
+                if result:
+                    logger.info(f"✅ 单次完成: {result}")
+                else:
+                    logger.warning("⚠️ 单次运行无结果（可能数据不足）")
+            else:
+                await pipeline.run(interval_seconds=args.interval)
+        finally:
+            await pipeline.close()
+
+    try:
+        asyncio.run(_main())
+    except KeyboardInterrupt:
+        logger.info("⏹ Trading Pipeline 收到退出信号")
+        sys.exit(0)

@@ -1,4 +1,5 @@
 """
+# DEPRECATED: Use configs/settings.py instead
 Quant AI Trader - 全局配置
 顶级量化基金级别的配置管理
 """

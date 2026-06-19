@@ -19,11 +19,11 @@ RUN pip install -e ".[dev]" --no-cache-dir
 
 COPY shared/ ./shared/
 COPY configs/ ./configs/
-COPY services/model_infer/ ./services/model_infer/
+COPY services/model_infer_service/ ./services/model_infer_service/
 
 EXPOSE 8014
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8014/health || exit 1
 
-CMD ["uvicorn", "services.model_infer.main:app", "--host", "0.0.0.0", "--port", "8014", "--workers", "1", "--log-level", "info"]
+CMD ["uvicorn", "services.model_infer_service.main:app", "--host", "0.0.0.0", "--port", "8014", "--workers", "1", "--log-level", "info"]

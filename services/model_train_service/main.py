@@ -6,17 +6,20 @@ Provides training endpoints, hyperopt, and MLflow integration.
 
 from __future__ import annotations
 
+import json
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from loguru import logger
 
-from services.model_train_service.api.routes import router as train_router
+from services.model_train_service.api.routes import _training_runs, router as train_router
 from services.model_train_service.config import train_config
 from shared.core.logger import setup_logger
 
 _START_TIME: float = time.time()
+_TRAINING_JOBS_PATH: Path = Path("cache") / "training_jobs.json"
 
 
 @asynccontextmanager
@@ -24,7 +27,27 @@ async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {train_config.SERVICE_NAME} on port {train_config.PORT}")
     logger.info(f"Device: {train_config.DEVICE}")
+
+    # Restore _training_runs history from disk
+    if _TRAINING_JOBS_PATH.exists():
+        try:
+            saved = json.loads(_TRAINING_JOBS_PATH.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                _training_runs.update(saved)
+                logger.info(f"Restored {len(saved)} training job(s) from {_TRAINING_JOBS_PATH}")
+        except Exception as e:
+            logger.warning(f"Failed to restore training jobs: {e}")
+
     yield
+
+    # Persist _training_runs to disk on shutdown
+    try:
+        _TRAINING_JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _TRAINING_JOBS_PATH.write_text(json.dumps(_training_runs, indent=2), encoding="utf-8")
+        logger.info(f"Saved {len(_training_runs)} training job(s) to {_TRAINING_JOBS_PATH}")
+    except Exception as e:
+        logger.warning(f"Failed to persist training jobs: {e}")
+
     logger.info(f"Shutting down {train_config.SERVICE_NAME}")
 
 

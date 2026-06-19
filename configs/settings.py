@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     )
 
     # ── Application ──────────────────────────────────────────
+    PROJECT_ROOT: str = Field(default=".", description="Project root directory")
     APP_NAME: str = Field(default="quant-ai-trader", description="Application name")
     APP_VERSION: str = Field(default="2.0.0", description="Application version")
     ENV: str = Field(default="development", description="Runtime environment")
@@ -39,10 +40,18 @@ class Settings(BaseSettings):
     API_KEY: str = Field(
         default="dev-api-key-change-in-production", description="API key for authentication"
     )
-    CORS_ORIGINS: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"],
-        description="CORS allowed origins (list or comma-separated string)",
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:5173,http://localhost:3000",
+        description="CORS allowed origins (comma-separated string)",
     )
+
+    # ── Microservice Ports ───────────────────────────────────
+    DATA_PORT: int = Field(default=8011, description="Data service listen port")
+    FACTOR_PORT: int = Field(default=8012, description="Factor service listen port")
+    MODEL_TRAIN_PORT: int = Field(default=8013, description="Model training service listen port")
+    MODEL_INFER_PORT: int = Field(default=8014, description="Model inference service listen port")
+    RISK_PORT: int = Field(default=8015, description="Risk service listen port")
+    EXEC_PORT: int = Field(default=8016, description="Execution service listen port")
 
     # ── PostgreSQL ───────────────────────────────────────────
     POSTGRES_URL: str = Field(
@@ -118,6 +127,12 @@ class Settings(BaseSettings):
     EXECUTION_ORDER_TIMEOUT_SECONDS: int = Field(default=30)
     EXECUTION_RETRY_ATTEMPTS: int = Field(default=3)
 
+    # ── Training ─────────────────────────────────────────────
+    TRAIN_DEVICE: str = Field(default="cpu", description="PyTorch training device (cpu/cuda)")
+
+    # ── Docker ───────────────────────────────────────────────
+    USE_DOCKER: bool = Field(default=False, description="Whether running inside Docker")
+
     # ── Slack Alerts ─────────────────────────────────────────
     SLACK_BOT_TOKEN: str = Field(default="")
     SLACK_ALERT_CHANNEL: str = Field(default="#quant-alerts")
@@ -125,16 +140,18 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: str) -> list[str]:
-        """Parse comma-separated CORS origins into a list."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    def parse_cors_origins(cls, v: object) -> str:
+        """Normalize CORS origins to a comma-separated string."""
+        if isinstance(v, list):
+            return ",".join(str(x).strip() for x in v)
+        return str(v) if v else ""
 
     @property
     def cors_origin_list(self) -> list[str]:
         """Return CORS origins as a list for FastAPI middleware."""
-        return list(self.CORS_ORIGINS) if self.CORS_ORIGINS else ["*"]
+        if not self.CORS_ORIGINS:
+            return ["*"]
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
     def is_production(self) -> bool:

@@ -4,19 +4,26 @@ Endpoints:
 - POST /optimizer/markowitz – Mean-variance optimization
 - POST /optimizer/bl – Black-Litterman optimization
 - POST /backtest – Run event-driven backtest
-- POST /execute/order – Place a real or paper order
+- POST /order – Place a real or paper order (unified)
+- POST /execute/order – Alias for POST /order (backward compatible)
+- GET /order/{order_id} – Order status tracking
 - GET /positions – Current positions
 - GET /alerts – Recent alerts
 """
 
 from __future__ import annotations
 
+import json
+import time
+import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from services.execution_service.api.schemas import OrderRequest, OrderResult
 from services.execution_service.config import exec_config
 from services.execution_service.optimizer.markowitz import MarkowitzOptimizer
 from services.execution_service.optimizer.black_litterman import BlackLittermanOptimizer
@@ -36,6 +43,10 @@ _position_tracker = PositionTracker()
 _circuit_breaker = CircuitBreaker()
 _alert_manager = AlertManager()
 
+# In-memory order cache + persistence path
+_orders: dict[str, dict] = {}
+_ORDERS_CACHE_PATH: Path = Path("cache") / "orders.jsonl"
+
 
 class MarkowitzRequest(BaseModel):
     tickers: list[str] = Field(..., description="Universe tickers")
@@ -54,16 +65,6 @@ class BacktestRequest(BaseModel):
     start_date: str = Field(default="2023-01-01")
     end_date: str = Field(default="2024-12-31")
     initial_capital: float = Field(default=1_000_000.0)
-
-
-class OrderRequest(BaseModel):
-    ticker: str = Field(...)
-    side: str = Field(default="BUY")
-    quantity: int = Field(default=100)
-    order_type: str = Field(default="MKT", description="MKT / LMT")
-    limit_price: float | None = None
-    algo: str = Field(default="twap", description="twap / vwap / pov / direct")
-    account: str = Field(default="20874631")
 
 
 @router.post("/optimizer/markowitz")
@@ -128,16 +129,62 @@ async def run_backtest(req: BacktestRequest, background_tasks: BackgroundTasks) 
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/execute/order")
-async def execute_order(req: OrderRequest) -> APIResponse:
-    """Place an order (paper or live)."""
+def _persist_order(record: dict) -> None:
+    """Append an order record to cache/orders.jsonl."""
+    try:
+        _ORDERS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_ORDERS_CACHE_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.warning(f"Failed to persist order to cache: {e}")
+
+
+@router.post("/order", response_model=OrderResult)
+async def place_order(req: OrderRequest) -> OrderResult:
+    """Unified order placement endpoint — paper or live."""
     log = get_logger(__name__)
+
+    order_id = str(uuid.uuid4())
+    placed_at = time.time()
+
+    # Build initial order record
+    order_record = {
+        "order_id": order_id,
+        "ticker": req.ticker,
+        "side": req.side,
+        "quantity": req.quantity,
+        "filled_price": None,
+        "filled_qty": 0.0,
+        "status": "queued",
+        "algo": req.algo,
+        "placed_at": placed_at,
+        "updated_at": placed_at,
+    }
+
+    # Store in memory
+    _orders[order_id] = order_record
+
+    # Persist to JSON Lines
+    _persist_order(order_record)
+
     try:
         # Circuit breaker check
         if not _circuit_breaker.allow_order(req.ticker, req.quantity):
-            raise HTTPException(status_code=403, detail="Circuit breaker active — order rejected")
+            _orders[order_id]["status"] = "cancelled"
+            _orders[order_id]["updated_at"] = time.time()
+            _persist_order(_orders[order_id])
+            return OrderResult(
+                order_id=order_id,
+                ticker=req.ticker,
+                side=req.side,
+                quantity=req.quantity,
+                status="cancelled",
+                algo=req.algo,
+                placed_at=placed_at,
+                updated_at=time.time(),
+            )
 
-        broker = TigerBroker(account=req.account)
+        broker = TigerBroker(account=req.account or exec_config.TIGER_ACCOUNT)
         result = await broker.place_order(
             ticker=req.ticker,
             side=req.side,
@@ -147,18 +194,95 @@ async def execute_order(req: OrderRequest) -> APIResponse:
             algo=req.algo,
         )
 
+        # Update order record
+        _orders[order_id]["filled_price"] = result.get("filled_price")
+        _orders[order_id]["filled_qty"] = result.get("filled_qty", 0.0)
+        _orders[order_id]["status"] = result.get("status", "submitted")
+        _orders[order_id]["updated_at"] = time.time()
+        _persist_order(_orders[order_id])
+
         # Update position tracker
         _position_tracker.record_order(result)
 
         # Check alert thresholds
         _alert_manager.check_and_alert(result)
 
-        return APIResponse(success=True, message=f"Order placed: {req.side} {req.quantity} {req.ticker}", data=result)
+        return OrderResult(
+            order_id=order_id,
+            ticker=req.ticker,
+            side=req.side,
+            quantity=req.quantity,
+            filled_price=result.get("filled_price"),
+            filled_qty=result.get("filled_qty", 0.0),
+            status=result.get("status", "submitted"),
+            algo=req.algo,
+            placed_at=placed_at,
+            updated_at=time.time(),
+        )
+
     except HTTPException:
+        _orders[order_id]["status"] = "cancelled"
+        _orders[order_id]["updated_at"] = time.time()
+        _persist_order(_orders[order_id])
         raise
     except Exception as e:
         log.exception(f"Order failed: {e}")
+        _orders[order_id]["status"] = "cancelled"
+        _orders[order_id]["updated_at"] = time.time()
+        _persist_order(_orders[order_id])
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/order/{order_id}")
+async def get_order_status(order_id: str) -> APIResponse:
+    """Get the current status of an order by its ID.
+
+    Checks the in-memory _orders dict first, then falls back to
+    searching cache/orders.jsonl.
+    """
+    # Check in-memory cache first
+    if order_id in _orders:
+        return APIResponse(
+            success=True,
+            message=f"Order {order_id} status: {_orders[order_id].get('status')}",
+            data=_orders[order_id],
+        )
+
+    # Fall back to orders.jsonl
+    if _ORDERS_CACHE_PATH.exists():
+        try:
+            with open(_ORDERS_CACHE_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if record.get("order_id") == order_id:
+                            return APIResponse(
+                                success=True,
+                                message=f"Order {order_id} (from cache)",
+                                data=record,
+                            )
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.warning(f"Failed to read orders cache: {e}")
+
+    return APIResponse(
+        success=True,
+        message="Order not found in cache",
+        data={"order_id": order_id, "status": "unknown", "message": "Order not found in cache"},
+    )
+
+
+@router.post("/execute/order")
+async def execute_order(req: OrderRequest) -> OrderResult:
+    """Backward-compatible alias for POST /order.
+
+    Delegates to the unified place_order handler.
+    """
+    return await place_order(req)
 
 
 @router.get("/positions")

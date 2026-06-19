@@ -139,6 +139,24 @@ services:
     ports:
       - "${QAT_EXEC_PORT:-8016}:8016"
 
+  # ── Trading Pipeline (optional — scale=0 by default) ──────
+  trading-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: qat-trading-pipeline
+    command: python trading_pipeline.py --once
+    restart: "no"
+    env_file:
+      - .env
+    networks:
+      - qat-network
+    depends_on:
+      api-gateway:
+        condition: service_started
+    profiles:
+      - pipeline
+
   # ── MLflow Tracking ─────────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.10.0

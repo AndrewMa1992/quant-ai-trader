@@ -9,12 +9,14 @@ Endpoints:
 
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from services.model_train_service.api.schemas import TrainJob, TrainRequest
 from services.model_train_service.config import train_config
 from services.model_train_service.data_loader import create_dataset
 from services.model_train_service.trainers.gbdt_trainer import GBDTTrainer
@@ -29,13 +31,6 @@ mlflow_mgr = MLflowManager()
 # In-memory training run cache
 _training_runs: dict[str, dict[str, Any]] = {}
 _training_counter: int = 0
-
-
-class TrainRequest(BaseModel):
-    tickers: list[str] = Field(default_factory=list)
-    start_date: str | None = None
-    end_date: str | None = None
-    hyperparams: dict[str, Any] = Field(default_factory=dict)
 
 
 class HyperoptRequest(BaseModel):
@@ -82,12 +77,12 @@ async def train_model(
         raise HTTPException(status_code=400, detail=f"Unsupported model type: {model_type}")
 
     _training_counter += 1
-    run_id = f"{model_type}_{_training_counter}_{int(__import__('time').time())}"
+    run_id = f"{model_type}_{_training_counter}_{int(time.time())}"
 
     _training_runs[run_id] = {
         "status": "queued",
         "model_type": model_type,
-        "started_at": __import__('time').time(),
+        "started_at": time.time(),
         "metrics": {},
     }
 
@@ -110,14 +105,16 @@ async def train_model(
                 features = df.drop(columns=["target"], errors="ignore")
                 target = df["target"] if "target" in df.columns else df["close"].pct_change(21).shift(-21)
 
+                hyperparams = req.hyperparams or {}
+
                 if model_type == "gbdt":
                     trainer = GBDTTrainer(
-                        gbdt_type=req.hyperparams.get("gbdt_type", "lightgbm"),
+                        gbdt_type=hyperparams.get("gbdt_type", "lightgbm"),
                     )
                 elif model_type == "transformer":
                     trainer = TransformerTrainer(
-                        d_model=req.hyperparams.get("d_model", 128),
-                        n_heads=req.hyperparams.get("n_heads", 8),
+                        d_model=hyperparams.get("d_model", 128),
+                        n_heads=hyperparams.get("n_heads", 8),
                     )
                 elif model_type == "tcn":
                     from services.model_train_service.trainers.tcn_trainer import TCNTrainer
@@ -133,7 +130,7 @@ async def train_model(
                     return
 
                 metrics = trainer.fit(features, target, valid_frac=0.2)
-                mlflow_mgr.log_params(req.hyperparams)
+                mlflow_mgr.log_params(hyperparams)
                 mlflow_mgr.log_metrics(metrics)
 
                 # Register model
@@ -222,4 +219,116 @@ async def hyperopt(
         success=True,
         message=f"Hyperopt {req.model_type} started",
         data={"run_id": run_id, "n_trials": req.n_trials},
+    )
+
+
+@router.post("/train")
+async def train_model_unified(
+    req: TrainRequest,
+    background_tasks: BackgroundTasks,
+) -> APIResponse:
+    """Unified training endpoint — model_type specified in body instead of path.
+
+    Delegates to the existing POST /train/{model_type} logic internally.
+    """
+    global _training_counter
+    log = get_logger(__name__)
+
+    model_type = req.model_type
+    if model_type not in ("gbdt", "transformer", "tcn", "tft", "rl"):
+        raise HTTPException(status_code=400, detail=f"Unsupported model type: {model_type}")
+
+    _training_counter += 1
+    run_id = f"{model_type}_{_training_counter}_{int(time.time())}"
+
+    _training_runs[run_id] = {
+        "status": "queued",
+        "model_type": model_type,
+        "started_at": time.time(),
+        "metrics": {},
+    }
+
+    async def _run_training() -> None:
+        try:
+            _training_runs[run_id]["status"] = "running"
+
+            with mlflow_mgr.start_run(run_name=run_id) as run:
+                df = create_dataset(
+                    req.tickers or ["AAPL", "MSFT"],
+                    req.start_date or "2023-01-01",
+                    req.end_date or "2024-12-31",
+                )
+
+                if df is None or len(df) < 100:
+                    _training_runs[run_id]["status"] = "failed"
+                    _training_runs[run_id]["error"] = "Insufficient data"
+                    return
+
+                features = df.drop(columns=["target"], errors="ignore")
+                target = df["target"] if "target" in df.columns else df["close"].pct_change(21).shift(-21)
+
+                hyperparams = req.hyperparams or {}
+
+                if model_type == "gbdt":
+                    trainer = GBDTTrainer(
+                        gbdt_type=hyperparams.get("gbdt_type", "lightgbm"),
+                    )
+                elif model_type == "transformer":
+                    trainer = TransformerTrainer(
+                        d_model=hyperparams.get("d_model", 128),
+                        n_heads=hyperparams.get("n_heads", 8),
+                    )
+                elif model_type == "tcn":
+                    from services.model_train_service.trainers.tcn_trainer import TCNTrainer
+                    trainer = TCNTrainer()
+                elif model_type == "tft":
+                    from services.model_train_service.trainers.tft_trainer import TFTTrainer
+                    trainer = TFTTrainer()
+                elif model_type == "rl":
+                    from services.model_train_service.trainers.rl_trainer import RLTrainer
+                    trainer = RLTrainer()
+                else:
+                    _training_runs[run_id]["status"] = "failed"
+                    return
+
+                metrics = trainer.fit(features, target, valid_frac=0.2)
+                mlflow_mgr.log_params(hyperparams)
+                mlflow_mgr.log_metrics(metrics)
+
+                version = mlflow_mgr.register_model(run_id, model_type)
+                _training_runs[run_id]["mlflow_run_id"] = str(run.info.run_id) if hasattr(run, "info") else ""
+                _training_runs[run_id]["model_version"] = version
+                _training_runs[run_id]["status"] = "completed"
+                _training_runs[run_id]["metrics"] = metrics
+
+                log.info(f"Training {run_id} completed: {metrics}")
+
+        except Exception as e:
+            log.exception(f"Training {run_id} failed: {e}")
+            _training_runs[run_id]["status"] = "failed"
+            _training_runs[run_id]["error"] = str(e)
+
+    background_tasks.add_task(_run_training)
+
+    return APIResponse(
+        success=True,
+        message=f"Training {model_type} started",
+        data={"run_id": run_id, "status": "queued"},
+    )
+
+
+@router.get("/train/{job_id}")
+async def get_train_job(job_id: str) -> APIResponse:
+    """Alias for GET /training/{run_id} — PRD semantic alignment.
+
+    Redirects conceptually to the training run status lookup.
+    """
+    run_info = _training_runs.get(job_id)
+    if run_info is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    return APIResponse(
+        success=True,
+        message=f"Training job {job_id}",
+        data=run_info,
     )

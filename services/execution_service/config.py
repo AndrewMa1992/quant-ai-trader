@@ -46,5 +46,8 @@ class ExecutionServiceConfig(BaseSettings):
     LIVE_TRADING_REQUIRE_CONFIRM: bool = Field(default=True)
     TIGER_ACCOUNT: str = Field(default="20874631")
 
+    # Order management
+    ORDER_STATUS_TTL: int = Field(default=86400, description="Order status TTL in seconds (24 hours)")
+
 
 exec_config = ExecutionServiceConfig()

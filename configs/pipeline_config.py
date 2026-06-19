@@ -32,16 +32,25 @@ class PipelineConfig:
     MIN_TRADE_VALUE: float = 1000.0            # 最小交易金额（USD）
 
     # ── v2 微服务地址 ─────────────────────────────────────────
-    SERVICE_BASE_URLS: dict = field(default_factory=lambda: {
-        "data": "http://localhost:8011",
-        "factor": "http://localhost:8012",
-        "risk": "http://localhost:8015",
-        "execution": "http://localhost:8016",
-    })
+    SERVICE_BASE_URLS: dict = field(default_factory=lambda: _build_service_urls())
 
     # ── HTTP 客户端超时 ───────────────────────────────────────
     HTTP_TIMEOUT: float = 30.0                 # httpx 请求超时（秒）
     HTTP_RETRIES: int = 3                      # 重试次数
+
+
+def _build_service_urls() -> dict:
+    """Dynamically read service ports from central settings."""
+    from configs.settings import settings
+
+    return {
+        "data": f"http://localhost:{settings.DATA_PORT}",
+        "factor": f"http://localhost:{settings.FACTOR_PORT}",
+        "model_train": f"http://localhost:{settings.MODEL_TRAIN_PORT}",
+        "model_infer": f"http://localhost:{settings.MODEL_INFER_PORT}",
+        "risk": f"http://localhost:{settings.RISK_PORT}",
+        "execution": f"http://localhost:{settings.EXEC_PORT}",
+    }
 
 
 # 全局单例（方便直接 import）

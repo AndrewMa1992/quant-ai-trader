@@ -59,5 +59,8 @@ class TrainServiceConfig(BaseSettings):
     MODEL_SAVE_DIR: str = Field(default="./cache/models", description="Model checkpoint directory")
     MODEL_REGISTRY_STAGE: str = Field(default="staging", description="Initial MLflow stage")
 
+    # Job management
+    TRAIN_JOB_TTL: int = Field(default=604800, description="Training job TTL in seconds (7 days)")
+
 
 train_config = TrainServiceConfig()

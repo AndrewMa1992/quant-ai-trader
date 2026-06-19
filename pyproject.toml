@@ -102,7 +102,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*", "shared*", "configs*", "api_gateway*"]
+include = ["backend*", "shared*", "configs*", "api_gateway*", "services*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.toml", "*.yaml", "*.yml", "*.json", "*.env"]
