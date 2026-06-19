@@ -28,6 +28,7 @@ from backend.trading_engine import (
     TradingStrategy, Backtester,
 )
 from backend.data_engine.tiger_client import tiger_client
+from backend.data_engine.china_adapter import china_data_adapter
 from backend.api import (
     routes_data, routes_trade, routes_analysis, routes_models
 )
@@ -56,6 +57,10 @@ trainer = ModelTrainer(transformer=transformer, rl_agent=rl_agent)
 realtime = RealtimeEngine(market_data, data_pipeline)
 
 active_connections: Set[WebSocket] = set()
+
+# 数据源状态缓存（启动时探测，/health 端点读取）
+_data_source_status: Dict = {"primary": "unknown", "eastmoney": False, "efinance": False, "tencent": False, "yfinance": False}
+_data_source_checked_at: str = ""
 
 
 # ================================================================
@@ -120,6 +125,18 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning(f"⚠️ Tiger 同步未完成: {sync_result['source']}")
 
+    # ★ 启动时探测各数据源可达性
+    try:
+        source_status = china_data_adapter.health_check()
+        available_sources = [k for k, v in source_status.items() if v and k != "primary"]
+        logger.info(f"数据源健康检查: primary={source_status.get('primary', 'unknown')}, 可用源: {available_sources}")
+        # 缓存到全局变量供 /health 端点读取
+        global _data_source_status, _data_source_checked_at
+        _data_source_status = dict(source_status)
+        _data_source_checked_at = datetime.now().isoformat()
+    except Exception as e:
+        logger.debug(f"数据源健康检查跳过: {e}")
+
     # Save state after each trade
     executor.on_order_filled(lambda trade: portfolio.save_state())
 
@@ -166,6 +183,7 @@ app.add_middleware(
 # Register API routes
 app.include_router(routes_data.router)
 app.include_router(routes_trade.router)
+app.include_router(routes_trade.risk_v2_router)
 app.include_router(routes_analysis.router)
 app.include_router(routes_models.router)
 
@@ -347,12 +365,38 @@ async def push_tiger_snapshot(data: Dict):
 
 @app.get("/health")
 async def health():
+    # Tiger API 状态 — 包在 try/except 内防止报错影响整体健康检查
+    tiger_status: Dict = {"connected": False, "account": ""}
+    try:
+        status = tiger_client.get_status()
+        tiger_status["connected"] = status.get("connected", False)
+        tiger_status["account"] = status.get("real_account", "") or status.get("simulation_account", "")
+    except Exception as e:
+        logger.debug(f"Tiger get_status() 调用失败: {e}")
+
+    # 数据源状态 — 使用启动时缓存的结果
+    ds_status = dict(_data_source_status)
+    # 如果缓存为空（启动时健康检查失败），补充降级状态
+    if not ds_status or ds_status.get("primary", "unknown") == "unknown":
+        ds_status.update({"primary": "pending", "yfinance": True, "note": "health_check_not_run"})
+
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "models": {
             "transformer": transformer.is_ready(),
             "rl_agent": rl_agent.is_ready(),
+        },
+        "tiger_api": tiger_status,
+        "data_sources": {
+            "checked_at": _data_source_checked_at or datetime.now().isoformat(),
+            "primary": ds_status.get("primary", "unknown"),
+            "sources": {
+                "eastmoney": ds_status.get("eastmoney", False),
+                "efinance": ds_status.get("efinance", False),
+                "tencent": ds_status.get("tencent", False),
+                "yfinance": ds_status.get("yfinance", False),
+            },
         },
         "portfolio_value": portfolio.total_value,
         "ws_connections": len(active_connections),

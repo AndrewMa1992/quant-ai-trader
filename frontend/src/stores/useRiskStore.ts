@@ -18,6 +18,9 @@ export const useRiskStore = defineStore('risk', () => {
   const currentDrawdown = ref(0)
   const circuitBreakerCooldown = ref(0)
 
+  // P0-3: Breaker mode — "hard" or "warn"
+  const breakerMode = ref('warn')
+
   const loading = ref(false)
   const error = ref('')
 
@@ -83,20 +86,82 @@ export const useRiskStore = defineStore('risk', () => {
     dailyPnlPct: number
     drawdown: number
     cooldown?: number
+    breakerMode?: string
   }) {
     circuitBreakerTriggered.value = data.triggered
     dailyPnl.value = data.dailyPnl
     dailyPnlPct.value = data.dailyPnlPct
     currentDrawdown.value = data.drawdown
     circuitBreakerCooldown.value = data.cooldown ?? 0
+    if (data.breakerMode) {
+      breakerMode.value = data.breakerMode
+    }
+  }
+
+  // P0-3: Reset circuit breaker via API
+  async function resetCircuitBreaker() {
+    loading.value = true
+    error.value = ''
+    try {
+      const data = await riskApi.resetCircuitBreaker()
+      if (data.reset) {
+        circuitBreakerTriggered.value = data.circuit_breaker_triggered
+        breakerMode.value = data.breaker_mode
+      }
+      return data
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Reset circuit breaker failed'
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // P0-3: Toggle breaker mode via API
+  async function toggleBreakerMode(mode: string) {
+    loading.value = true
+    error.value = ''
+    try {
+      const data = await riskApi.toggleBreakerMode(mode)
+      if (data.toggled) {
+        breakerMode.value = data.breaker_mode
+      }
+      return data
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Toggle breaker mode failed'
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // P0-3: Fetch breaker status from API
+  async function fetchBreakerStatus() {
+    loading.value = true
+    error.value = ''
+    try {
+      const data = await riskApi.getCircuitBreakerStatus()
+      circuitBreakerTriggered.value = data.circuit_breaker_triggered ?? false
+      breakerMode.value = data.breaker_mode ?? 'warn'
+      dailyPnl.value = data.daily_pnl ?? 0
+      dailyPnlPct.value = data.daily_pnl_pct ?? 0
+      currentDrawdown.value = data.max_drawdown ?? 0
+      return data
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Fetch breaker status failed'
+      return null
+    } finally {
+      loading.value = false
+    }
   }
 
   return {
     barraExposures, covarianceMatrix, varData, cvarData, drawdownData,
     stressTestResult, loading, error,
     circuitBreakerTriggered, dailyPnl, dailyPnlPct, currentDrawdown,
-    circuitBreakerCooldown, riskLevel,
+    circuitBreakerCooldown, breakerMode, riskLevel,
     fetchBarra, fetchVaR, fetchCVaR, fetchDrawdown, runStressTest,
-    updateCircuitBreakerState,
+    updateCircuitBreakerState, resetCircuitBreaker, toggleBreakerMode,
+    fetchBreakerStatus,
   }
 })

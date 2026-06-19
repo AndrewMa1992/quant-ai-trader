@@ -110,6 +110,7 @@ class TransformerPredictor:
         self.scaler_mean = None
         self.scaler_std = None
         self._is_trained = False
+        self._untrained_warned = False
         logger.info(f"Transformer 预测器初始化 (device: {self.device})")
 
     def build_model(self, n_vars=40, seq_len=60, pred_len=5):
@@ -198,7 +199,16 @@ class TransformerPredictor:
 
     def predict(self, X):
         if self.model is None:
-            raise ValueError("模型未训练")
+            if not self._untrained_warned:
+                logger.warning("Transformer 模型未训练，返回降级预测结果")
+                self._untrained_warned = True
+            return {
+                "prediction_1d": {"low": 0.0, "mid": 0.0, "high": 0.0},
+                "prediction_5d": {"low": 0.0, "mid": 0.0, "high": 0.0},
+                "direction": "neutral",
+                "confidence": 0.0,
+                "status": "model_not_trained",
+            }
         if X.ndim == 2:
             X = X[np.newaxis, :, :]
         if self.scaler_mean is not None:

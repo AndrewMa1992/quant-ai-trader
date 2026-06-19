@@ -5,8 +5,12 @@ from typing import Optional
 from datetime import datetime
 import numpy as np
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/trade", tags=["trading"])
+
+# P0-3: v2 risk router for circuit breaker management
+risk_v2_router = APIRouter(prefix="/api/v2/risk", tags=["risk-v2"])
 
 # 这些会在 main.py 中注入
 executor = None
@@ -400,3 +404,66 @@ async def fix_short_positions():
         "orders": results,
         "message": f"Submitted {len(results)} buy orders to cover shorts"
     }
+
+
+# ============================================================
+# P0-3: v2 Risk API — Circuit Breaker Management
+# ============================================================
+
+class BreakerToggleRequest(BaseModel):
+    """断路器模式切换请求"""
+    mode: str  # "hard" 或 "warn"
+
+
+@risk_v2_router.get("/circuit_breaker")
+async def get_circuit_breaker_status():
+    """获取当前断路器状态（含 breaker_mode）"""
+    if risk_manager is None:
+        return {"error": "风控未初始化"}
+    status = risk_manager.get_status()
+    return {
+        "circuit_breaker_triggered": status.get("circuit_breaker_triggered", False),
+        "breaker_mode": status.get("breaker_mode", "warn"),
+        "daily_pnl": status.get("daily_pnl", 0),
+        "daily_pnl_pct": status.get("daily_pnl_pct", 0),
+        "max_drawdown": status.get("max_drawdown", 0),
+        "peak_value": status.get("peak_value", 0),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@risk_v2_router.post("/circuit_breaker/reset")
+async def reset_circuit_breaker():
+    """强制重置断路器并校准峰值"""
+    if risk_manager is None:
+        return {"error": "风控未初始化"}
+    try:
+        risk_manager.force_reset_circuit()
+        return {
+            "reset": True,
+            "breaker_mode": risk_manager.breaker_mode,
+            "circuit_breaker_triggered": risk_manager.circuit_breaker_triggered,
+            "peak_value": round(risk_manager.peak_value, 2),
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        return {"reset": False, "error": str(e)}
+
+
+@risk_v2_router.post("/circuit_breaker/toggle")
+async def toggle_circuit_breaker(req: BreakerToggleRequest):
+    """切换断路器模式: hard / warn"""
+    if risk_manager is None:
+        return {"error": "风控未初始化"}
+    if req.mode not in ("hard", "warn"):
+        return {"error": f"无效模式: {req.mode}，仅支持 'hard' 或 'warn'"}
+    try:
+        risk_manager.toggle_breaker_mode(req.mode)
+        return {
+            "toggled": True,
+            "breaker_mode": risk_manager.breaker_mode,
+            "circuit_breaker_triggered": risk_manager.circuit_breaker_triggered,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        return {"toggled": False, "error": str(e)}

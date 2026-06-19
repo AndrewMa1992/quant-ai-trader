@@ -496,6 +496,63 @@ class ChinaDataAdapter:
 
         return df
 
+    def health_check(self) -> Dict[str, bool | str]:
+        """
+        快速探测各数据源可达性
+        
+        使用轻量 ticker (SPY) 快速测试各源，每个源 5 秒超时。
+        失败不阻塞，返回各源状态和当前主数据源。
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        test_ticker = "SPY"
+        sources: Dict[str, bool] = {}
+
+        def _probe(name: str, fn) -> tuple:
+            """探测单个数据源，5秒超时"""
+            try:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(fn)
+                    df = future.result(timeout=5)
+                if df is not None and not df.empty and len(df) >= 3:
+                    return (name, True)
+            except Exception:
+                pass
+            return (name, False)
+
+        # 并行探测所有源（轻量请求：仅最近 1 月数据）
+        period = "1mo"
+        probes = [
+            ("eastmoney", lambda: get_history_eastmoney(test_ticker, period=period)),
+            ("efinance", lambda: get_history_efinance(test_ticker, period=period)),
+            ("tencent", lambda: get_history_tencent(test_ticker, period=period)),
+            ("yfinance", lambda: get_history_yfinance(test_ticker, period=period)),
+        ]
+
+        results: Dict[str, bool] = {}
+        with ThreadPoolExecutor(max_workers=len(probes)) as executor:
+            future_map = {executor.submit(_probe, name, fn): name for name, fn in probes}
+            for future in as_completed(future_map, timeout=10):
+                try:
+                    name, ok = future.result(timeout=5)
+                    results[name] = ok
+                except Exception:
+                    results[future_map[future]] = False
+
+        # 确保所有源都有结果
+        for name, _ in probes:
+            results.setdefault(name, False)
+
+        # 确定主数据源（按优先级第一个可用的）
+        primary = "yfinance"  # 默认回退
+        priority = ["eastmoney", "efinance", "tencent", "yfinance"]
+        for src in priority:
+            if results.get(src, False):
+                primary = src
+                break
+
+        return {**results, "primary": primary}
+
     def get_realtime_quote(self, ticker: str) -> Optional[Dict]:
         """获取实时行情 — 腾讯优先，新浪备选"""
         # 腾讯

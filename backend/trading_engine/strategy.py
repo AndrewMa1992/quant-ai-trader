@@ -157,7 +157,7 @@ class TradingStrategy:
         if all_tickers and features_dict:
             try:
                 # 优先使用 GAT
-                if gat_network.model is not None:
+                if getattr(gat_network, 'model', None) is not None:
                     cs = gat_network.get_cross_stock_signal(ticker, all_tickers, features_dict)
                 else:
                     cs = cross_stock.get_cross_stock_signal(ticker, all_tickers, features_dict)
@@ -184,13 +184,24 @@ class TradingStrategy:
 
         fused = self.ensemble.fuse_signals(signals, cross_stock_boost)
 
+        # 防御性访问：fuse_signals 可能返回异常格式（stub 模式等）
+        if not fused or not isinstance(fused, dict):
+            return {
+                "decision": "hold",
+                "strength": 0.0,
+                "confidence": 0.0,
+                "position_size": 0.0,
+                "ensemble_score": 0.0,
+                "details": {},
+            }
+
         return {
-            "decision": fused["decision"],
-            "strength": fused["strength"],
-            "confidence": fused["confidence"],
-            "position_size": fused["position_size"],
-            "ensemble_score": fused["ensemble_score"],
-            "details": fused["details"],
+            "decision": fused.get("decision", "hold"),
+            "strength": fused.get("strength", 0.0),
+            "confidence": fused.get("confidence", 0.0),
+            "position_size": fused.get("position_size", 0.0),
+            "ensemble_score": fused.get("ensemble_score", 0.0),
+            "details": fused.get("details", {}),
         }
 
     def _generate_technical_signal(self, features: np.ndarray) -> Dict:
