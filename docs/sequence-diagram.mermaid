@@ -1,115 +1,94 @@
 sequenceDiagram
-    participant VF as FactorResearch.vue
-    participant SF as useFactorStore
-    participant AF as factorApi
-    participant RF as routes_factors.py
-    participant HS as HistoricalStore
-    participant DB as SQLite DB
+    actor Daemon as daemon_win.ps1
+    participant Pipeline as trading_pipeline.py
+    participant Gateway as api_gateway :8001
+    participant Data as data_service :8011
+    participant Factor as factor_service :8012
+    participant Infer as model_infer :8014
+    participant Risk as risk_service :8015
+    participant Exec as execution_service :8016
+    participant DB as PostgreSQL
+    participant Redis as Redis :6379
 
-    VF->>VF: onMounted()
-    VF->>SF: fetchFactors()
-    SF->>AF: GET /api/v2/factors/factors
-    AF->>RF: HTTP request
-    RF->>HS: get_factors()
-    HS->>DB: SELECT * FROM factor_definitions
-    DB-->>HS: rows
-    HS-->>RF: FactorDef[]
-    RF-->>AF: {factors: [...], categories: {...}}
-    AF-->>SF: update factors, categories
-    SF-->>VF: reactive render
+    Note over Daemon: v2 启动链路
 
-    VF->>SF: fetchCorrelation(factorNames)
-    SF->>AF: GET /api/v2/factors/correlation?factor_names=...
-    AF->>RF: HTTP request
-    RF->>HS: get_factor_correlation(names)
-    HS->>DB: SELECT * FROM factor_correlation WHERE factor_1 IN (...) AND factor_2 IN (...)
-    DB-->>HS: rows
-    HS-->>RF: matrix + redundant pairs
-    RF-->>AF: {correlation_matrix: {...}, redundant_pairs: [...]}
-    AF-->>SF: update correlationMatrix, redundantPairs
-    SF-->>VF: heatmap render
+    Daemon->>Gateway: 启动 api_gateway/main.py
+    Gateway->>Gateway: lifespan: init DB + Redis
+    Gateway-->>Daemon: health OK
 
-    ---
+    Daemon->>Data: 启动 data_service
+    Daemon->>Factor: 启动 factor_service
+    Daemon->>Infer: 启动 model_infer
+    Daemon->>Risk: 启动 risk_service
+    Daemon->>Exec: 启动 execution_service
 
-    participant VD as Dashboard.vue
-    participant PS as usePortfolioStore
-    participant EE as executionApi
-    participant RT as routes_trade.py
-    participant PM as PortfolioManager
+    Daemon->>Pipeline: 启动 trading_pipeline.py
 
-    VD->>VD: onMounted()
-    par parallel fetch
-        VD->>PS: fetchDashboard()
-        PS->>EE: getDashboard() → GET /api/trade/dashboard
-        EE->>RT: HTTP request
-        RT->>PM: get_metrics() + compute sharpe/max_dd/wr
-        PM-->>RT: metrics + value_history
-        RT-->>EE: DashboardMetrics
-        EE-->>PS: update dashboardMetrics, navHistory
-    and
-        VD->>PS: fetchPositions()
-        PS->>EE: GET /api/trade/positions
-        EE->>RT: HTTP request
-        RT->>PM: positions + cash
-        PM-->>RT: positions list
-        RT-->>EE: {positions: [...], cash: ...}
-        EE-->>PS: update positions
+    loop 每 300s 一轮
+        Note over Pipeline: === Cycle #N ===
+
+        rect rgb(230, 245, 255)
+            Note over Pipeline,Data: Step 0: 获取活跃股票池
+            Pipeline->>Data: GET /api/v2/data/symbols?active=true
+            Data->>Redis: 读取缓存
+            Redis-->>Data: symbols list
+            Data-->>Pipeline: ["AAPL","MSFT",...]
+        end
+
+        rect rgb(230, 245, 255)
+            Note over Pipeline,Data: Step 1: 获取行情数据
+            Pipeline->>Data: GET /api/v2/data/bars?tickers=AAPL,MSFT,...
+            Data->>DB: 查询 OHLCV
+            DB-->>Data: DataFrame
+            Data-->>Pipeline: {ticker: {prices, volumes}}
+        end
+
+        rect rgb(255, 245, 230)
+            Note over Pipeline,Factor: Step 2: 因子计算（本地引擎）
+            Pipeline->>Factor: FactorEngine.compute_all_multi(data)
+            Factor-->>Pipeline: factor_df
+        end
+
+        rect rgb(255, 245, 230)
+            Note over Pipeline,Infer: Step 3: 模型推理（本地引擎）
+            Pipeline->>Infer: InferenceEngine.generate_signals_batch(factor_df)
+            Infer-->>Pipeline: [{ticker, signal, confidence}]
+        end
+
+        rect rgb(255, 230, 230)
+            Note over Pipeline,Risk: Step 4: 风控检查
+            loop 每个信号
+                Pipeline->>Pipeline: RiskGate.check(ticker, qty, price, ...)
+                Pipeline->>Risk: GET /api/v2/risk/exposures
+                Risk-->>Pipeline: factor exposures
+                Pipeline->>Risk: GET /api/v2/risk/var
+                Risk-->>Pipeline: VaR value
+                Pipeline->>Risk: POST /api/v2/risk/check
+                Risk->>Redis: 更新检查日志
+                Risk-->>Pipeline: {passed, reason, warnings}
+            end
+        end
+
+        rect rgb(230, 255, 230)
+            Note over Pipeline,Exec: Step 5: 组合优化
+            Pipeline->>Exec: POST /api/v2/execution/optimizer/bl
+            Exec-->>Pipeline: {weights: {AAPL: 0.15, ...}}
+        end
+
+        rect rgb(230, 255, 230)
+            Note over Pipeline,Exec: Step 6: 执行再平衡
+            loop 每个目标权重
+                Pipeline->>Exec: POST /api/v2/execution/order
+                Exec->>Exec: CircuitBreaker.allow_order()
+                Exec-->>Pipeline: {order_id, status, filled_price, filled_qty}
+            end
+        end
+
+        rect rgb(245, 245, 255)
+            Note over Pipeline,DB: Step 7: 绩效记录
+            Pipeline->>DB: INSERT INTO cycle_performance
+            Pipeline->>Redis: 更新组合快照
+        end
+
+        Note over Pipeline: Cycle #{N} 完成 | 耗时 X.Xs
     end
-    PS-->>VD: reactive render AccountSummary + NAV chart
-
-    ---
-
-    participant VB as BacktestAnalysis.vue
-    participant RP as routes_portfolio_history.py
-
-    VB->>VB: onMounted()
-    VB->>PS: fetchPortfolioHistory()
-    PS->>EE: GET /api/v2/analysis/portfolio-history
-    EE->>RP: HTTP request
-    RP->>HS: get_portfolio_snapshots(limit=1008)
-    HS->>DB: SELECT * FROM portfolio_snapshots ORDER BY timestamp DESC LIMIT 1008
-    DB-->>HS: rows
-    HS-->>RP: PortfolioSnapshot[]
-    RP-->>EE: {nav_history: [...], drawdown_history: [...], summary: {...}}
-    EE-->>PS: update portfolioHistory
-
-    VB->>PS: fetchYearlyReturns()
-    PS->>EE: GET /api/v2/analysis/yearly-returns
-    EE->>RP: HTTP request
-    RP->>HS: get_yearly_returns()
-    HS->>DB: SELECT strftime('%Y',timestamp) as year, (last/first-1) as ret FROM portfolio_snapshots GROUP BY year
-    DB-->>HS: yearly aggregations
-    HS-->>RP: YearlyReturn[]
-    RP-->>EE: {yearly_returns: [...]}
-    EE-->>PS: update yearlyReturns
-    PS-->>VB: reactive render equity curve + metrics + yearly bar chart
-
-    ---
-
-    participant VR as RiskDashboard.vue
-    participant RS as useRiskStore
-    participant RA as riskApi
-    participant RC as risk_v2_router
-    participant RM as RiskManager
-
-    VR->>VR: onMounted()
-    par parallel fetch
-        VR->>RS: fetchBreakerStatus()
-        RS->>RA: GET /api/v2/risk/circuit_breaker
-        RA->>RC: HTTP request
-        RC->>RM: get_status()
-        RM-->>RC: breaker state
-        RC-->>RA: CircuitBreakerStatus
-        RA-->>RS: update breaker fields
-    and
-        VR->>RS: fetchDrawdownHistory()
-        RS->>RA: GET /api/v2/risk/drawdown-history
-        RA->>RP: HTTP request
-        RP->>HS: get_portfolio_snapshots(drawdown_from_peak)
-        HS->>DB: SELECT timestamp, drawdown_from_peak FROM portfolio_snapshots ORDER BY timestamp
-        DB-->>HS: rows
-        HS-->>RP: drawdown timeline
-        RP-->>RA: {drawdown_timeline: [...], max_drawdown, current_drawdown}
-        RA-->>RS: update drawdownHistory
-    end
-    RS-->>VR: reactive render circuit breaker + drawdown chart + gauge

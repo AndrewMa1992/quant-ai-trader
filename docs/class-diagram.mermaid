@@ -1,150 +1,139 @@
 classDiagram
-    class FactorDef {
-        +String id
-        +String name
-        +String category
-        +String subcategory
-        +String description
-        +int lookback_default
-        +String frequency
-        +float direction
+    direction TB
+
+    class TrainRequest {
+        +str model_type
+        +list~str~ tickers
+        +str start_date
+        +str end_date
+        +dict hyperparams
     }
 
-    class ICAnalysis {
-        +float rank_ic_mean
-        +float rank_ic_std
-        +float information_ratio
-        +float ic_t_stat
-        +float positive_ic_ratio
-        +List~ICPoint~ ic_series
-        +List~CumICPoint~ ic_cumulative
-        +List~MonthlyIC~ monthly_ic
+    class TrainJob {
+        +str job_id
+        +str model_type
+        +str status
+        +float started_at
+        +float completed_at
+        +dict metrics
+        +str error
+        +str mlflow_run_id
+        +int model_version
     }
 
-    class ICPoint {
-        +String date
-        +float ic
+    class PredictRequest {
+        +str ticker
+        +dict~str,float~ features
+        +list~str~ model_types
     }
 
-    class CumICPoint {
-        +String date
-        +float cumulative_ic
+    class BatchPredictRequest {
+        +list~str~ tickers
+        +list~str~ model_types
     }
 
-    class MonthlyIC {
-        +int year
-        +int month
-        +float ic
+    class SignalResult {
+        +str ticker
+        +float signal
+        +float confidence
+        +str direction
+        +dict~str,float~ components
     }
 
-    class CorrMatrix {
-        +Dict~String,Dict~ correlation_matrix
-        +List~RedundantPair~ redundant_pairs
-    }
-
-    class RedundantPair {
-        +String factor_1
-        +String factor_2
-        +float correlation
-    }
-
-    class PortfolioSnapshot {
-        +String timestamp
-        +float total_value
-        +float cash
-        +float positions_value
-        +float daily_pnl
-        +float total_pnl
-        +float cumulative_return
-        +float drawdown_from_peak
-        +float sharpe_ratio
-    }
-
-    class PortfolioHistoryResponse {
-        +List~NavPoint~ nav_history
-        +List~DrawdownPoint~ drawdown_history
-        +PortfolioSummary summary
-        +int snapshot_count
-    }
-
-    class NavPoint {
-        +String time
-        +float value
-        +float cumulative_return
-    }
-
-    class DrawdownPoint {
-        +String time
-        +float drawdown
-    }
-
-    class YearlyReturnsResponse {
-        +List~YearlyReturn~ yearly_returns
-    }
-
-    class YearlyReturn {
-        +int year
-        +float return_pct
-    }
-
-    class ModelVersionWithMetrics {
-        +String name
-        +String type
-        +int version
-        +String stage
-        +String status
-        +float sharpe
-        +float pnl
-        +float win_rate
-        +String last_trained
-    }
-
-    class TradeLogEntry {
-        +int id
-        +String ticker
-        +String side
-        +float quantity
+    class RiskCheckRequest {
+        +str ticker
+        +int quantity
         +float price
-        +float value
-        +float commission
-        +String timestamp
+        +dict portfolio_state
         +float signal_strength
-        +String strategy
-        +String status
     }
 
-    class DashboardMetrics {
-        +float total_value
-        +float cash
-        +float positions_value
-        +float total_pnl
-        +float total_return_pct
-        +float sharpe_ratio
-        +float max_drawdown
-        +float max_drawdown_pct
-        +float win_rate
-        +float profit_factor
-        +float calmar_ratio
-        +int num_positions
-        +int total_trades
-        +int snapshot_count
-        +String timestamp
+    class RiskCheckResult {
+        +bool passed
+        +str reason
+        +list~str~ warnings
+        +dict~str,float~ sanitized_weights
     }
 
-    class HistoricalStore {
-        +get_factors(category?) List~FactorDef~
-        +get_factor_ic(factor_name, window) ICAnalysis
-        +get_factor_correlation(factor_names) CorrMatrix
-        +get_portfolio_snapshots(limit, since) List~PortfolioSnapshot~
-        +get_yearly_returns() List~YearlyReturn~
-        +get_model_versions_with_metrics() List~ModelVersionWithMetrics~
-        +get_trades(ticker, limit, since) DataFrame
+    class RiskLimits {
+        +float MAX_POSITION_SIZE
+        +float MAX_SINGLE_STOCK_EXPOSURE
+        +float STOP_LOSS
+        +float MAX_DRAWDOWN_PORTFOLIO
+        +float DAILY_LOSS_LIMIT
+        +float VAR_LIMIT
+        +float CVAR_LIMIT
+        +int COOLING_OFF_MINUTES
+        +int MAX_RETRY_ATTEMPTS
+        +get_limit(attr_name) float
+        +get_all_position_limits() dict
     }
 
-    HistoricalStore --> FactorDef : queries factor_definitions
-    HistoricalStore --> ICAnalysis : queries factor_ic
-    HistoricalStore --> CorrMatrix : queries factor_correlation
-    HistoricalStore --> PortfolioSnapshot : queries portfolio_snapshots
-    HistoricalStore --> YearlyReturn : aggregates portfolio_snapshots
-    HistoricalStore --> ModelVersionWithMetrics : joins model_versions+model_metrics
-    HistoricalStore --> TradeLogEntry : queries trades
+    class OrderRequest {
+        +str ticker
+        +str side
+        +int quantity
+        +str order_type
+        +float limit_price
+        +str algo
+        +str account
+    }
+
+    class OrderResult {
+        +str order_id
+        +str ticker
+        +str side
+        +int quantity
+        +float filled_price
+        +float filled_qty
+        +str status
+        +str algo
+        +float placed_at
+        +float updated_at
+        +dict raw_response
+    }
+
+    class CycleSummary {
+        +int cycle
+        +str timestamp
+        +int tickers
+        +int signals
+        +int approved
+        +int orders
+        +float elapsed_seconds
+    }
+
+    class APIResponse {
+        +bool success
+        +str message
+        +T data
+        +str code
+    }
+
+    class HealthResponse {
+        +str status
+        +str version
+        +float uptime_seconds
+        +str database
+        +str redis
+    }
+
+    class ErrorResponse {
+        +bool success
+        +str message
+        +str code
+        +dict details
+        +int status_code
+    }
+
+    TrainRequest --> TrainJob : 创建
+    PredictRequest --> SignalResult : 生成
+    BatchPredictRequest --> SignalResult : 批量生成
+    RiskCheckRequest --> RiskCheckResult : 校验
+    RiskCheckResult --> RiskLimits : 引用阈值
+    OrderRequest --> OrderResult : 执行
+    APIResponse --> SignalResult : 包装
+    APIResponse --> TrainJob : 包装
+    APIResponse --> RiskCheckResult : 包装
+    APIResponse --> OrderResult : 包装
+    APIResponse --> CycleSummary : 包装
