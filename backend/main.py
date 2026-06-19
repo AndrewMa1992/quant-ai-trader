@@ -32,6 +32,8 @@ from backend.data_engine.china_adapter import china_data_adapter
 from backend.api import (
     routes_data, routes_trade, routes_analysis, routes_models
 )
+from backend.api.routes_factors import router as factors_router
+from backend.api.routes_portfolio_history import router as portfolio_history_router
 
 
 # ================================================================
