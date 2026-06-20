@@ -1,94 +1,114 @@
 sequenceDiagram
-    actor Daemon as daemon_win.ps1
-    participant Pipeline as trading_pipeline.py
-    participant Gateway as api_gateway :8001
-    participant Data as data_service :8011
-    participant Factor as factor_service :8012
-    participant Infer as model_infer :8014
-    participant Risk as risk_service :8015
-    participant Exec as execution_service :8016
-    participant DB as PostgreSQL
-    participant Redis as Redis :6379
+    actor Main
+    participant TP as TradingPipeline
+    participant MS as MarketSession
+    participant TB as TigerBridge
+    participant PM as PortfolioManager
+    participant RM as RiskManager
+    participant DS as DailyState
+    participant FE as FactorEngine
+    participant IE as InferenceEngine
+    participant RG as RiskGate
+    participant TE as TigerExecutor
+    participant WP as WsPusher
+    participant EXEC as execution-service:8016
+    participant DATA as data-service:8011
 
-    Note over Daemon: v2 启动链路
+    Main->>TP: run_cycle()
 
-    Daemon->>Gateway: 启动 api_gateway/main.py
-    Gateway->>Gateway: lifespan: init DB + Redis
-    Gateway-->>Daemon: health OK
-
-    Daemon->>Data: 启动 data_service
-    Daemon->>Factor: 启动 factor_service
-    Daemon->>Infer: 启动 model_infer
-    Daemon->>Risk: 启动 risk_service
-    Daemon->>Exec: 启动 execution_service
-
-    Daemon->>Pipeline: 启动 trading_pipeline.py
-
-    loop 每 300s 一轮
-        Note over Pipeline: === Cycle #N ===
-
-        rect rgb(230, 245, 255)
-            Note over Pipeline,Data: Step 0: 获取活跃股票池
-            Pipeline->>Data: GET /api/v2/data/symbols?active=true
-            Data->>Redis: 读取缓存
-            Redis-->>Data: symbols list
-            Data-->>Pipeline: ["AAPL","MSFT",...]
-        end
-
-        rect rgb(230, 245, 255)
-            Note over Pipeline,Data: Step 1: 获取行情数据
-            Pipeline->>Data: GET /api/v2/data/bars?tickers=AAPL,MSFT,...
-            Data->>DB: 查询 OHLCV
-            DB-->>Data: DataFrame
-            Data-->>Pipeline: {ticker: {prices, volumes}}
-        end
-
-        rect rgb(255, 245, 230)
-            Note over Pipeline,Factor: Step 2: 因子计算（本地引擎）
-            Pipeline->>Factor: FactorEngine.compute_all_multi(data)
-            Factor-->>Pipeline: factor_df
-        end
-
-        rect rgb(255, 245, 230)
-            Note over Pipeline,Infer: Step 3: 模型推理（本地引擎）
-            Pipeline->>Infer: InferenceEngine.generate_signals_batch(factor_df)
-            Infer-->>Pipeline: [{ticker, signal, confidence}]
-        end
-
-        rect rgb(255, 230, 230)
-            Note over Pipeline,Risk: Step 4: 风控检查
-            loop 每个信号
-                Pipeline->>Pipeline: RiskGate.check(ticker, qty, price, ...)
-                Pipeline->>Risk: GET /api/v2/risk/exposures
-                Risk-->>Pipeline: factor exposures
-                Pipeline->>Risk: GET /api/v2/risk/var
-                Risk-->>Pipeline: VaR value
-                Pipeline->>Risk: POST /api/v2/risk/check
-                Risk->>Redis: 更新检查日志
-                Risk-->>Pipeline: {passed, reason, warnings}
-            end
-        end
-
-        rect rgb(230, 255, 230)
-            Note over Pipeline,Exec: Step 5: 组合优化
-            Pipeline->>Exec: POST /api/v2/execution/optimizer/bl
-            Exec-->>Pipeline: {weights: {AAPL: 0.15, ...}}
-        end
-
-        rect rgb(230, 255, 230)
-            Note over Pipeline,Exec: Step 6: 执行再平衡
-            loop 每个目标权重
-                Pipeline->>Exec: POST /api/v2/execution/order
-                Exec->>Exec: CircuitBreaker.allow_order()
-                Exec-->>Pipeline: {order_id, status, filled_price, filled_qty}
-            end
-        end
-
-        rect rgb(245, 245, 255)
-            Note over Pipeline,DB: Step 7: 绩效记录
-            Pipeline->>DB: INSERT INTO cycle_performance
-            Pipeline->>Redis: 更新组合快照
-        end
-
-        Note over Pipeline: Cycle #{N} 完成 | 耗时 X.Xs
+    Note over TP: ── Pre-cycle checks ──
+    TP->>DS: check_date_roll()
+    alt 新交易日
+        DS->>RM: reset_daily_state()
     end
+
+    TP->>MS: is_any_market_open()
+    alt 休市
+        TP-->>Main: return None (skip trading)
+    end
+
+    TP->>TB: get_account_info(force=true)
+    TB-->>TP: TigerAccount {cash, total_value, leverage}
+    TP->>PM: sync_from_tiger(tiger_bridge)
+    PM-->>TP: sync_result
+    TP->>RM: sync_portfolio_value(total, cash)
+
+    Note over TP: ── P0-2 Circuit Breaker ──
+    TP->>RM: check_circuit_breaker()
+    alt 熔断触发
+        RM->>RM: liquidate_all(prices)
+        RM-->>TP: RiskReport {circuit_breaker=true}
+        TP->>WP: push_alert("circuit_breaker")
+        TP-->>Main: return None
+    end
+
+    Note over TP: ── P1-1 Leverage Check ──
+    TP->>RM: check_leverage(tiger_acct)
+    alt leverage > 1.001
+        RM-->>TP: blocked=true
+    end
+
+    Note over TP: ── P1-2 Daily Trade Limit ──
+    TP->>RM: check_daily_limit()
+    alt trades_today >= max
+        RM-->>TP: limit_reached=true
+        TP-->>Main: return None (valuation only)
+    end
+
+    Note over TP: ── Step 0: Universe ──
+    TP->>TP: _get_active_universe()
+    TP->>DATA: GET /api/v2/data/universe
+    DATA-->>TP: tickers[]
+    TP->>WP: push_step_update(0, {tickers})
+
+    Note over TP: ── Step 1: Market Data ──
+    TP->>TP: _fetch_market_data(tickers)
+    TP->>WP: push_step_update(1, {data_count})
+
+    Note over TP: ── Step 2: Factors ──
+    TP->>FE: compute_all_multi(dfs)
+    FE-->>TP: factor_df
+    TP->>WP: push_step_update(2, {n_factors})
+
+    Note over TP: ── Step 3: Inference ──
+    TP->>IE: generate_signals_batch(factor_df)
+    IE-->>TP: signals[]
+    TP->>WP: push_step_update(3, {n_signals})
+
+    Note over TP: ── Step 4: Risk Checks ──
+    loop each signal
+        TP->>RG: check(ticker, qty, price, portfolio, strength)
+        RG-->>TP: RiskResult
+    end
+    TP->>WP: push_step_update(4, {approved, rejected})
+
+    Note over TP: ── Step 5: Portfolio Optimization ──
+    TP->>EXEC: POST /api/v2/execution/optimizer/bl
+    EXEC-->>TP: weights{}
+    TP->>WP: push_step_update(5, {n_weights})
+
+    Note over TP: ── Step 6: Execute ──
+    loop each ticker in target_weights
+        TP->>TE: execute_rebalance(ticker, weight, price, positions)
+        TE->>RM: check_order(ticker, side, qty, price)
+        alt EXECUTION_MODE = "live"
+            TE->>TB: place_order(ticker, action, qty, "MKT", price)
+            TB-->>TE: order_result
+        else paper
+            TE->>PM: execute_trade(ticker, side, price, ...)
+            PM-->>TE: trade_record
+        end
+        TE-->>TP: order
+    end
+    TP->>WP: push_step_update(6, {n_orders})
+
+    Note over TP: ── Post-trade checks ──
+    TP->>RM: check_circuit_breaker()
+    TP->>RM: fix_short_positions(portfolio, executor, prices)
+
+    Note over TP: ── Step 7: Record ──
+    TP->>TP: _record_performance(orders)
+    TP->>PM: save_state()
+    TP->>WP: push_cycle_update(7, cycle_summary)
+
+    TP-->>Main: cycle_summary

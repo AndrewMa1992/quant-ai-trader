@@ -107,26 +107,63 @@ class ModelRegistry:
     def get_model_path(self, model_type: str) -> Optional[str]:
         """Get local filesystem path for a model checkpoint.
 
+        Scans both the configured model save directory and data/models/
+        for checkpoint files. Supports versioned file naming (v1, v2, ...)
+        and returns the highest version found.
+
         Args:
             model_type: Model type.
 
         Returns:
             File path to model checkpoint or None.
         """
+        import glob
         import os
+        import re
         from services.model_train_service.config import train_config
 
-        # Check local checkpoint first
         checkpoint_dir = train_config.MODEL_SAVE_DIR
-        checkpoint_path = os.path.join(checkpoint_dir, f"{model_type}_latest.pkl")
+        search_dirs: list[str] = [
+            os.path.abspath(checkpoint_dir),
+            os.path.abspath(os.path.join("data", "models")),
+        ]
+        extensions: tuple[str, ...] = (".pkl", ".pt", ".ckpt", ".joblib")
 
-        if os.path.exists(checkpoint_path):
-            return checkpoint_path
+        candidates: list[tuple[int, str]] = []  # (version, path)
 
-        # Check alternatives
-        for ext in [".pkl", ".pt", ".ckpt"]:
-            alt_path = os.path.join(checkpoint_dir, f"{model_type}{ext}")
-            if os.path.exists(alt_path):
-                return alt_path
+        for search_dir in search_dirs:
+            if not os.path.isdir(search_dir):
+                continue
 
-        return None
+            # 1) Check {model_type}_latest.pkl
+            latest_path = os.path.join(search_dir, f"{model_type}_latest.pkl")
+            if os.path.exists(latest_path):
+                candidates.append((999999, latest_path))  # "latest" trumps all
+
+            # 2) Check exact {model_type}{ext}
+            for ext in extensions:
+                exact_path = os.path.join(search_dir, f"{model_type}{ext}")
+                if os.path.exists(exact_path):
+                    candidates.append((0, exact_path))
+
+            # 3) Scan for {model_type}_v* patterns
+            for ext in extensions:
+                pattern = os.path.join(search_dir, f"{model_type}_v*{ext}")
+                for match in glob.glob(pattern):
+                    basename = os.path.basename(match)
+                    # Extract version number from e.g. "gbdt_v2.joblib"
+                    m = re.search(r"_v(\d+)", basename)
+                    if m:
+                        version = int(m.group(1))
+                        candidates.append((version, match))
+
+        if not candidates:
+            return None
+
+        # Sort by version descending, pick highest
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        best_version, best_path = candidates[0]
+        logger.debug(
+            f"get_model_path({model_type}): selected v{best_version} at {best_path}"
+        )
+        return best_path

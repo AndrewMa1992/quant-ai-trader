@@ -142,6 +142,33 @@ class WebSocketManager:
         except Exception:
             await self.disconnect(websocket)
 
+    async def push_cycle_data(self, data: dict) -> None:
+        """Broadcast cycle data to the 'market-data' room.
+
+        Args:
+            data: Cycle data dict to broadcast.
+        """
+        await self.broadcast_to_room("market-data", data)
+
+    async def push_tiger_snapshot(self, data: dict) -> None:
+        """Broadcast Tiger snapshot to the 'tiger' room.
+
+        Args:
+            data: Tiger snapshot data dict to broadcast.
+        """
+        await self.broadcast_to_room("tiger", data)
+
+    def room_size(self, room: str) -> int:
+        """Return the number of connections in a specific room.
+
+        Args:
+            room: Room name.
+
+        Returns:
+            Number of WebSocket connections in the room.
+        """
+        return len(self.rooms.get(room, set()))
+
     @property
     def connection_count(self) -> int:
         """Return the number of active WebSocket connections."""

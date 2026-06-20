@@ -1,139 +1,162 @@
 classDiagram
-    direction TB
-
-    class TrainRequest {
-        +str model_type
-        +list~str~ tickers
-        +str start_date
-        +str end_date
-        +dict hyperparams
+    class TradingPipeline {
+        +PipelineConfig config
+        +TigerBridge tiger
+        +MarketSession market_session
+        +PortfolioManager portfolio
+        +RiskManager risk
+        +TigerExecutor executor
+        +WsPusher ws_pusher
+        +FactorEngine factor_engine
+        +InferenceEngine inference_engine
+        +RiskGate risk_gate
+        +int cycle_count
+        +__init__(config)
+        +run(interval_seconds)
+        +run_cycle() Dict
+        -_get_active_universe() List~str~
+        -_fetch_market_data(tickers) Dict
+        -_compute_factors(data) DataFrame
+        -_run_inference(factor_df, tickers) List~Dict~
+        -_apply_risk_checks(signals) List~Dict~
+        -_optimize_portfolio(signals) Dict
+        -_execute_rebalance(weights) List~Dict~
+        -_record_performance(orders) None
+        -_sync_tiger_state() None
+        -_check_market_open() bool
+        -_check_circuit_breaker() bool
+        -_push_step_update(step, data) None
+        +close() None
     }
 
-    class TrainJob {
-        +str job_id
-        +str model_type
-        +str status
-        +float started_at
-        +float completed_at
-        +dict metrics
-        +str error
-        +str mlflow_run_id
-        +int model_version
+    class TigerBridge {
+        -TigerClient _client
+        -bool _connected
+        +connect() bool
+        +get_account_info(force) Optional~Dict~
+        +get_positions(force) List~Dict~
+        +place_order(ticker, action, quantity, type, price) Optional~Dict~
+        +get_quote(ticker) Optional~Dict~
+        +sync_all_to_db() Dict
+        +is_connected() bool
+        +get_status() Dict
     }
 
-    class PredictRequest {
-        +str ticker
-        +dict~str,float~ features
-        +list~str~ model_types
+    class MarketSession {
+        +bool US
+        +bool US_regular
+        +bool US_extended
+        +bool US_overnight
+        +bool HK
+        +bool SG
+        +bool AU
+        +bool NZ
+        +is_any_market_open() bool
+        +is_us_market_open() bool
+        +is_hk_market_open() bool
+        +get_status() Dict
     }
 
-    class BatchPredictRequest {
-        +list~str~ tickers
-        +list~str~ model_types
+    class PortfolioManager {
+        +float cash
+        +float total_value
+        +Dict~str,float~ positions
+        +Dict~str,float~ avg_costs
+        +Dict~str,float~ position_values
+        +float initial_capital
+        +sync_from_tiger(tiger_bridge, force) Dict
+        +execute_trade(ticker, side, price, strength, strategy) Optional~Dict~
+        +update_value(prices) None
+        +get_metrics() Dict
+        +save_state() None
+        +load_state() Optional~Dict~
     }
 
-    class SignalResult {
-        +str ticker
-        +float signal
-        +float confidence
-        +str direction
-        +dict~str,float~ components
+    class RiskManager {
+        +float portfolio_value
+        +float daily_start_value
+        +float peak_value
+        +bool circuit_breaker_triggered
+        +str breaker_mode
+        +int trades_today
+        +int max_daily_trades
+        +check_circuit_breaker() RiskReport
+        +liquidate_all(prices) List~Dict~
+        +check_leverage(tiger_acct) bool
+        +check_daily_limit() bool
+        +check_order(ticker, side, quantity, price) RiskReport
+        +sync_portfolio_value(total, cash) None
+        +reset_daily_state() None
+        +get_status() Dict
+        +fix_short_positions(portfolio, executor, prices) int
     }
 
-    class RiskCheckRequest {
-        +str ticker
-        +int quantity
-        +float price
-        +dict portfolio_state
-        +float signal_strength
+    class TigerExecutor {
+        +str mode
+        +PortfolioManager portfolio
+        +RiskManager risk
+        +TigerBridge tiger
+        +execute_signal(ticker, decision, strength, price, confidence, strategy) Optional~Dict~
+        +execute_rebalance(target_weights, prices, current_positions) List~Dict~
+        -_execute_live(ticker, action, quantity, price) Optional~Dict~
+        -_execute_paper(ticker, action, quantity, price, strategy) Optional~Dict~
     }
 
-    class RiskCheckResult {
+    class WsPusher {
+        +str api_url
+        +push_cycle_update(cycle, step, data) None
+        +push_trade(trade) None
+        +push_alert(level, message) None
+    }
+
+    class DailyState {
+        +str trade_date
+        +int trades_today
+        +bool circuit_broken
+        +float daily_start_value
+        +check_date_roll() bool
+        +increment_trades() None
+        +reset_for_new_day(start_value) None
+    }
+
+    class PipelineConfig {
+        +int CYCLE_INTERVAL_SECONDS
+        +bool TRADING_HOURS_ONLY
+        +int MAX_TICKERS_PER_CYCLE
+        +float SIGNAL_THRESHOLD
+        +float MIN_CONFIDENCE
+        +bool ENABLE_RISK_CHECKS
+        +bool ENABLE_PORTFOLIO_OPT
+        +str EXECUTION_MODE
+        +int MAX_DAILY_TRADES
+        +float DAILY_LOSS_LIMIT
+        +float LEVERAGE_LIMIT
+        +int V1_FALLBACK_RETRIES
+        +bool GIT_AUTO_SYNC
+        +bool ENABLE_WS_PUSH
+    }
+
+    class RiskReport {
         +bool passed
         +str reason
-        +list~str~ warnings
-        +dict~str,float~ sanitized_weights
+        +List~str~ warnings
+        +bool circuit_breaker
+        +bool daily_limit_reached
+        +bool leverage_blocked
+        +Dict details
     }
 
-    class RiskLimits {
-        +float MAX_POSITION_SIZE
-        +float MAX_SINGLE_STOCK_EXPOSURE
-        +float STOP_LOSS
-        +float MAX_DRAWDOWN_PORTFOLIO
-        +float DAILY_LOSS_LIMIT
-        +float VAR_LIMIT
-        +float CVAR_LIMIT
-        +int COOLING_OFF_MINUTES
-        +int MAX_RETRY_ATTEMPTS
-        +get_limit(attr_name) float
-        +get_all_position_limits() dict
-    }
-
-    class OrderRequest {
-        +str ticker
-        +str side
-        +int quantity
-        +str order_type
-        +float limit_price
-        +str algo
-        +str account
-    }
-
-    class OrderResult {
-        +str order_id
-        +str ticker
-        +str side
-        +int quantity
-        +float filled_price
-        +float filled_qty
-        +str status
-        +str algo
-        +float placed_at
-        +float updated_at
-        +dict raw_response
-    }
-
-    class CycleSummary {
-        +int cycle
-        +str timestamp
-        +int tickers
-        +int signals
-        +int approved
-        +int orders
-        +float elapsed_seconds
-    }
-
-    class APIResponse {
-        +bool success
-        +str message
-        +T data
-        +str code
-    }
-
-    class HealthResponse {
-        +str status
-        +str version
-        +float uptime_seconds
-        +str database
-        +str redis
-    }
-
-    class ErrorResponse {
-        +bool success
-        +str message
-        +str code
-        +dict details
-        +int status_code
-    }
-
-    TrainRequest --> TrainJob : 创建
-    PredictRequest --> SignalResult : 生成
-    BatchPredictRequest --> SignalResult : 批量生成
-    RiskCheckRequest --> RiskCheckResult : 校验
-    RiskCheckResult --> RiskLimits : 引用阈值
-    OrderRequest --> OrderResult : 执行
-    APIResponse --> SignalResult : 包装
-    APIResponse --> TrainJob : 包装
-    APIResponse --> RiskCheckResult : 包装
-    APIResponse --> OrderResult : 包装
-    APIResponse --> CycleSummary : 包装
+    TradingPipeline --> TigerBridge : uses
+    TradingPipeline --> MarketSession : uses
+    TradingPipeline --> PortfolioManager : owns
+    TradingPipeline --> RiskManager : owns
+    TradingPipeline --> TigerExecutor : owns
+    TradingPipeline --> WsPusher : uses
+    TradingPipeline --> DailyState : owns
+    TradingPipeline --> PipelineConfig : config
+    TigerExecutor --> TigerBridge : uses
+    TigerExecutor --> PortfolioManager : references
+    TigerExecutor --> RiskManager : references
+    RiskManager --> PortfolioManager : reads
+    PortfolioManager --> TigerBridge : syncs from
+    RiskManager --> RiskReport : produces

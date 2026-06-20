@@ -3,6 +3,12 @@ Trading Pipeline — v2 核心交易编排器
 =====================================
 替代 v1 auto_trader.py，串联六微服务执行 T+0 交易周期。
 
+v2.2 重构 (T04):
+  • Pre-cycle: 交易日切换 / 市场时段 / Tiger同步 / 熔断 / 杠杆 / 日交易上限
+  • 七步主线: Universe → Data → Factors → Inference → Risk → Optimize → Execute
+  • Post-cycle: 空头修复 / WS推送 / 状态保存
+  • TigerExecutor 统一 live/paper 执行
+
 七步流程:
   0. Get Active Universe — 获取当日活跃股票池
   1. Fetch Market Data — HTTP → data-service:8011
@@ -10,7 +16,7 @@ Trading Pipeline — v2 核心交易编排器
   3. Run Inference — 本地 InferenceEngine
   4. Apply Risk Checks — RiskGate（四道风控）
   5. Optimize Portfolio — HTTP → execution-service:8016 BL optimizer
-  6. Execute Rebalance — TigerBroker + TWAP/VWAP
+  6. Execute Rebalance — TigerExecutor (live/paper)
   7. Record Performance — 写入 shared database
 """
 import asyncio
@@ -21,11 +27,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import httpx
+import numpy as np
+import pandas as pd
 from loguru import logger
 
 from configs.pipeline_config import PipelineConfig, pipeline_config
 from shared.risk_gate import RiskGate, RiskResult
 from shared.signal_to_views import signals_to_bl_views, validate_views
+import shared.tiger_bridge as _tiger_bridge
 
 # ── v2 服务模块（已有，不改动） ──────────────────────────────
 try:
@@ -46,10 +55,14 @@ except ImportError as e:
     logger.warning(f"CircuitBreaker import failed ({e}), using stub")
     CircuitBreaker = None  # type: ignore[assignment]
 
-# ── v1 → v2 桥接（v1 模块保留用于过渡） ─────────────────────
-from backend.data_engine.tiger_client import tiger_client as _tiger_client
-from backend.trading_engine.portfolio import PortfolioManager
-from backend.trading_engine.risk_manager import RiskManager
+# ── v2 共享模块 ───────────────────────────────────────────────
+from shared.portfolio_manager import PortfolioManager
+from shared.risk_manager import RiskManager
+from shared.tiger_executor import TigerExecutor
+from shared.daily_state import DailyState
+from shared.ws_pusher import WsPusher
+from shared.market_session import get_market_status, is_any_market_open
+from shared.git_sync import git_sync
 
 
 class TradingPipeline:
@@ -57,11 +70,25 @@ class TradingPipeline:
 
     七步串联 v2 微服务管线，替代 v1 auto_trader.py。
     每步独立 try/except，单步失败不中断整轮循环。
+
+    Pre-cycle 检查 (P0/P1):
+      - 交易日切换 → 重置风控与日初数据
+      - 市场时段 → 休市时仅更新估值
+      - Tiger 同步 → 全覆盖拉取持仓/现金
+      - 组合熔断 → 日亏≥5% 或回撤≥25% 触发平仓
+      - 杠杆铁律 → 杠杆≥1.001 阻止所有买入
+      - 日交易上限 → 达上限后跳过交易仅更新估值
+
+    Post-cycle 检查:
+      - 空头修复 → 检测负持仓自动买回
+      - WS 推送 → 每步和周期总结推送到前端
+      - 状态保存 → portfolio/risk 状态持久化
     """
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config: PipelineConfig = config
         self.service_urls: Dict[str, str] = config.SERVICE_BASE_URLS
+        self.logger = logger  # alias for readability
 
         # ── 本地引擎（v2 已有，导入失败时降级为 stub） ──────
         logger.info("初始化本地引擎...")
@@ -98,20 +125,67 @@ class TradingPipeline:
         )
         logger.info("  ✅ RiskGate (四道风控) 已就绪")
 
-        # ── 交易组件 ─────────────────────────────────────────
-        logger.info("初始化交易组件...")
-        self.portfolio: PortfolioManager = PortfolioManager()
-        self.risk_manager: RiskManager = RiskManager()
-        self.position_tracker = self.portfolio  # alias for backward compat
+        # ── 组合管理 ─────────────────────────────────────────
+        logger.info("初始化组合管理器...")
+        self.portfolio: PortfolioManager = PortfolioManager(
+            initial_capital=100000.0,
+        )
+        # 尝试加载已有状态
+        self.portfolio.load_state("data/portfolio_state.json")
+        logger.info(
+            f"  ✅ PortfolioManager 已就绪 "
+            f"(现金 ${self.portfolio.cash:,.2f}, "
+            f"持仓 {len(self.portfolio.positions)} 只)"
+        )
 
-        # Tiger 连接
-        self.tiger_ready: bool = _tiger_client.connect()
+        # ── 风控管理器 (v2) ──────────────────────────────────
+        logger.info("初始化风控管理器 (v2)...")
+        self.risk_manager: RiskManager = RiskManager(
+            initial_capital=self.portfolio.initial_capital,
+            breaker_mode="hard",
+            max_daily_trades=config.MAX_DAILY_TRADES,
+        )
+        self.risk_manager.sync_portfolio_value(
+            self.portfolio.total_value,
+            self.portfolio.cash,
+        )
+        logger.info("  ✅ RiskManager (v2) 已就绪")
+
+        # ── 每日状态追踪 ─────────────────────────────────────
+        self.daily_state: DailyState = DailyState(
+            daily_start_value=self.portfolio.total_value,
+        )
+        logger.info("  ✅ DailyState 已就绪")
+
+        # ── Tiger 连接 ───────────────────────────────────────
+        logger.info("初始化 Tiger 连接...")
+        self.tiger = _tiger_bridge
+        self.tiger_ready: bool = self.tiger.connect()
         if self.tiger_ready:
             logger.info("  ✅ Tiger Broker 已连接")
         else:
             logger.warning("  ⚠️ Tiger Broker 未连接 — Paper Trading 模式")
 
-        self.tiger_broker = _tiger_client  # alias
+        # ── 执行器 ───────────────────────────────────────────
+        logger.info("初始化 TigerExecutor...")
+        self.executor: TigerExecutor = TigerExecutor(
+            mode="live" if self.tiger_ready else "paper",
+            portfolio=self.portfolio,
+            risk=self.risk_manager,
+            tiger_bridge=self.tiger,
+        )
+        logger.info(f"  ✅ TigerExecutor 已就绪 (mode={self.executor.mode})")
+
+        # ── WebSocket 推送器 ─────────────────────────────────
+        api_base: str = self.service_urls.get("api", "")
+        self.ws_pusher: WsPusher = WsPusher(
+            api_url=api_base,
+            enabled=config.ENABLE_WS_PUSH,
+        )
+        if config.ENABLE_WS_PUSH:
+            logger.info("  ✅ WsPusher 已启用")
+        else:
+            logger.info("  ⚠️ WsPusher 已禁用 (ENABLE_WS_PUSH=False)")
 
         # ── 数据目录 ─────────────────────────────────────────
         self.data_dir: Path = Path("data/daily")
@@ -143,6 +217,7 @@ class TradingPipeline:
             await self._http.aclose()
             self._http = None
         await self.risk_gate.close()
+        await self.ws_pusher.close()
 
     # ═══════════════════════════════════════════════════════════════
     # Main Loop
@@ -155,6 +230,14 @@ class TradingPipeline:
             interval_seconds: 循环间隔，默认 300s (5 min)
         """
         logger.info(f"🚀 交易管线启动 — 间隔 {interval_seconds}s")
+
+        # ── P2-3: 强制卖出指定持仓 ──────────────────────────
+        if self.config.FORCE_SELL_TICKERS:
+            try:
+                self._execute_force_sells()
+            except Exception as exc:
+                logger.error(f"强制清仓异常 (非致命): {exc}")
+
         try:
             while True:
                 try:
@@ -167,6 +250,17 @@ class TradingPipeline:
                     logger.info(f"休眠 {retry_wait}s 后重试...")
                     await asyncio.sleep(retry_wait)
                     continue
+
+                # ── P2-1: Git 自动同步 (每6周期) ────────────
+                if (
+                    self.config.GIT_AUTO_SYNC
+                    and self.cycle_count > 0
+                    and self.cycle_count % 6 == 0
+                ):
+                    try:
+                        self._git_sync()
+                    except Exception as exc:
+                        logger.debug(f"Git 同步异常 (静默): {exc}")
 
                 logger.info(f"休眠 {interval_seconds // 60} 分钟...")
                 await asyncio.sleep(interval_seconds)
@@ -182,18 +276,104 @@ class TradingPipeline:
         self.cycle_count += 1
         t_start: float = time.time()
 
-        # ── 日期切换检测 ────────────────────────────────────
-        today: str = datetime.now().strftime("%Y-%m-%d")
-        if today != self.trade_date:
-            self.trades_today = 0
-            self.trade_date = today
-            logger.info(f"📅 新交易日 {today}，重置交易计数")
-
         logger.info(
             f"\n{'=' * 50}\n"
             f"  Cycle #{self.cycle_count} — {datetime.now().strftime('%H:%M:%S')}\n"
             f"{'=' * 50}"
         )
+
+        # ═══════════════════════════════════════════════════════════
+        # Pre-cycle 检查
+        # ═══════════════════════════════════════════════════════════
+
+        # ── 1. 交易日切换检测 ────────────────────────────────
+        if self.daily_state.check_date_roll():
+            self.risk_manager.reset_daily_state()
+            self.daily_state.reset_for_new_day(self.portfolio.total_value)
+            self.trades_today = 0
+            self.trade_date = self.daily_state.trade_date
+
+        # ── 2. P0-3: 市场时段检查 ────────────────────────────
+        if self.config.TRADING_HOURS_ONLY:
+            try:
+                if not is_any_market_open():
+                    logger.info("📴 所有市场休市，跳过交易 — 仅更新估值")
+                    prices = await self._get_live_prices()
+                    self.portfolio.update_value(prices)
+                    await self._push_step_update(0, {
+                        "status": "markets_closed",
+                        "portfolio": self.portfolio.get_metrics(),
+                    })
+                    return None
+            except Exception as e:
+                logger.warning(f"市场时段检查异常: {e}，继续执行")
+
+        # ── 3. P0-4, P0-5: Tiger 状态同步 ────────────────────
+        if self.tiger_ready:
+            try:
+                sync_result = self.portfolio.sync_from_tiger(self.tiger, force=False)
+                if sync_result.get("synced"):
+                    self.risk_manager.sync_portfolio_value(
+                        self.portfolio.total_value,
+                        self.portfolio.cash,
+                    )
+                    logger.info(
+                        f"🔄 Tiger 同步: {sync_result.get('positions')} 只持仓, "
+                        f"现金 ${sync_result.get('cash', 0):,.2f}"
+                    )
+            except Exception as e:
+                logger.warning(f"Tiger 同步异常（继续使用本地数据）: {e}")
+
+        # ── 4. P0-2: 组合熔断检查 ────────────────────────────
+        try:
+            prices = await self._get_live_prices()
+            self.portfolio.update_value(prices)
+        except Exception:
+            prices = {}
+
+        report = self.risk_manager.check_circuit_breaker()
+        if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
+            logger.error(f"🚨 熔断触发: {report.reason}")
+            await self.ws_pusher.push_alert("circuit_breaker", report.reason)
+            self.risk_manager.liquidate_all(prices, self.tiger)
+            await self._push_step_update(-1, {
+                "circuit_breaker": True,
+                "reason": report.reason,
+            })
+            return None
+
+        # ── 5. P1-1: 杠杆检查 ────────────────────────────────
+        leverage_blocked: bool = False
+        if self.tiger_ready:
+            try:
+                acct = self.tiger.get_account_info()
+                if acct and self.risk_manager.check_leverage(acct):
+                    logger.warning("🚫 杠杆铁律: 阻止所有买入")
+                    await self.ws_pusher.push_alert(
+                        "leverage",
+                        f"Tiger 杠杆率 {acct.get('leverage', '?')} ≥ 1.001 — 阻止所有买入",
+                    )
+                    leverage_blocked = True
+            except Exception as e:
+                logger.warning(f"杠杆检查异常: {e}")
+
+        # ── 6. P1-2: 每日交易上限 ────────────────────────────
+        if self.risk_manager.check_daily_limit():
+            logger.info(
+                f"📊 日交易上限已达 ({self.risk_manager.trades_today}/"
+                f"{self.risk_manager.max_daily_trades})，仅更新估值"
+            )
+            self.portfolio.update_value(prices)
+            await self._push_step_update(0, {
+                "status": "daily_limit_reached",
+                "trades_today": self.risk_manager.trades_today,
+                "max_daily_trades": self.risk_manager.max_daily_trades,
+            })
+            return None
+
+        # ═══════════════════════════════════════════════════════════
+        # Main Pipeline (7 Steps)
+        # ═══════════════════════════════════════════════════════════
 
         # Step 0: Get Active Universe
         tickers: List[str] = await self._get_active_universe()
@@ -201,33 +381,82 @@ class TradingPipeline:
             logger.warning("活跃股票池为空，跳过本轮")
             return None
         logger.info(f"Step 0: 股票池 {len(tickers)} 只")
+        await self._push_step_update(0, {"tickers": len(tickers)})
 
         # Step 1: Fetch Market Data
         data: Dict = await self._fetch_market_data(tickers)
         if not data or len(data) < 2:
             logger.warning("市场数据不足，跳过本轮")
             return None
+        await self._push_step_update(1, {"symbols_fetched": len(data)})
 
         # Step 2: Compute Factors
         factor_df = await self._compute_factors(data)
+        n_factors: int = factor_df.shape[1] - 1 if factor_df.shape[1] > 1 else 0
+        await self._push_step_update(2, {
+            "tickers_processed": len(factor_df),
+            "factors": n_factors,
+        })
 
         # Step 3: Run Inference
         signals: List[Dict] = await self._run_inference(factor_df, tickers)
         if not signals:
             logger.warning("无有效信号，跳过本轮")
             return None
+        await self._push_step_update(3, {"raw_signals": len(signals)})
 
         # Step 4: Apply Risk Checks
         approved: List[Dict] = await self._apply_risk_checks(signals)
+        await self._push_step_update(4, {
+            "approved": len(approved),
+            "rejected": len(signals) - len(approved),
+        })
 
         # Step 5: Optimize Portfolio
         target_weights: Dict = await self._optimize_portfolio(approved)
+        await self._push_step_update(5, {
+            "target_positions": len(target_weights),
+        })
 
-        # Step 6: Execute Rebalance
+        # Step 6: Execute Rebalance — TigerExecutor
         orders: List[Dict] = await self._execute_rebalance(target_weights)
+        await self._push_step_update(6, {
+            "orders": len(orders),
+            "trades_today": self.trades_today,
+        })
 
         # Step 7: Record Performance
         await self._record_performance(orders)
+
+        # ═══════════════════════════════════════════════════════════
+        # Post-cycle 检查
+        # ═══════════════════════════════════════════════════════════
+
+        # ── 7. P1-3: 空头修复 ────────────────────────────────
+        try:
+            if not prices:
+                prices = await self._get_live_prices()
+            fixed: int = self.risk_manager.fix_short_positions(
+                self.portfolio, self.tiger, prices,
+            )
+            if fixed:
+                logger.info(f"🔧 空头修复: {fixed} 只")
+        except Exception as e:
+            logger.warning(f"空头修复异常: {e}")
+
+        # ── 8. 状态保存 ──────────────────────────────────────
+        try:
+            self.portfolio.save_state()
+        except Exception as e:
+            logger.warning(f"状态保存异常: {e}")
+
+        # ── P2-2: Tiger 全量同步到本地 DB (每10轮) ──────────
+        if self.tiger_ready and self.cycle_count % 10 == 0:
+            try:
+                self.tiger.sync_all_to_db()
+                logger.debug(f"Tiger 全量同步完成 (cycle #{self.cycle_count})")
+            except Exception:
+                pass  # 静默降级，不阻塞交易
 
         # ── 周期汇总 ─────────────────────────────────────────
         elapsed: float = time.time() - t_start
@@ -237,7 +466,7 @@ class TradingPipeline:
             f"| 信号 {len(signals)} → 通过 {len(approved)} → 订单 {len(orders)}"
         )
 
-        return {
+        cycle_summary = {
             "cycle": self.cycle_count,
             "timestamp": datetime.now().isoformat(),
             "tickers": len(tickers),
@@ -246,6 +475,11 @@ class TradingPipeline:
             "orders": len(orders),
             "elapsed_seconds": round(elapsed, 2),
         }
+
+        # ── P1-5: WS 推送周期总结 ────────────────────────────
+        await self.ws_pusher.push_summary(self.cycle_count, cycle_summary)
+
+        return cycle_summary
 
     # ═══════════════════════════════════════════════════════════════
     # Step 0: Get Active Universe
@@ -258,27 +492,26 @@ class TradingPipeline:
             List of ticker strings, capped at MAX_TICKERS_PER_CYCLE.
         """
         t0: float = time.time()
+        tickers: List[str] = []
         try:
-            # v2: 从 data-service 获取股票池
-            http = await self._get_http()
-            resp = await http.get(
-                f"{self.service_urls['data']}/api/v2/data/symbols",
+            # v2: 从 data-service 获取股票池 (带重试)
+            data = await self._retry_http_call(
+                "GET",
+                f"{self.service_urls['data']}/api/v2/data/universe",
                 params={"active": "true"},
             )
-            if resp.status_code == 200:
-                data = resp.json()
+            if data is not None:
                 symbols_data = data.get("data", data)
-                if isinstance(symbols_data, list):
+                if isinstance(symbols_data, dict) and "stocks" in symbols_data:
+                    tickers = [s["ticker"] for s in symbols_data["stocks"] if s.get("ticker")]
+                elif isinstance(symbols_data, list):
                     tickers = [
                         (s.get("symbol") or s.get("ticker") or "")
                         for s in symbols_data
                     ]
                 elif isinstance(symbols_data, dict):
                     tickers = list(symbols_data.keys())
-                else:
-                    tickers = []
             else:
-                logger.warning(f"data-service symbols 返回 {resp.status_code}")
                 tickers = []
         except Exception as e:
             logger.warning(f"获取股票池失败: {e}，使用 v1 fallback")
@@ -307,39 +540,32 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _fetch_market_data(self, tickers: List[str]) -> Dict:
-        """HTTP → data-service:8011 获取市场数据。
+        """获取市场数据 (v1 fallback + ParquetStore 同步)。
 
-        GET /api/v2/data/bars?tickers=AAPL,MSFT,...
-
-        Returns:
-            {ticker: {prices: [...], volumes: [...], ...}, ...}
+        使用 v1 MarketDataEngine 获取数据，同时写入 ParquetStore 供
+        v2 InferenceEngine 读取。
         """
-        t0: float = time.time()
-        try:
-            http = await self._get_http()
-            tickers_param: str = ",".join(tickers)
-            resp = await http.get(
-                f"{self.service_urls['data']}/api/v2/data/bars",
-                params={"tickers": tickers_param},
-            )
+        result = self._fetch_market_data_v1_fallback(tickers)
 
-            if resp.status_code != 200:
-                logger.warning(f"data-service bars 返回 {resp.status_code}")
-                return self._fetch_market_data_v1_fallback(tickers)
+        # 同步写入 ParquetStore 供 v2 inference engine 使用
+        if result:
+            try:
+                from services.data_service.storage.parquet_store import ParquetStore
+                store = ParquetStore()
+                for ticker, d in result.items():
+                    if isinstance(d, dict) and "features" in d:
+                        features = d["features"]
+                        if isinstance(features, np.ndarray) and features.ndim == 2:
+                            df = pd.DataFrame(features)
+                            df["close"] = d.get("close", 0.0)
+                            try:
+                                store.write_daily(ticker, df)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
 
-            data = resp.json()
-            result: Dict = data.get("data", data)
-            elapsed: float = time.time() - t0
-            count: int = len(result) if isinstance(result, dict) else 0
-            logger.info(f"  Step 1 ({elapsed:.1f}s): {count}/{len(tickers)} 成功")
-            return result if isinstance(result, dict) else {}
-
-        except httpx.TimeoutException:
-            logger.warning("Step 1 超时 — 使用 v1 fallback")
-            return self._fetch_market_data_v1_fallback(tickers)
-        except Exception as e:
-            logger.warning(f"Step 1 失败: {e}")
-            return self._fetch_market_data_v1_fallback(tickers)
+        return result
 
     def _fetch_market_data_v1_fallback(self, tickers: List[str]) -> Dict:
         """v1 fallback: 使用 backend MarketDataEngine。"""
@@ -396,22 +622,51 @@ class TradingPipeline:
             DataFrame with factor values indexed by ticker.
         """
         t0: float = time.time()
-        if self.factor_engine is None:
+        if self.factor_engine is None or not data:
             logger.warning("  Step 2: FactorEngine stub — returning empty DataFrame")
-            import pandas as pd
             return pd.DataFrame({"ticker": list(data.keys())})
 
         try:
-            # v2 FactorEngine.compute_all_multi accepts dict of data
-            factor_df = self.factor_engine.compute_all_multi(data)
+            # Convert v1 fallback format → DataFrame dict for FactorEngine
+            dfs: dict = {}
+            for ticker, d in data.items():
+                if isinstance(d, dict) and "features" in d:
+                    features = d["features"]
+                    if isinstance(features, np.ndarray) and features.ndim == 2:
+                        n_cols = features.shape[1]
+                        cols = [f"f{i}" for i in range(n_cols)]
+                        dfs[ticker] = pd.DataFrame(features, columns=cols)
+                    elif isinstance(features, np.ndarray):
+                        dfs[ticker] = pd.DataFrame({"f0": features})
+                    else:
+                        dfs[ticker] = pd.DataFrame({"close": [d.get("close", 0)]})
+                elif isinstance(d, pd.DataFrame):
+                    dfs[ticker] = d
+                else:
+                    dfs[ticker] = pd.DataFrame({"close": [0.0]})
+
+            factor_results = self.factor_engine.compute_all_multi(dfs)
+            rows = []
+            for ticker, fdf in factor_results.items():
+                if fdf is not None and not fdf.empty:
+                    row = {"ticker": str(ticker)}
+                    for col in fdf.columns[:68]:
+                        try:
+                            row[col] = float(fdf[col].iloc[-1])
+                        except (IndexError, ValueError):
+                            row[col] = 0.0
+                    rows.append(row)
+                else:
+                    rows.append({"ticker": str(ticker)})
+
+            factor_df = pd.DataFrame(rows)
             elapsed: float = time.time() - t0
-            n_factors: int = factor_df.shape[1] if hasattr(factor_df, "shape") else 0
-            n_tickers: int = factor_df.shape[0] if hasattr(factor_df, "shape") else 0
+            n_tickers: int = len(factor_df)
+            n_factors: int = factor_df.shape[1] - 1 if factor_df.shape[1] > 1 else 0
             logger.info(f"  Step 2 ({elapsed:.1f}s): {n_tickers} tickers × {n_factors} factors")
             return factor_df
         except Exception as e:
-            logger.error(f"Step 2 因子计算失败: {e}")
-            import pandas as pd
+            logger.error(f"Step 2 因子计算失败: {e}", exc_info=True)
             return pd.DataFrame({"ticker": list(data.keys())})
 
     # ═══════════════════════════════════════════════════════════════
@@ -422,22 +677,23 @@ class TradingPipeline:
         """本地 InferenceEngine 模型推理。
 
         Args:
-            factor_df: Factor DataFrame from Step 2.
+            factor_df: Factor DataFrame from Step 2 (must have 'ticker' column).
             tickers: Active ticker list.
 
         Returns:
-            List of signal dicts: [{"ticker": "AAPL", "signal": 0.6, "confidence": 0.8}, ...]
+            List of signal dicts above threshold.
         """
         t0: float = time.time()
-        if self.inference_engine is None:
+        if self.inference_engine is None or factor_df is None or factor_df.empty:
             logger.warning("  Step 3: InferenceEngine stub — returning HOLD for all tickers")
-            return [
-                {"ticker": t, "signal": 0.0, "confidence": 0.0, "direction": "HOLD"}
-                for t in tickers
-            ]
+            return []
 
         try:
-            # v2 InferenceEngine.generate_signals_batch returns signals
+            # Ensure factor_df has a 'ticker' column for batch inference
+            if "ticker" not in factor_df.columns and len(factor_df) <= len(tickers):
+                factor_df = factor_df.copy()
+                factor_df["ticker"] = tickers[:len(factor_df)]
+
             signals: List[Dict] = self.inference_engine.generate_signals_batch(factor_df)
 
             elapsed: float = time.time() - t0
@@ -453,7 +709,7 @@ class TradingPipeline:
             )
             return valid
         except Exception as e:
-            logger.error(f"Step 3 推理失败: {e}")
+            logger.error(f"Step 3 推理失败: {e}", exc_info=True)
             return []
 
     # ═══════════════════════════════════════════════════════════════
@@ -622,9 +878,10 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _execute_rebalance(self, target_weights: Dict[str, float]) -> List[Dict]:
-        """TigerBroker + TWAP/VWAP 执行再平衡。
+        """TigerExecutor 统一再平衡执行。
 
-        比对新旧权重，生成买卖订单并通过 Tiger Broker 执行。
+        使用 v2 TigerExecutor (live/paper 策略模式) 执行权重调整。
+        替代 v1 的 PaperExecutor 手动循环。
 
         Args:
             target_weights: {ticker: target_weight, ...} from Step 5.
@@ -638,73 +895,50 @@ class TradingPipeline:
             return []
 
         try:
-            from backend.trading_engine.executor import PaperExecutor
+            # 获取实时价格
+            prices: Dict[str, float] = {}
+            for ticker in target_weights:
+                try:
+                    http = await self._get_http()
+                    resp = await http.get(
+                        f"{self.service_urls['data']}/api/v2/data/realtime/{ticker}"
+                    )
+                    if resp.status_code == 200:
+                        rt = resp.json()
+                        rt_data = rt.get("data", rt)
+                        px = float(rt_data.get("price", rt_data.get("close", 0.0)))
+                        if px > 0:
+                            prices[ticker] = px
+                except Exception:
+                    pass
 
-            executor: PaperExecutor = PaperExecutor(
-                portfolio=self.portfolio,
-                risk_manager=self.risk_manager,
+            if not prices:
+                logger.warning("Step 6: 无有效价格，跳过执行")
+                return []
+
+            # Delegate to TigerExecutor.execute_rebalance
+            current_positions: Dict[str, float] = dict(self.portfolio.positions)
+            orders: List[Dict] = self.executor.execute_rebalance(
+                target_weights=target_weights,
+                prices=prices,
+                current_positions=current_positions,
             )
 
-            orders: List[Dict] = []
-            current_positions: Dict[str, float] = dict(self.portfolio.positions)
-            total_value: float = self.portfolio.total_value
+            # Count non-rejected trades
+            filled: int = sum(1 for o in orders if not o.get("rejected"))
+            self.trades_today += filled
 
-            for ticker, target_weight in target_weights.items():
-                try:
-                    current_shares: float = current_positions.get(ticker, 0.0)
-                    current_value: float = current_shares * self.portfolio.avg_costs.get(
-                        ticker, 0.0
-                    )
-                    current_weight: float = current_value / max(total_value, 1.0)
-                    diff: float = target_weight - current_weight
+            elapsed: float = time.time() - t0
+            rejected: int = len(orders) - filled
+            logger.info(
+                f"  Step 6 ({elapsed:.1f}s): {filled} 笔成交"
+                + (f", {rejected} 笔拒绝" if rejected else "")
+            )
 
-                    # 差异小于 0.5% 不调
-                    if abs(diff) < 0.005:
-                        continue
-
-                    # 获取价格
-                    price: float = 0.0
-                    try:
-                        http = await self._get_http()
-                        resp = await http.get(
-                            f"{self.service_urls['data']}/api/v2/data/realtime/{ticker}"
-                        )
-                        if resp.status_code == 200:
-                            rt = resp.json()
-                            rt_data = rt.get("data", rt)
-                            price = float(rt_data.get("price", rt_data.get("close", 0.0)))
-                    except Exception:
-                        price = 0.0
-
-                    if price <= 0:
-                        continue
-
-                    decision: str = "buy" if diff > 0 else "sell"
-                    strength: float = min(abs(diff), 0.20)
-                    confidence: float = 0.6  # moderate confidence for rebalance
-
-                    order: Optional[Dict] = executor.execute_signal(
-                        ticker=ticker,
-                        decision=decision,
-                        strength=strength,
-                        price=price,
-                        confidence=confidence,
-                        strategy="bl_rebalance",
-                    )
-                    if order:
-                        orders.append(order)
-                        self.trades_today += 1
-
-                except Exception as e:
-                    logger.warning(f"Step 6 单票执行异常 {ticker}: {e}")
-                    continue
-
-            # 保存状态
+            # 状态保存
             if orders:
                 self.portfolio.save_state()
 
-            elapsed: float = time.time() - t0
-            logger.info(f"  Step 6 ({elapsed:.1f}s): {len(orders)} 笔成交")
             return orders
 
         except Exception as e:
@@ -786,6 +1020,178 @@ class TradingPipeline:
 
         except Exception as e:
             logger.error(f"Step 7 绩效记录异常: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # Helpers
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _get_live_prices(self) -> Dict[str, float]:
+        """Fetch real-time prices for all portfolio positions.
+
+        Tries the data-service HTTP endpoint first, falls back to
+        portfolio's internal ``_last_prices`` cache.
+
+        Returns:
+            ticker → price (USD) mapping.  Empty dict on total failure.
+        """
+        prices: Dict[str, float] = {}
+        tickers: List[str] = list(self.portfolio.positions.keys())
+        if not tickers:
+            return prices
+
+        try:
+            http = await self._get_http()
+            for ticker in tickers[:20]:  # Cap parallel fetches
+                try:
+                    resp = await http.get(
+                        f"{self.service_urls['data']}/api/v2/data/realtime/{ticker}"
+                    )
+                    if resp.status_code == 200:
+                        rt = resp.json()
+                        rt_data = rt.get("data", rt)
+                        px = float(rt_data.get("price", rt_data.get("close", 0.0)))
+                        if px > 0:
+                            prices[ticker] = px
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.debug(f"_get_live_prices HTTP failed: {exc}")
+
+        # Fallback: use cached last prices if HTTP failed for some tickers
+        for ticker in tickers:
+            if ticker not in prices:
+                cached = self.portfolio._last_prices.get(ticker, 0.0)
+                if cached > 0:
+                    prices[ticker] = cached
+
+        return prices
+
+    async def _push_step_update(self, step: int, data: Dict) -> None:
+        """Push a per-step update to the WebSocket dashboard.
+
+        Guards on ENABLE_WS_PUSH config — no-op when disabled.
+
+        Args:
+            step: Step number (0-7, or -1 for circuit breaker).
+            data: Step-specific payload.
+        """
+        if not self.config.ENABLE_WS_PUSH:
+            return
+        await self.ws_pusher.push_step_update(self.cycle_count, step, data)
+
+    # ═══════════════════════════════════════════════════════════════
+    # P1-4: v2 HTTP Retry Helper
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _retry_http_call(
+        self,
+        method: str,
+        url: str,
+        max_retries: int = 3,
+        **kwargs,
+    ) -> Optional[Dict]:
+        """指数退避重试 HTTP 调用。
+
+        v2 服务不可用时自动重试，全部失败返回 None 由调用方走
+        v1 fallback。
+
+        Args:
+            method: HTTP method (``"GET"`` / ``"POST"``).
+            url: Full URL.
+            max_retries: Max attempts (default 3).
+            **kwargs: Passed to ``httpx.AsyncClient.request``.
+
+        Returns:
+            Parsed JSON dict, or None if all retries exhausted.
+        """
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.request(method, url, **kwargs)
+                    resp.raise_for_status()
+                    return resp.json()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500:
+                    # 4xx: client error — don't retry.
+                    logger.debug(
+                        f"HTTP {exc.response.status_code} for {url} — not retrying"
+                    )
+                    return None
+                # 5xx: server error — retry.
+                wait: int = 2 ** attempt
+                logger.warning(
+                    f"HTTP {exc.response.status_code} retry {attempt + 1}/{max_retries} "
+                    f"for {url}, waiting {wait}s"
+                )
+            except (httpx.TimeoutException, httpx.ConnectError, OSError) as exc:
+                wait: int = 2 ** attempt
+                logger.warning(
+                    f"HTTP retry {attempt + 1}/{max_retries} for {url}: {exc}, waiting {wait}s"
+                )
+            except Exception as exc:
+                logger.debug(f"HTTP unrecoverable for {url}: {exc}")
+                return None
+
+            if attempt < max_retries - 1:
+                await asyncio.sleep(wait)
+
+        logger.warning(f"HTTP exhausted {max_retries} retries for {url}")
+        return None
+
+    # ═══════════════════════════════════════════════════════════════
+    # P2-3: Force Sell
+    # ═══════════════════════════════════════════════════════════════
+
+    def _execute_force_sells(self) -> None:
+        """启动时强制清仓 FORCE_SELL_TICKERS 中的持仓。
+
+        遍历 config.FORCE_SELL_TICKERS 列表，对每只在手持仓
+        签发市价卖出单。paper 模式仅更新本地状态；live 模式
+        同时通过 Tiger 下单。
+        """
+        positions: Dict[str, float] = dict(self.portfolio.positions)
+        for ticker in self.config.FORCE_SELL_TICKERS:
+            if ticker in positions and positions[ticker] != 0.0:
+                shares: float = abs(positions[ticker])
+                logger.warning(f"🔴 强制清仓: {ticker} × {shares} 股")
+
+                try:
+                    if self.tiger_ready:
+                        self.tiger.place_order(
+                            ticker=ticker,
+                            action="SELL",
+                            quantity=int(shares),
+                            order_type="MKT",
+                        )
+                except Exception as exc:
+                    logger.warning(f"强制清仓 Tiger 下单异常 {ticker}: {exc}")
+
+                # 更新本地状态。
+                self.portfolio.execute_trade(
+                    ticker=ticker,
+                    side="sell",
+                    price=0.0,  # Market order — exact fill unknown.
+                    quantity=shares,
+                    strategy="force_sell",
+                )
+                logger.info(f"  ✅ 强制清仓完成: {ticker} × {shares}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # P2-1: Git Auto-Sync
+    # ═══════════════════════════════════════════════════════════════
+
+    def _git_sync(self) -> None:
+        """触发一次 git add/commit/pull/push。
+
+        通过 ``shared.git_sync.git_sync`` 执行，全部异常静默
+        降级不阻塞交易循环。
+        """
+        logger.info("🔄 Git auto-sync...")
+        ok: bool = git_sync(str(Path(__file__).resolve().parent))
+        if ok:
+            logger.debug("Git sync succeeded")
+        else:
+            logger.debug("Git sync skipped or failed (see debug log)")
 
 
 # ═══════════════════════════════════════════════════════════════

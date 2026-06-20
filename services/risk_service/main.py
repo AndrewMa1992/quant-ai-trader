@@ -13,6 +13,8 @@ from fastapi import FastAPI
 from loguru import logger
 
 from services.risk_service.api.routes import router as risk_router
+from services.risk_service.api.portfolio_analytics import router as pa_router
+from services.risk_service.api.signal_routes import router as signal_router
 from services.risk_service.config import risk_config
 from shared.core.logger import setup_logger
 
@@ -50,6 +52,8 @@ app = FastAPI(
 )
 
 app.include_router(risk_router, prefix="/api/v2/risk", tags=["Risk"])
+app.include_router(pa_router, prefix="/api/v2/risk", tags=["Risk Analytics"])
+app.include_router(signal_router, prefix="/api/v2/risk", tags=["Signals"])
 
 
 @app.get("/health")

@@ -26,6 +26,7 @@ engine: InferenceEngine | None = None
 async def lifespan(app: FastAPI):
     global engine
     setup_logger()
+    logger.add("logs/model_infer.log", rotation="10 MB", retention="7 days")
     logger.info(f"Starting {infer_config.SERVICE_NAME} on port {infer_config.PORT}")
 
     engine = InferenceEngine()

@@ -16,12 +16,14 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from services.execution_service.api.schemas import OrderRequest, OrderResult
 from services.execution_service.config import exec_config
@@ -33,7 +35,9 @@ from services.execution_service.live.tiger_broker import TigerBroker
 from services.execution_service.live.position_tracker import PositionTracker
 from services.execution_service.live.circuit_breaker import CircuitBreaker
 from services.execution_service.live.alert_manager import AlertManager
+from services.execution_service.live.tiger_advanced import TigerAdvancedClient
 from shared.core.logger import get_logger
+from shared.database.engine import get_engine
 from shared.schema import APIResponse
 
 router = APIRouter()
@@ -307,4 +311,226 @@ async def get_alerts(
         alerts = _alert_manager.get_recent(severity=severity if severity else None)
         return APIResponse(success=True, message=f"{len(alerts)} alerts", data={"alerts": alerts})
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── P1-1: Tiger Advanced Operations ───────────────────────────
+_tiger_advanced = TigerAdvancedClient()
+
+
+@router.post("/tiger/refresh-assets", tags=["Tiger Advanced"])
+async def tiger_refresh_assets() -> APIResponse:
+    """Pull current account assets from Tiger and update the DB.
+
+    Fetches NAV, cash, and positions from Tiger Broker, then writes
+    a new portfolio snapshot to the ``portfolios`` table.
+    """
+    try:
+        result = await _tiger_advanced.refresh_assets()
+        return APIResponse(
+            success=result.get("status") == "success",
+            message=f"Assets refreshed: NAV={result.get('nav', 0):,.0f}",
+            data=result,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tiger/reconcile", tags=["Tiger Advanced"])
+async def tiger_reconcile() -> APIResponse:
+    """Reconcile Tiger positions against DB positions.
+
+    Compares current Tiger Broker holdings with the latest records
+    in the ``positions`` table and reports matches, deltas, and issues.
+    """
+    try:
+        result = await _tiger_advanced.reconcile()
+        summary = result.get("summary", {})
+        return APIResponse(
+            success=result.get("status") == "success",
+            message=(
+                f"Reconciliation: {summary.get('matched', 0)} matched, "
+                f"{summary.get('deltas', 0)} deltas, "
+                f"{summary.get('issues', 0)} issues"
+            ),
+            data=result,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tiger/repair-shorts", tags=["Tiger Advanced"])
+async def tiger_repair_shorts() -> APIResponse:
+    """Check short positions for borrowable share availability.
+
+    Queries borrowable inventory for current short positions.
+    Per architecture decision #4, this does NOT auto-place orders.
+    """
+    try:
+        result = await _tiger_advanced.repair_shorts()
+        return APIResponse(
+            success=result.get("status") == "success",
+            message=result.get("message", "Short repair check complete"),
+            data=result,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tiger/account", tags=["Tiger Advanced"])
+async def tiger_get_account() -> APIResponse:
+    """Query full Tiger account information.
+
+    Returns account status, permissions, funds, margin info,
+    and currency settings.
+    """
+    try:
+        result = await _tiger_advanced.get_account()
+        return APIResponse(
+            success=result.get("status") != "error",
+            message=f"Account {result.get('account', 'unknown')} queried",
+            data=result,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── P1-2: Order History ──────────────────────────────────────
+@router.get("/orders", tags=["Orders"])
+async def list_orders(
+    ticker: str | None = Query(default=None, description="Filter by ticker"),
+    limit: int = Query(default=50, ge=1, le=500, description="Max orders to return"),
+    since: str | None = Query(default=None, description="ISO datetime filter"),
+) -> APIResponse:
+    """List historical orders from cache and DB.
+
+    Merges results from ``cache/orders.jsonl`` (in-memory orders)
+    and the ``trades`` database table. Supports optional ticker
+    and date filtering with pagination.
+    """
+    log = get_logger(__name__)
+    orders: list[dict] = []
+
+    try:
+        # ── In-memory orders ─────────────────────────────────
+        for oid, orec in _orders.items():
+            if ticker and orec.get("ticker", "").upper() != ticker.upper():
+                continue
+            if since:
+                ts = orec.get("placed_at", 0)
+                try:
+                    since_ts = datetime.fromisoformat(since).timestamp()
+                    if ts < since_ts:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            orders.append(orec)
+
+        # ── Persisted orders (cache/orders.jsonl) ────────────
+        if _ORDERS_CACHE_PATH.exists():
+            try:
+                with open(_ORDERS_CACHE_PATH, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                            oid = record.get("order_id", "")
+                            # Skip if already in memory
+                            if oid in _orders:
+                                continue
+                            if ticker and record.get("ticker", "").upper() != ticker.upper():
+                                continue
+                            if since:
+                                ts = record.get("placed_at", 0)
+                                try:
+                                    since_ts = datetime.fromisoformat(since).timestamp()
+                                    if ts < since_ts:
+                                        continue
+                                except (ValueError, TypeError):
+                                    pass
+                            orders.append(record)
+                        except json.JSONDecodeError:
+                            continue
+            except Exception as e:
+                log.warning(f"Failed to read orders cache: {e}")
+
+        # ── DB trades ────────────────────────────────────────
+        try:
+            engine = get_engine()
+            async with engine.connect() as conn:
+                query = "SELECT * FROM trades"
+                conditions: list[str] = []
+                params: dict = {}
+
+                if ticker:
+                    conditions.append("ticker = :ticker")
+                    params["ticker"] = ticker.upper()
+
+                if since:
+                    try:
+                        since_dt = datetime.fromisoformat(since)
+                        conditions.append("trade_time >= :since")
+                        params["since"] = since_dt
+                    except (ValueError, TypeError):
+                        pass
+
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+
+                query += " ORDER BY trade_time DESC LIMIT :limit"
+                params["limit"] = limit
+
+                result = await conn.execute(text(query), params)
+                rows = result.fetchall()
+
+                for row in rows:
+                    orders.append({
+                        "order_id": getattr(row, "order_id", ""),
+                        "ticker": getattr(row, "ticker", ""),
+                        "side": getattr(row, "side", ""),
+                        "quantity": getattr(row, "quantity", 0),
+                        "price": getattr(row, "price", 0.0),
+                        "notional": getattr(row, "notional", 0.0),
+                        "commission": getattr(row, "commission", 0.0),
+                        "trade_date": (
+                            row.trade_date.isoformat()
+                            if hasattr(row, "trade_date") and row.trade_date
+                            else None
+                        ),
+                        "trade_time": (
+                            row.trade_time.isoformat()
+                            if hasattr(row, "trade_time") and row.trade_time
+                            else None
+                        ),
+                        "market": getattr(row, "market", ""),
+                        "strategy": getattr(row, "strategy", ""),
+                        "source": "db",
+                    })
+        except Exception as e:
+            log.warning(f"DB trade query failed (non-fatal): {e}")
+
+        # Sort by timestamp descending
+        orders.sort(
+            key=lambda o: o.get("placed_at", o.get("trade_time", 0)) or 0,
+            reverse=True,
+        )
+
+        # Apply limit
+        paged = orders[:limit]
+
+        return APIResponse(
+            success=True,
+            message=f"Returned {len(paged)} orders",
+            data={
+                "orders": paged,
+                "count": len(paged),
+                "total": len(orders),
+                "limit": limit,
+            },
+        )
+
+    except Exception as e:
+        log.exception(f"Failed to list orders: {e}")
         raise HTTPException(status_code=500, detail=str(e))

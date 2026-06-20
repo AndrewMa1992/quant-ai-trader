@@ -26,6 +26,17 @@ class PipelineConfig:
     BARRA_EXPOSURE_MAX_Z: float = 3.0          # Barra 因子暴露 Z-score 上限
     ENABLE_RISK_CHECKS: bool = True            # 是否启用四道风控
     ENABLE_PORTFOLIO_OPT: bool = True          # 是否启用组合优化
+
+    # ── P0-P1 新增参数 ──────────────────────────────────────────
+    EXECUTION_MODE: str = "paper"              # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
+    MAX_DAILY_TRADES: int = 0                  # 每日交易上限，0 = 不限制
+    DAILY_LOSS_LIMIT: float = 0.05             # 日亏损熔断阈值（组合价值%），默认 5%
+    LEVERAGE_LIMIT: float = 1.001              # 杠杆上限，≥ 此值阻止买入
+    V1_FALLBACK_RETRIES: int = 3               # v2 服务 HTTP 调用重试次数
+    ENABLE_WS_PUSH: bool = True                # 是否启用前端 WebSocket 推送
+    GIT_AUTO_SYNC: bool = False                # 是否启用 Git 自动同步（默认关闭）
+    FORCE_SELL_TICKERS: list = field(default_factory=list)  # 启动时强制清仓列表
+
     ENABLE_ALERTS: bool = True                 # 是否启用告警
 
     # ── 交易参数 ──────────────────────────────────────────────
@@ -37,6 +48,12 @@ class PipelineConfig:
     # ── HTTP 客户端超时 ───────────────────────────────────────
     HTTP_TIMEOUT: float = 30.0                 # httpx 请求超时（秒）
     HTTP_RETRIES: int = 3                      # 重试次数
+
+    def __post_init__(self) -> None:
+        """从环境变量覆盖关键配置"""
+        import os
+
+        self.EXECUTION_MODE = os.getenv("QAT_EXECUTION_MODE", self.EXECUTION_MODE)
 
 
 def _build_service_urls() -> dict:
