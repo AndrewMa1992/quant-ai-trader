@@ -1,0 +1,18 @@
+{
+  "initial_capital": 100000.0,
+  "cash": 82000.0,
+  "total_value": 100000.0,
+  "positions": {
+    "AAPL": 100.0
+  },
+  "avg_costs": {
+    "AAPL": 180.0
+  },
+  "last_prices": {},
+  "value_history": [
+    100000.0
+  ],
+  "daily_returns": [],
+  "tiger_synced": true,
+  "saved_at": "2026-06-20T18:46:47.952696"
+}
