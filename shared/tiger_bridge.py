@@ -18,6 +18,18 @@ _tiger_client: Optional[Any] = None
 _has_attempted_import: bool = False
 
 
+def _run_async(coro, timeout: float = 30.0):
+    """Safely run async coroutine — handles both sync and async contexts."""
+    import concurrent.futures
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return _run_async(coro)
+    # Inside running event loop → run in separate thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        return ex.submit(lambda: _run_async(coro)).result(timeout=timeout)
+
+
 def _lazy_import() -> Optional[Any]:
     """Lazily import and cache the Tiger trade singleton.
 
@@ -138,7 +150,7 @@ def get_account_info(force: bool = False) -> Optional[Dict[str, Any]]:
             return client.get_account_info(force=force)
         # TigerBroker async → sync bridge
         if hasattr(client, "get_account_summary"):
-            return asyncio.run(client.get_account_summary())
+            return _run_async(client.get_account_summary())
         return None
     except Exception as exc:
         logger.error(f"TigerBridge: get_account_info failed — {exc}")
@@ -165,7 +177,7 @@ def get_positions(force: bool = False) -> List[Dict[str, Any]]:
             if "force" in sig.parameters:
                 return client.get_positions(force=force)
             # v2 TigerBroker — async method, no force param
-            return asyncio.run(client.get_positions())
+            return _run_async(client.get_positions())
         return []
     except Exception as exc:
         logger.error(f"TigerBridge: get_positions failed — {exc}")
@@ -199,7 +211,7 @@ def place_order(
             # Check if it's the async v2 TigerBroker or sync legacy
             import inspect
             if inspect.iscoroutinefunction(client.place_order):
-                return asyncio.run(client.place_order(
+                return _run_async(client.place_order(
                     ticker=ticker,
                     side=action,
                     quantity=quantity,
@@ -236,7 +248,7 @@ def get_quote(ticker: str) -> Optional[Dict[str, Any]]:
         if client is not None and hasattr(client, "get_quote"):
             result = client.get_quote(ticker)
             if asyncio.iscoroutine(result):
-                return asyncio.run(result)
+                return _run_async(result)
             return result
 
         # v2 TigerBroker lacks get_quote — use v2 TigerClient directly
@@ -244,7 +256,7 @@ def get_quote(ticker: str) -> Optional[Dict[str, Any]]:
 
         tc = TigerClient()
         tc._ensure_initialized()
-        return asyncio.run(tc.get_quote(ticker))
+        return _run_async(tc.get_quote(ticker))
     except Exception as exc:
         logger.error(f"TigerBridge: get_quote({ticker}) failed — {exc}")
         return None
@@ -264,8 +276,8 @@ def sync_all_to_db() -> Dict[str, Any]:
         if hasattr(client, "sync_all_to_db"):
             return client.sync_all_to_db()
         # v2 TigerBroker — sync manually via get_positions + get_account_summary
-        positions = asyncio.run(client.get_positions()) if hasattr(client, "get_positions") else []
-        account = asyncio.run(client.get_account_summary()) if hasattr(client, "get_account_summary") else {}
+        positions = _run_async(client.get_positions()) if hasattr(client, "get_positions") else []
+        account = _run_async(client.get_account_summary()) if hasattr(client, "get_account_summary") else {}
         return {
             "positions_synced": len(positions) if isinstance(positions, list) else 0,
             "account_updated": bool(account),
@@ -304,8 +316,8 @@ def get_status() -> Dict[str, Any]:
             }
         # v2 TigerBroker
         connected = getattr(client, "_initialized", False)
-        account = asyncio.run(client.get_account_summary()) if hasattr(client, "get_account_summary") else None
-        positions = asyncio.run(client.get_positions()) if hasattr(client, "get_positions") else []
+        account = _run_async(client.get_account_summary()) if hasattr(client, "get_account_summary") else None
+        positions = _run_async(client.get_positions()) if hasattr(client, "get_positions") else []
         return {
             "connected": connected,
             "account_available": account is not None and account.get("nav", 0) > 0,
