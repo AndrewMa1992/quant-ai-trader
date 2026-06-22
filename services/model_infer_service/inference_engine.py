@@ -210,54 +210,71 @@ class InferenceEngine:
     def generate_signals_batch(
         self,
         input_data: pd.DataFrame | list[str],
+        top_n: int = 5,
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
     ) -> list[dict[str, Any]]:
-        """Generate signals for multiple tickers.
+        """Generate signals for multiple tickers, returning top-N by |signal|.
 
         Supports two input modes:
         1. pd.DataFrame with a 'ticker' column (from FactorEngine)
         2. list[str] of ticker symbols (direct lookup)
 
+        All tickers are inferred, then filtered by min_threshold + min_confidence,
+        sorted by |signal| descending, and the top_n are returned.
+
         Args:
             input_data: Factor DataFrame with 'ticker' column, or list of tickers.
+            top_n: Maximum number of signals to return.
+            min_threshold: Minimum absolute signal strength (floor).
+            min_confidence: Minimum confidence score.
 
         Returns:
-            List of signal dicts with signal, confidence, direction, components.
+            List of signal dicts (top-N by |signal|), each with
+            signal, confidence, direction, components.
         """
         if isinstance(input_data, pd.DataFrame):
-            return self._generate_signals_from_factor_df(input_data)
-        return self._generate_signals_from_tickers(input_data)
+            return self._generate_signals_from_factor_df(
+                input_data, min_threshold, min_confidence, top_n,
+            )
+        return self._generate_signals_from_tickers(
+            input_data, min_threshold, min_confidence, top_n,
+        )
 
     def _generate_signals_from_factor_df(
         self,
         factor_df: pd.DataFrame,
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
+        top_n: int = 5,
     ) -> list[dict[str, Any]]:
         """Generate signals from FactorEngine-computed factor DataFrame.
 
+        Full inference on all tickers, then Top-N selection by |signal| desc.
+
         Args:
             factor_df: DataFrame from FactorEngine, must have 'ticker' column.
+            min_threshold: Minimum absolute signal strength (floor).
+            min_confidence: Minimum confidence score.
+            top_n: Max signals to return.
 
         Returns:
-            [{"ticker": "AAPL", "signal": 0.6, "confidence": 0.8}, ...]
+            Top-N signal dicts sorted by |signal| descending.
         """
-        signals: list[dict[str, Any]] = []
+        all_signals: list[dict[str, Any]] = []
         tickers = (
             factor_df["ticker"].unique()
             if "ticker" in factor_df.columns
             else []
         )
 
-        for ticker in tickers[:50]:  # Max 50 per batch
+        for ticker in tickers:
             try:
-                ticker_data = (
-                    factor_df[factor_df["ticker"] == ticker]
-                    if "ticker" in factor_df.columns
-                    else factor_df
-                )
                 signal = self.generate_signal(str(ticker))
                 strength = float(signal.get("signal", 0) or 0)
                 confidence = float(signal.get("confidence", 0) or 0)
-                if abs(strength) >= 0.1:  # Minimum signal threshold
-                    signals.append({
+                if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    all_signals.append({
                         "ticker": str(ticker),
                         "signal": round(strength, 4),
                         "confidence": round(confidence, 4),
@@ -267,30 +284,38 @@ class InferenceEngine:
             except Exception as e:
                 logger.warning(f"Inference failed for {ticker}: {e}")
 
-        return signals
+        # Top-N selection by |signal| descending
+        all_signals.sort(key=lambda s: abs(s["signal"]), reverse=True)
+        return all_signals[:top_n]
 
     def _generate_signals_from_tickers(
         self,
         tickers: list[str],
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
+        top_n: int = 5,
     ) -> list[dict[str, Any]]:
-        """Generate signals from a list of ticker symbols (legacy path)."""
-        signals: list[dict[str, Any]] = []
+        """Generate signals from a list of ticker symbols with Top-N selection."""
+        all_signals: list[dict[str, Any]] = []
         for ticker in tickers:
             try:
                 signal = self.generate_signal(ticker)
-                signals.append(signal)
+                strength = float(signal.get("signal", 0) or 0)
+                confidence = float(signal.get("confidence", 0) or 0)
+                if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    all_signals.append({
+                        "ticker": str(ticker),
+                        "signal": round(strength, 4),
+                        "confidence": round(confidence, 4),
+                        "direction": signal.get("direction", "HOLD"),
+                        "components": signal.get("components", {}),
+                    })
             except Exception as e:
                 logger.error(f"Signal failed for {ticker}: {e}")
-                signals.append({
-                    "ticker": ticker,
-                    "signal": 0.0,
-                    "confidence": 0.0,
-                    "direction": "HOLD",
-                    "components": {},
-                    "error": str(e),
-                })
 
-        return signals
+        # Top-N selection by |signal| descending
+        all_signals.sort(key=lambda s: abs(s["signal"]), reverse=True)
+        return all_signals[:top_n]
 
     def update_weights(self, model_predictions: dict[str, np.ndarray],
                        realized_returns: np.ndarray) -> dict[str, float]:

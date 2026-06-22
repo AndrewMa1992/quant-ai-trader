@@ -200,6 +200,7 @@ class TradingPipeline:
         self.cycle_count: int = 0
         self.trades_today: int = 0
         self.trade_date: str = datetime.now().strftime("%Y-%m-%d")
+        self._market_round_index: int = 0
 
         logger.info("=" * 60)
         logger.info("TradingPipeline 初始化完成")
@@ -541,6 +542,22 @@ class TradingPipeline:
 
         # 过滤并限制数量
         tickers = [t for t in tickers if isinstance(t, str) and t]
+
+        # ── 市场轮询：每轮只分析一个市场 ──
+        if self.config.MARKET_ROUND_ROBIN and self.config.MARKET_ROTATION:
+            target_market = self.config.MARKET_ROTATION[
+                self._market_round_index % len(self.config.MARKET_ROTATION)
+            ]
+            if target_market == "HK":
+                tickers = [t for t in tickers if ".HK" in t]
+            elif target_market == "US":
+                tickers = [t for t in tickers if ".HK" not in t and ".SI" not in t and ".AX" not in t]
+            elif target_market == "SG":
+                tickers = [t for t in tickers if ".SI" in t]
+            tickers = tickers[: self.config.MAX_STOCKS_PER_MARKET]
+            logger.info(f"  🎯 市场轮询: {target_market}, {len(tickers)} 只")
+            self._market_round_index += 1
+
         tickers = tickers[: self.config.MAX_TICKERS_PER_CYCLE]
 
         elapsed: float = time.time() - t0
@@ -696,14 +713,14 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _run_inference(self, factor_df, tickers: List[str]) -> List[Dict]:
-        """本地 InferenceEngine 模型推理。
+        """本地 InferenceEngine 模型推理 — Top-N 信号选择。
 
         Args:
             factor_df: Factor DataFrame from Step 2 (must have 'ticker' column).
             tickers: Active ticker list.
 
         Returns:
-            List of signal dicts above threshold.
+            Top-N signal dicts by |signal| descending.
         """
         t0: float = time.time()
         if self.inference_engine is None or factor_df is None or factor_df.empty:
@@ -716,20 +733,21 @@ class TradingPipeline:
                 factor_df = factor_df.copy()
                 factor_df["ticker"] = tickers[:len(factor_df)]
 
-            signals: List[Dict] = self.inference_engine.generate_signals_batch(factor_df)
+            signals: List[Dict] = self.inference_engine.generate_signals_batch(
+                factor_df,
+                top_n=self.config.TOP_N_SIGNALS,
+                min_threshold=self.config.SIGNAL_THRESHOLD_MIN,
+                min_confidence=self.config.MIN_CONFIDENCE,
+            )
 
             elapsed: float = time.time() - t0
-            valid: List[Dict] = [
-                s for s in signals
-                if isinstance(s, dict)
-                and abs(s.get("signal", s.get("strength", 0.0))) >= self.config.SIGNAL_THRESHOLD
-                and s.get("confidence", 0.0) >= self.config.MIN_CONFIDENCE
-            ]
             logger.info(
-                f"  Step 3 ({elapsed:.1f}s): {len(signals)} raw → "
-                f"{len(valid)} above threshold ({self.config.SIGNAL_THRESHOLD})"
+                f"  Step 3 ({elapsed:.1f}s): {len(signals)} signals "
+                f"(top {self.config.TOP_N_SIGNALS} by |score|, "
+                f"floor={self.config.SIGNAL_THRESHOLD_MIN}, "
+                f"min_conf={self.config.MIN_CONFIDENCE})"
             )
-            return valid
+            return signals
         except Exception as e:
             logger.error(f"Step 3 推理失败: {e}", exc_info=True)
             return []
