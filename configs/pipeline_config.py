@@ -35,8 +35,8 @@ class PipelineConfig:
     ENABLE_PORTFOLIO_OPT: bool = True          # 是否启用组合优化
 
     # ── P0-P1 新增参数 ──────────────────────────────────────────
-    EXECUTION_MODE: str = "paper"              # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
-    MAX_DAILY_TRADES: int = 0                  # 每日交易上限，0 = 不限制
+    EXECUTION_MODE: str = "live"               # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
+    MAX_DAILY_TRADES: int = 5                  # 每日交易上限，5笔/天安全起步
     DAILY_LOSS_LIMIT: float = 0.05             # 日亏损熔断阈值（组合价值%），默认 5%
     LEVERAGE_LIMIT: float = 1.001              # 杠杆上限，≥ 此值阻止买入
     V1_FALLBACK_RETRIES: int = 3               # v2 服务 HTTP 调用重试次数
