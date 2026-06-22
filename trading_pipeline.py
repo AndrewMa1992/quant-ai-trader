@@ -103,7 +103,9 @@ class TradingPipeline:
 
         if InferenceEngine is not None:
             self.inference_engine: InferenceEngine = InferenceEngine()
-            logger.info("  ✅ InferenceEngine 已就绪")
+            load_status = self.inference_engine.load_models()
+            loaded_count = sum(1 for v in load_status.values() if v)
+            logger.info(f"  ✅ InferenceEngine 已就绪 ({loaded_count}/{len(load_status)} models loaded)")
         else:
             self.inference_engine = None  # type: ignore[assignment]
             logger.warning("  ⚠️ InferenceEngine 不可用 — stub 模式")
