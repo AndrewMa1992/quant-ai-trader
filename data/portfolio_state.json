@@ -6,9 +6,10 @@
   "avg_costs": {},
   "last_prices": {},
   "value_history": [
-    100000.0
+    100000.0,
+    0.0
   ],
   "daily_returns": [],
   "tiger_synced": true,
-  "saved_at": "2026-06-22T13:12:20.863918"
+  "saved_at": "2026-06-22T13:18:08.404541"
 }

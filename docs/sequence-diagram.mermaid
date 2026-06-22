@@ -1,80 +1,51 @@
 sequenceDiagram
-    participant DP as daemon_forever.bat
     participant TP as TradingPipeline
-    participant TB as shared/tiger_bridge
-    participant TC as services/ingestion/tiger_client
-    participant RM as shared/risk_manager
-    participant PM as PortfolioManager
-    participant SDK as Tiger SDK
+    participant PC as PipelineConfig
+    participant SU as StockUniverse
+    participant IE as InferenceEngine
+    participant TB as TigerBridge
+    participant BR as TigerBroker (v2)
+    participant SDK as Tiger TradeClient
 
-    DP->>TP: 启动 trading_pipeline.py
-
-    Note over TP: ===== Cycle #1 开始 =====
-
-    %% Step: 交易日切换
-    TP->>RM: reset_daily_state() if new day
-
-    %% Step: Tiger 同步 (关键修复点)
-    TP->>PM: sync_from_tiger(tiger, force=false)
-    PM->>TB: get_positions() + get_account_info()
-    TB->>TC: get_positions() [v2 async→sync bridge]
-    TC->>SDK: trade_client.get_positions()
-    SDK-->>TC: positions list
-    TC-->>TB: positions
-    TB-->>PM: positions + account
-    PM-->>TP: sync_result {synced: true}
-
-    rect rgb(255, 230, 230)
-        Note over TP,RM: 【Bug 2 修复】Tiger 同步后传递标记
-        TP->>RM: sync_portfolio_value(2475, cash, is_tiger_sync=True)
-        Note over RM: _tiger_synced=False → 重置<br/>daily_start_value=2475<br/>peak_value=2475<br/>_tiger_synced=True
+    %% Market Round-Robin Universe Selection
+    rect rgb(240, 248, 255)
+        Note over TP,SU: Step 0 — Market Round-Robin
+        TP->>PC: get_next_market()
+        PC-->>TP: "US" (cycle 1)
+        TP->>SU: stock_universe.us_tickers
+        SU-->>TP: [200 tickers]
+        TP->>TP: tickers (no MAX_TICKERS_PER_CYCLE cap)
+        Note over TP: 200 tickers → Step 1 market data
     end
 
-    %% Step: 熔断检查
-    TP->>TP: _get_live_prices() via HTTP
-    TP->>RM: check_circuit_breaker()
-
-    rect rgb(230, 255, 230)
-        Note over RM: daily_pnl_pct = (2475-2475)/2475<br/>= 0% ✅ 正常
-        RM-->>TP: RiskReport(passed=true)
+    %% Top-N Signal Selection
+    rect rgb(255, 248, 240)
+        Note over TP,IE: Step 3 — Top-N Signal Selection
+        TP->>IE: generate_signals_batch(factor_df)
+        Note over IE: 全量推理 (移除 [:50])
+        IE-->>TP: 200 raw signals
+        TP->>PC: TOP_N_SIGNALS=5, SIGNAL_THRESHOLD_MIN=0.05
+        TP->>TP: filter: confidence>=MIN_CONFIDENCE AND abs(signal)>=0.05
+        TP->>TP: sort by abs(signal) descending
+        TP->>TP: take top 5
+        TP-->>TP: 5 valid signals → Step 4 Risk Checks
     end
 
-    %% Step: 杠杆检查
-    TP->>TB: get_account_info()
-    TB-->>TP: account info
-    TP->>RM: check_leverage(account)
-    RM-->>TP: False (safe)
+    %% Tiger Position Query (Fixed)
+    rect rgb(240, 255, 240)
+        Note over TB,SDK: Tiger Position Query (Fixed)
+        TB->>BR: get_positions()
+        BR->>BR: _ensure_client()
+        BR->>SDK: TradeClient.connect()
+        SDK-->>BR: connected
+        BR->>SDK: TradeClient.get_positions()
+        SDK-->>BR: [Position objects]
+        Note over BR: p.contract.symbol (NOT p.symbol)
+        BR-->>TB: [{ticker, quantity, avg_cost, market_value}]
 
-    Note over TP: ===== 主循环 7 步 =====
-    TP->>TP: Step 0: _get_active_universe()
-    TP->>TP: Step 1: _fetch_market_data()
-    TP->>TP: Step 2: _compute_factors()
-    TP->>TP: Step 3: _run_inference()
-    TP->>TP: Step 4: _apply_risk_checks()
-    TP->>TP: Step 5: _optimize_portfolio()
-    TP->>TP: Step 6: _execute_rebalance()
-    TP->>TP: Step 7: _record_performance()
-
-    Note over TP: Post-cycle: 空头修复 + 状态保存
-
-    %% ===== Bug 1 修复验证 =====
-    rect rgb(255, 240, 230)
-        Note over TB,SDK: 【Bug 1 修复】get_quote 调用链
-        TP->>TB: get_quote("09878")
-        TB->>TC: get_quote("09878") [v2 async→sync]
-        TC->>SDK: get_stock_briefs(["09878"])
-        SDK-->>TC: DataFrame | list | None
-        Note over TC: _is_empty_result(obj)<br/>→ None? True<br/>→ DataFrame.empty? True<br/>→ len(list)==0? True<br/>安全处理所有类型
-        TC-->>TB: quote dict | None
-        TB-->>TP: quote dict | None
+        TB->>BR: get_account_summary()
+        BR->>SDK: TradeClient.get_accounts()
+        SDK-->>BR: [Account objects]
+        Note over BR: acc.summary.net_liquidation (NOT acc.net_liquidation)
+        BR-->>TB: {account, nav, cash, buying_power}
     end
-
-    %% ===== 熔断保护场景 =====
-    rect rgb(230, 230, 255)
-        Note over RM: 【保护场景】Tiger 未同步前首次调用
-        TP->>RM: check_circuit_breaker()
-        Note over RM: daily_start_value=0.0<br/>→ 自动设为 portfolio_value<br/>首次调用总是通过
-        RM-->>TP: RiskReport(passed=true)
-    end
-
-    Note over TP: Cycle #1 完成，休眠 300s...

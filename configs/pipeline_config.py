@@ -13,11 +13,18 @@ class PipelineConfig:
     # ── 调度参数 ──────────────────────────────────────────────
     CYCLE_INTERVAL_SECONDS: int = 300          # 每轮间隔（秒），默认5分钟
     TRADING_HOURS_ONLY: bool = True            # 仅交易时段运行
-    MAX_TICKERS_PER_CYCLE: int = 50            # 每轮最多分析标的数
+    MAX_TICKERS_PER_CYCLE: int = 9999            # 移除限制，交由市场轮询控制
 
-    # ── 信号阈值 ──────────────────────────────────────────────
-    SIGNAL_THRESHOLD: float = 0.3              # 信号强度下限 |signal| >= 阈值才生成 view
-    MIN_CONFIDENCE: float = 0.5                # 置信度下限
+    # ── 信号阈值（Top-N 替代固定阈值） ─────────────────────
+    SIGNAL_THRESHOLD: float = 0.05               # 基础 floor 阈值
+    SIGNAL_THRESHOLD_MIN: float = 0.05           # 最低信号强度
+    MIN_CONFIDENCE: float = 0.3                  # 置信度下限
+    TOP_N_SIGNALS: int = 5                       # 每轮最多选 N 个最强信号
+
+    # ── 全市场轮询 ────────────────────────────────────────
+    MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
+    MARKET_ROTATION: list = field(default_factory=lambda: ["US", "HK", "SG"])   # 市场轮询顺序
+    MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
 
     # ── 风控参数 ──────────────────────────────────────────────
     VAR_CONFIDENCE: float = 0.95               # VaR 置信水平
