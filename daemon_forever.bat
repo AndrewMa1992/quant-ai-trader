@@ -58,25 +58,25 @@ set /a GIT_COUNTER=0
 set /a PUSH_COUNTER=0
 
 :: ═══════════════════════════════════════════════
-:: 首次启动：git pull 最新代码
-:: ═══════════════════════════════════════════════
-echo [%date% %time%] === 启动: git pull 同步最新代码 ===
-cd /d "%PROJ%"
-git stash >nul 2>&1
-git pull --rebase origin dev-20260522 >nul 2>&1
-if errorlevel 1 (
-    echo [%time%] Git pull failed (network/ssl issue, continuing with local code)
-) else (
-    echo [%time%] Git pull OK - running latest code
-)
-cd /d "%PROJ%"
-
-:: ═══════════════════════════════════════════════
-:: 首次启动：顺序启动所有 v2 服务
+:: 首次启动：先启动所有 v2 服务（不等 git，避免网络卡死）
 :: ═══════════════════════════════════════════════
 echo [%time%] Starting all v2 services...
 call :start_all
 echo [%time%] Initial startup complete
+
+:: ═══════════════════════════════════════════════
+:: 启动后：尝试 git pull（带15秒超时，失败不阻塞）
+:: ═══════════════════════════════════════════════
+echo [%date% %time%] === 尝试: git pull 同步最新代码 (15s超时) ===
+cd /d "%PROJ%"
+git -c http.timeout=15 -c https.timeout=15 stash >nul 2>&1
+git -c http.timeout=15 -c https.timeout=15 pull --rebase origin dev-20260522 >nul 2>&1
+if errorlevel 1 (
+    echo [%time%] Git pull failed/skipped (network issue, running local code)
+) else (
+    echo [%time%] Git pull OK - running latest code
+)
+cd /d "%PROJ%"
 
 :: ═══════════════════════════════════════════════
 :: 主循环 - 永久运行
@@ -93,16 +93,16 @@ if !GIT_COUNTER! geq %GIT_PULL_EVERY% (
     cd /d "%PROJ%"
 
     :: auto-commit 本地修改
-    git add -A 2>nul
-    git commit -m "auto: daemon sync %date% %time%" 2>nul
+    git -c http.timeout=15 -c https.timeout=15 add -A 2>nul
+    git -c http.timeout=15 -c https.timeout=15 commit -m "auto: daemon sync %date% %time%" 2>nul
 
-    git stash >nul 2>&1
-    git fetch origin dev-20260522 2>nul
+    git -c http.timeout=15 -c https.timeout=15 stash >nul 2>&1
+    git -c http.timeout=15 -c https.timeout=15 fetch origin dev-20260522 2>nul
 
     for /f %%a in ('git rev-list HEAD..origin/dev-20260522 --count 2^>nul') do set BEHIND=%%a
     if defined BEHIND if !BEHIND! gtr 0 (
         echo [%time%] Git: !BEHIND! new commits - pulling and restarting services...
-        git pull --rebase origin dev-20260522 >nul 2>&1
+        git -c http.timeout=15 -c https.timeout=15 pull --rebase origin dev-20260522 >nul 2>&1
         if not errorlevel 1 (
             echo [%time%] Code updated. Restarting affected services...
             call :stop_all
@@ -123,9 +123,9 @@ if !PUSH_COUNTER! geq %GIT_PUSH_EVERY% (
     if errorlevel 1 (
         echo [%time%] Git: no remote configured, skipping push
     ) else (
-        git add -A 2>nul
-        git commit -m "auto: daemon push %date% %time%" 2>nul
-        git push origin dev-20260522 2>nul
+        git -c http.timeout=15 -c https.timeout=15 add -A 2>nul
+        git -c http.timeout=15 -c https.timeout=15 commit -m "auto: daemon push %date% %time%" 2>nul
+        git -c http.timeout=15 -c https.timeout=15 push origin dev-20260522 2>nul
     )
     cd /d "%PROJ%"
 )
