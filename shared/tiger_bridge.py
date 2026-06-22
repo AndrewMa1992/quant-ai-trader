@@ -147,7 +147,8 @@ def get_account_info(force: bool = False) -> Optional[Dict[str, Any]]:
 
     Returns:
         A dict with account fields (e.g. net_liquidation, cash, etc.),
-        or None on failure.
+        or None on failure.  The ``nav`` field is also exposed as
+        ``total_value`` for PortfolioManager compatibility.
     """
     try:
         client = _lazy_import()
@@ -157,7 +158,11 @@ def get_account_info(force: bool = False) -> Optional[Dict[str, Any]]:
             return client.get_account_info(force=force)
         # TigerBroker async → sync bridge
         if hasattr(client, "get_account_summary"):
-            return _run_async(client.get_account_summary())
+            result = _run_async(client.get_account_summary())
+            # Map nav → total_value for PortfolioManager compatibility
+            if result and isinstance(result, dict):
+                result["total_value"] = result.get("nav", 0.0)
+            return result
         return None
     except Exception as exc:
         logger.error(f"TigerBridge: get_account_info failed — {exc}")

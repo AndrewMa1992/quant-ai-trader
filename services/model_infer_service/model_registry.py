@@ -5,8 +5,10 @@ Queries MLflow for latest production versions and caches model metadata.
 
 from __future__ import annotations
 
+import socket
 import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -28,9 +30,61 @@ class ModelRegistry:
         self._cache: dict[str, dict[str, Any]] = {}
         self._last_refresh: float = 0.0
         self._cache_ttl = infer_config.MODEL_CACHE_TTL_SECONDS
+        self._mlflow_checked = False
+        self._mlflow_reachable = False
+
+    def _check_mlflow_available(self) -> bool:
+        """Quick TCP-connect probe to see if the MLflow server is up.
+
+        Caches the result so we only probe once per process lifetime.
+
+        Returns:
+            True if the MLflow tracking URI host accepts a connection.
+        """
+        if self._mlflow_checked:
+            return self._mlflow_reachable
+
+        self._mlflow_checked = True
+
+        if not self._mlflow._mlflow_available:
+            self._mlflow_reachable = False
+            return False
+
+        uri = self._mlflow.tracking_uri or ""
+        if not uri:
+            self._mlflow_reachable = False
+            return False
+
+        # MLflow local file store (no server to ping) — treat as reachable
+        if uri.startswith("file:") or not uri.startswith(("http://", "https://")):
+            self._mlflow_reachable = True
+            return True
+
+        try:
+            parsed = urlparse(uri)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            self._mlflow_reachable = result == 0
+            if not self._mlflow_reachable:
+                logger.warning(
+                    f"MLflow server not reachable at {host}:{port} — "
+                    f"using local checkpoints only"
+                )
+            return self._mlflow_reachable
+        except Exception as e:
+            logger.debug(f"MLflow reachability check failed: {e}")
+            self._mlflow_reachable = False
+            return False
 
     def refresh(self) -> dict[str, dict[str, Any]]:
         """Refresh model metadata from MLflow.
+
+        If MLflow server is not reachable, skips MLflow queries entirely and
+        returns empty metadata (callers fall back to local checkpoints).
 
         Returns:
             Dict of model_type → metadata.
@@ -38,20 +92,28 @@ class ModelRegistry:
         if time.time() - self._last_refresh < self._cache_ttl and self._cache:
             return self._cache
 
+        # Quick MLflow availability check — skip slow queries if unreachable
+        mlflow_available = self._check_mlflow_available()
+
         result: dict[str, dict[str, Any]] = {}
 
         for model_type in self.MODEL_TYPES:
-            model_uri = self._mlflow.get_latest_production_model(model_type)
+            model_uri: Optional[str] = None
+
+            if mlflow_available:
+                model_uri = self._mlflow.get_latest_production_model(model_type)
+
             if model_uri:
                 result[model_type] = {
                     "model_uri": model_uri,
                     "status": "production",
                     "model_type": model_type,
                 }
-            else:
-                # Check staging (mlflow may not be installed)
+            elif mlflow_available:
+                # Check staging (mlflow may not have production yet)
                 try:
                     import mlflow
+
                     client = mlflow.tracking.MlflowClient()
                     versions = client.get_latest_versions(
                         f"quant-{model_type}", stages=["staging"]
@@ -74,6 +136,13 @@ class ModelRegistry:
                         "status": "not_found",
                         "model_type": model_type,
                     }
+            else:
+                # MLflow not reachable — mark all as not_found, rely on local
+                result[model_type] = {
+                    "model_uri": None,
+                    "status": "not_found",
+                    "model_type": model_type,
+                }
 
         self._cache = result
         self._last_refresh = time.time()

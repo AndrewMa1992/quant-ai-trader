@@ -48,6 +48,60 @@ class InferenceEngine:
 
         self._store = ParquetStore()
 
+        # Initialize FactorEngine once and reuse across predictions.
+        # Models were trained with 77 FactorEngine features; using the same
+        # engine here ensures feature-shape consistency at inference time.
+        self._factor_engine = None
+        try:
+            from services.factor_service.engine.factor_engine import FactorEngine
+
+            self._factor_engine = FactorEngine()
+            self._factor_engine.register_all()
+            logger.info(
+                f"InferenceEngine: FactorEngine ready with "
+                f"{len(self._factor_engine.factors)} factors"
+            )
+        except Exception as e:
+            logger.warning(f"InferenceEngine: FactorEngine not available: {e}")
+
+        # Load training-time feature column order (77 columns).
+        # Stored in feature_names.json — extracted from transformer checkpoint.
+        self._feature_names: list[str] = self._load_feature_names()
+
+    @staticmethod
+    def _load_feature_names() -> list[str]:
+        """Load the 77 training-time feature names in exact column order.
+
+        Models were trained with: close, high, low, open, volume,
+        ret_1d..ret_63d, F001..F311. The order is deterministic.
+        """
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).parent.parent.parent / "data" / "models" / "feature_names.json"
+        if path.exists():
+            try:
+                with open(path) as f:
+                    names = json.load(f)
+                if len(names) == 77:
+                    return names
+                logger.warning(f"feature_names.json has {len(names)} cols, expected 77")
+            except Exception:
+                pass
+
+        # Fallback: reconstruct from FactorEngine + OHLCV + returns
+        logger.warning("Reconstructing feature names from FactorEngine registry")
+        names = ["close", "high", "low", "open", "volume",
+                 "ret_1d", "ret_5d", "ret_21d", "ret_63d"]
+        # FactorEngine uses F001–F311 naming
+        from services.factor_service.engine.factor_engine import FactorEngine
+        fe = FactorEngine()
+        fe.register_all()
+        for name in fe.factors:
+            if name not in names:
+                names.append(name)
+        return names
+
     def load_models(self) -> dict[str, bool]:
         """Load all available production models.
 
@@ -96,8 +150,26 @@ class InferenceEngine:
             for name, model in self.models.items()
         }
 
+    def _compute_basic_returns(self, df: pd.DataFrame) -> None:
+        """Compute basic return features as a fallback when FactorEngine is unavailable.
+
+        Mutates ``df`` in place by adding ``ret_1d``, ``ret_5d``, ``ret_21d``,
+        and ``ret_63d`` columns.
+
+        Args:
+            df: OHLCV DataFrame (will be modified in place).
+        """
+        for p in [1, 5, 21, 63]:
+            col = "adj_close" if "adj_close" in df.columns else "close"
+            df[f"ret_{p}d"] = df[col].pct_change(p)
+
     def predict_single(self, ticker: str) -> dict[str, Any]:
         """Run all loaded models on a single ticker.
+
+        Uses ``FactorEngine`` to compute the same 77-feature set that was
+        used during training. If FactorEngine is unavailable, falls back to
+        basic return features (which will likely cause shape-mismatch errors
+        in trained models, but at least avoids hard crashes).
 
         Args:
             ticker: Stock ticker symbol.
@@ -115,15 +187,37 @@ class InferenceEngine:
                 "error": "Insufficient data",
             }
 
-        # Prepare features (use OHLCV + returns as minimal feature set)
         df = df.tail(504).copy()  # 2 years of daily data for sufficient context
-        for p in [1, 5, 21, 63]:
-            col = "adj_close" if "adj_close" in df.columns else "close"
-            df[f"ret_{p}d"] = df[col].pct_change(p)
 
-        # Drop date-level cols for prediction
-        feature_cols = [c for c in df.columns if c not in ("open", "high", "low", "close", "adj_close")]
-        X = df[feature_cols].fillna(0.0).tail(252)  # 1 year window for sequence models
+        # Compute full feature set using FactorEngine (same as training).
+        if self._factor_engine is not None:
+            try:
+                df = self._factor_engine.compute_all(df)
+            except Exception as e:
+                logger.warning(
+                    f"FactorEngine failed for {ticker}, using basic features: {e}"
+                )
+                self._compute_basic_returns(df)
+        else:
+            # Fallback: basic returns if FactorEngine not available
+            self._compute_basic_returns(df)
+
+        # Compute basic return columns (training included these alongside factors)
+        self._compute_basic_returns(df)
+
+        # Align columns to match exact training order (77 features).
+        # Training order: close, high, low, open, volume, ret_1d..ret_63d, F001..F311
+        train_cols = self._feature_names
+        aligned = pd.DataFrame(0.0, index=df.index, columns=train_cols)
+        for col in train_cols:
+            if col in df.columns:
+                aligned[col] = df[col].values
+            # If col not in df.columns, it stays 0.0 (missing feature)
+        missing = [c for c in train_cols if c not in df.columns]
+        if missing:
+            logger.debug(f"Missing features for {ticker} (padded=0): {missing[:5]}...")
+
+        X = aligned.fillna(0.0).tail(252)
 
         predictions: dict[str, Any] = {}
 
