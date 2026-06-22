@@ -34,8 +34,8 @@ def signals_to_bl_views(signals: List[Dict]) -> List[Dict]:
         signal_val: float = entry.get("signal", 0.0)
         confidence: float = entry.get("confidence", 0.5)
 
-        # 规则1: 信号强度需达到阈值
-        if abs(signal_val) < 0.3:
+        # 规则1: 信号强度需达到阈值（与管线 min_threshold 一致）
+        if abs(signal_val) < 0.05:
             continue
 
         # 规则2: 年化收益 = signal × 0.2（max ±20%）
