@@ -21,8 +21,10 @@ v2.2 重构 (T04):
 """
 import asyncio
 import json
+import sqlite3
 import time
-from datetime import datetime
+import uuid as _uuid
+from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -169,7 +171,7 @@ class TradingPipeline:
         # ── 执行器 ───────────────────────────────────────────
         logger.info("初始化 TigerExecutor...")
         self.executor: TigerExecutor = TigerExecutor(
-            mode="live" if self.tiger_ready else "paper",
+            mode="live" if (self.tiger_ready and self.config.EXECUTION_MODE == "live") else "paper",
             portfolio=self.portfolio,
             risk=self.risk_manager,
             tiger_bridge=self.tiger,
@@ -335,6 +337,15 @@ class TradingPipeline:
         if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
             logger.error(f"🚨 熔断触发: {report.reason}")
             await self.ws_pusher.push_alert("circuit_breaker", report.reason)
+            # P1-2: Tiger price fallback when HTTP prices are empty
+            if not prices and self.tiger_ready:
+                try:
+                    for ticker in list(self.portfolio.positions.keys()):
+                        quote = self.tiger.get_quote(ticker)
+                        if quote and quote.get("last", 0) > 0:
+                            prices[ticker] = float(quote["last"])
+                except Exception:
+                    pass
             self.risk_manager.liquidate_all(prices, self.tiger)
             await self._push_step_update(-1, {
                 "circuit_breaker": True,
@@ -356,6 +367,11 @@ class TradingPipeline:
                     leverage_blocked = True
             except Exception as e:
                 logger.warning(f"杠杆检查异常: {e}")
+
+        # ── P0-3: 杠杆阻止买入 ────────────────────────────────
+        if leverage_blocked:
+            logger.error("🚫 Tiger 账户杠杆率过高 — 跳过所有买入")
+            return None
 
         # ── 6. P1-2: 每日交易上限 ────────────────────────────
         if self.risk_manager.check_daily_limit():
@@ -405,6 +421,9 @@ class TradingPipeline:
             return None
         await self._push_step_update(3, {"raw_signals": len(signals)})
 
+        # ── DB Write: 保存信号到 signals 表 ──────────────────────
+        self._write_signals_to_db(signals)
+
         # Step 4: Apply Risk Checks
         approved: List[Dict] = await self._apply_risk_checks(signals)
         await self._push_step_update(4, {
@@ -420,6 +439,9 @@ class TradingPipeline:
 
         # Step 6: Execute Rebalance — TigerExecutor
         orders: List[Dict] = await self._execute_rebalance(target_weights)
+
+        # ── DB Write: 保存交易到 trades 表 ──────────────────────
+        self._write_trades_to_db(orders)
         await self._push_step_update(6, {
             "orders": len(orders),
             "trades_today": self.trades_today,
@@ -1020,6 +1042,194 @@ class TradingPipeline:
 
         except Exception as e:
             logger.error(f"Step 7 绩效记录异常: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # DB Write Helpers — 将信号/交易写入 SQLite 数据库
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_db_path(self) -> Path:
+        """Resolve the SQLite database path from backend config."""
+        try:
+            from configs.settings import settings
+            return settings.DB_PATH
+        except ImportError:
+            return Path("data/quant_trader.db")
+
+    def _write_signals_to_db(self, signals: List[Dict]) -> int:
+        """Write trading signals to the ``signals`` table.
+
+        Uses the v2 SQLAlchemy schema (ticker, signal_date, horizon,
+        direction, strength, target_weight, predicted_return, confidence,
+        risk_score, is_executed).
+
+        Args:
+            signals: List of signal dicts from Step 3.
+
+        Returns:
+            Number of signals written.
+        """
+        if not signals:
+            return 0
+
+        db_path = self._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+
+        written: int = 0
+        today: str = date.today().isoformat()
+        now: str = datetime.now().isoformat()
+
+        try:
+            for sig in signals:
+                ticker: str = sig.get("ticker", "")
+                if not ticker:
+                    continue
+
+                strength: float = float(sig.get("signal", sig.get("strength", 0.0)))
+                direction: int = 1 if strength > 0 else (-1 if strength < 0 else 0)
+                confidence: float = float(sig.get("confidence", 0.5))
+                predicted_return: float = float(sig.get("predicted_return", strength * 0.01))
+                target_weight: float = float(
+                    sig.get("target_weight", min(abs(strength) * 0.10, 0.20))
+                )
+                risk_score: float = float(sig.get("risk_score", 0.0))
+                horizon: str = str(sig.get("horizon", "1d"))
+                is_executed: bool = bool(sig.get("is_executed", False))
+
+                conn.execute(
+                    """INSERT OR REPLACE INTO signals
+                       (id, ticker, signal_date, horizon, direction, strength,
+                        target_weight, predicted_return, confidence, risk_score,
+                        is_executed, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(_uuid.uuid4()),
+                        ticker,
+                        today,
+                        horizon,
+                        direction,
+                        round(strength, 6),
+                        round(target_weight, 6),
+                        round(predicted_return, 6),
+                        round(confidence, 4),
+                        round(risk_score, 4),
+                        int(is_executed),
+                        now,
+                        now,
+                    ),
+                )
+                written += 1
+
+            conn.commit()
+            logger.debug(f"  📊 signals → DB: {written} 条写入 signals 表")
+        except Exception as e:
+            logger.warning(f"signals DB write failed (non-critical): {e}")
+        finally:
+            conn.close()
+
+        return written
+
+    def _write_trades_to_db(self, orders: List[Dict]) -> int:
+        """Write executed orders to the ``trades`` table.
+
+        Uses the v2 SQLAlchemy schema (ticker, trade_date, trade_time,
+        side, quantity, price, commission, slippage_bps, notional,
+        order_id, execution_id, signal_id, market, currency, strategy).
+
+        Args:
+            orders: List of order dicts from Step 6.
+
+        Returns:
+            Number of trades written.
+        """
+        if not orders:
+            return 0
+
+        db_path = self._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+
+        written: int = 0
+        today: str = date.today().isoformat()
+        now: str = datetime.now().isoformat()
+
+        try:
+            for order in orders:
+                # Skip rejected orders
+                if order.get("rejected"):
+                    continue
+
+                ticker: str = order.get("ticker", "")
+                if not ticker:
+                    continue
+
+                side: str = str(order.get("side", "")).upper()
+                quantity: int = int(float(order.get("quantity", 0)))
+                price: float = float(order.get("price", 0.0))
+                if quantity <= 0 or price <= 0:
+                    continue
+
+                notional: float = float(order.get("value", price * quantity))
+                commission: float = float(order.get("commission", 0.0))
+                slippage_bps: float = float(order.get("slippage_bps", 0.0))
+                order_id: str = str(order.get("order_id", ""))
+                execution_id: str = str(order.get("execution_id", order_id))
+                signal_id: str = str(order.get("signal_id", ""))
+                strategy: str = str(order.get("strategy", "pipeline"))
+                market: str = (
+                    "HK" if ".HK" in ticker
+                    else "SG" if ".SI" in ticker
+                    else "AU" if ".AX" in ticker
+                    else "NZ" if ".NZ" in ticker
+                    else "US"
+                )
+                currency: str = (
+                    "HKD" if ".HK" in ticker
+                    else "SGD" if ".SI" in ticker
+                    else "AUD" if ".AX" in ticker
+                    else "NZD" if ".NZ" in ticker
+                    else "USD"
+                )
+
+                conn.execute(
+                    """INSERT INTO trades
+                       (id, ticker, trade_date, trade_time, side, quantity, price,
+                        commission, slippage_bps, notional, order_id, execution_id,
+                        signal_id, market, currency, strategy, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(_uuid.uuid4()),
+                        ticker,
+                        today,
+                        now,
+                        side,
+                        quantity,
+                        round(price, 4),
+                        round(commission, 4),
+                        round(slippage_bps, 2),
+                        round(notional, 2),
+                        order_id,
+                        execution_id,
+                        signal_id,
+                        market,
+                        currency,
+                        strategy,
+                        now,
+                        now,
+                    ),
+                )
+                written += 1
+
+            conn.commit()
+            logger.debug(f"  📈 trades → DB: {written} 笔写入 trades 表")
+        except Exception as e:
+            logger.warning(f"trades DB write failed (non-critical): {e}")
+        finally:
+            conn.close()
+
+        return written
 
     # ═══════════════════════════════════════════════════════════════
     # Helpers

@@ -7,7 +7,7 @@ from datetime import datetime
 import numpy as np
 from loguru import logger
 
-from backend.config import model_config
+from configs.settings import settings
 from backend.data_engine import DataPipeline
 from backend.ai_models import (
     TransformerPredictor, TradingRLAgent, SentimentAnalyzer,
@@ -123,10 +123,10 @@ class TradingStrategy:
         signals = {}
 
         # 1. Transformer 预测信号
-        if self.transformer.is_ready() and len(features) >= model_config.TRANSFORMER_LOOKBACK:
+        if self.transformer.is_ready() and len(features) >= settings.MODEL_TRANSFORMER_LOOKBACK:
             try:
-                input_seq = features[-model_config.TRANSFORMER_LOOKBACK:]
-                if input_seq.shape[0] == model_config.TRANSFORMER_LOOKBACK:
+                input_seq = features[-settings.MODEL_TRANSFORMER_LOOKBACK:]
+                if input_seq.shape[0] == settings.MODEL_TRANSFORMER_LOOKBACK:
                     pred = self.transformer.predict(input_seq)
                     signals["transformer"] = {
                         "direction": pred["direction"],

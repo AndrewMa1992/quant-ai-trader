@@ -312,7 +312,7 @@ async def get_tiger_account():
 async def refresh_from_tiger():
     """★ 实时刷新：强制从老虎拉取真实资产数据"""
     from backend.data_engine.tiger_client import tiger_client
-    from backend.config import trading_config
+    from configs.settings import settings
     
     if not tiger_client.is_connected():
         tiger_client.connect()
@@ -323,7 +323,7 @@ async def refresh_from_tiger():
     tiger_client.connect()
     try:
         # 使用正确的实盘账户 (20874631) 而非模拟盘
-        real_account = trading_config.TIGER_ACCOUNT  # 20874631
+        real_account = settings.TIGER_ACCOUNT  # 20874631
         assets = tiger_client._trade_client.get_assets(account=real_account)
         
         if assets and isinstance(assets, list) and len(assets) > 0:

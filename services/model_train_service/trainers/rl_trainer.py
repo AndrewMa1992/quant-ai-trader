@@ -110,9 +110,12 @@ class TradingEnv(gym.Env if HAS_GYM else object):
         return self._get_obs(), float(reward), terminated, truncated, {"portfolio_value": self.portfolio_value}
 
     def _get_obs(self) -> np.ndarray:
-        """Build observation window."""
+        """Build observation window with NaN protection."""
         start = self.current_step - self.window
-        obs_data = self.data[start:self.current_step, :]
+        obs_data = self.data[max(0, start):self.current_step, :].copy()
+
+        # Sanitise: replace inf/NaN with 0
+        obs_data = np.nan_to_num(obs_data, nan=0.0, posinf=1.0, neginf=-1.0)
 
         # Pad if needed
         if obs_data.shape[0] < self.window:
@@ -121,7 +124,7 @@ class TradingEnv(gym.Env if HAS_GYM else object):
 
         # Add position channel
         pos_col = np.full((self.window, 1), float(self.position), dtype=np.float32)
-        return np.hstack([obs_data, pos_col])
+        return np.hstack([obs_data, pos_col]).astype(np.float32)
 
 
 class RLTrainer(TrainerBase):
@@ -176,7 +179,15 @@ class RLTrainer(TrainerBase):
         if self.algo == "SAC":
             self.model = SAC("MlpPolicy", env, verbose=0, device=self.device)
         else:
-            self.model = PPO("MlpPolicy", env, verbose=0, device=self.device)
+            self.model = PPO(
+                "MlpPolicy", env, verbose=0, device=self.device,
+                learning_rate=kwargs.get("lr", 3e-4),
+                n_steps=512,
+                batch_size=64,
+                clip_range=0.2,
+                max_grad_norm=0.5,
+                ent_coef=0.01,
+            )
 
         self.model.learn(total_timesteps=total_timesteps)
 

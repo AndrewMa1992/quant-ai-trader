@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from loguru import logger
 
-from backend.config import trading_config
+from configs.settings import settings
 
 
 @dataclass
@@ -40,21 +40,21 @@ class RiskManager:
     """
 
     def __init__(self):
-        self.portfolio_value = trading_config.INITIAL_CAPITAL
-        self.cash = trading_config.INITIAL_CAPITAL
+        self.portfolio_value = settings.TRADING_INITIAL_CAPITAL
+        self.cash = settings.TRADING_INITIAL_CAPITAL
         self.positions: Dict[str, float] = {}  # ticker -> shares
         self.position_values: Dict[str, float] = {}  # ticker -> market value
         self.trade_history: List[Dict] = []
         self.price_history: Dict[str, List[float]] = {}
-        self.peak_value = trading_config.INITIAL_CAPITAL
+        self.peak_value = settings.TRADING_INITIAL_CAPITAL
 
         # P0-2: 熔断相关状态
-        self.daily_start_value: float = trading_config.INITIAL_CAPITAL
+        self.daily_start_value: float = settings.TRADING_INITIAL_CAPITAL
         self.circuit_breaker_triggered: bool = False
         self.circuit_breaker_time: Optional[datetime] = None
 
         # P0-3: 断路器模式 — "hard" = 熔断+平仓, "warn" = 仅日志告警
-        self.breaker_mode: str = "warn"
+        self.breaker_mode: str = "hard"
 
     # ================================================================
     # P0-2: 组合级熔断
@@ -82,12 +82,12 @@ class RiskManager:
         # 检查冷却期是否已过
         if self.circuit_breaker_triggered and self.circuit_breaker_time is not None:
             cooldown_seconds = (datetime.now() - self.circuit_breaker_time).total_seconds()
-            if cooldown_seconds < trading_config.CIRCUIT_BREAKER_COOLDOWN:
+            if cooldown_seconds < settings.TRADING_CIRCUIT_BREAKER_COOLDOWN:
                 report.circuit_breaker = True
                 report.passed = False
                 report.violations.append(
                     f"🚨 熔断冷却中: {cooldown_seconds:.0f}s / "
-                    f"{trading_config.CIRCUIT_BREAKER_COOLDOWN}s 剩余"
+                    f"{settings.TRADING_CIRCUIT_BREAKER_COOLDOWN}s 剩余"
                 )
                 report.details["breaker_mode"] = self.breaker_mode
                 return report
@@ -101,13 +101,13 @@ class RiskManager:
         daily_pnl = self.get_daily_pnl()
         daily_pnl_pct = daily_pnl / (self.daily_start_value + 1e-8)
 
-        if daily_pnl_pct <= -trading_config.DAILY_LOSS_LIMIT:
+        if daily_pnl_pct <= -settings.TRADING_DAILY_LOSS_LIMIT:
             report.circuit_breaker = True
             report.passed = False
             if is_warn_mode:
                 report.violations.append(
                     f"⚠️ 断路器告警（未阻断）: 当日亏损 {daily_pnl_pct:.2%} ≥ "
-                    f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
+                    f"限制 {settings.TRADING_DAILY_LOSS_LIMIT:.0%}"
                 )
                 logger.warning(
                     f"⚠️ 断路器告警（warn模式，未阻断）: 当日亏损={daily_pnl_pct:.2%}, "
@@ -116,7 +116,7 @@ class RiskManager:
             else:
                 report.violations.append(
                     f"🚨 熔断触发! 当日亏损 {daily_pnl_pct:.2%} ≥ "
-                    f"限制 {trading_config.DAILY_LOSS_LIMIT:.0%}"
+                    f"限制 {settings.TRADING_DAILY_LOSS_LIMIT:.0%}"
                 )
                 self.circuit_breaker_triggered = True
                 self.circuit_breaker_time = datetime.now()
@@ -133,13 +133,13 @@ class RiskManager:
         if (self.peak_value > self.portfolio_value
                 and self.portfolio_value > 0
                 and current_dd < 0.90):
-            if current_dd >= trading_config.MAX_DRAWDOWN:
+            if current_dd >= settings.TRADING_MAX_DRAWDOWN:
                 report.circuit_breaker = True
                 report.passed = False
                 if is_warn_mode:
                     report.violations.append(
                         f"⚠️ 断路器告警（未阻断）: 最大回撤 {current_dd:.2%} ≥ "
-                        f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
+                        f"限制 {settings.TRADING_MAX_DRAWDOWN:.0%}"
                     )
                     logger.warning(
                         f"⚠️ 断路器告警（warn模式，未阻断）: 回撤={current_dd:.2%}"
@@ -147,7 +147,7 @@ class RiskManager:
                 else:
                     report.violations.append(
                         f"🚨 熔断触发! 最大回撤 {current_dd:.2%} ≥ "
-                        f"限制 {trading_config.MAX_DRAWDOWN:.0%}"
+                        f"限制 {settings.TRADING_MAX_DRAWDOWN:.0%}"
                     )
                     self.circuit_breaker_triggered = True
                     self.circuit_breaker_time = datetime.now()
@@ -265,8 +265,8 @@ class RiskManager:
         首次调用时校准 daily_start_value 和 peak_value；
         后续调用只更新 portfolio_value（用于熔断判断）。
         """
-        is_first_sync = (self.portfolio_value == trading_config.INITIAL_CAPITAL
-                         and self.daily_start_value == trading_config.INITIAL_CAPITAL)
+        is_first_sync = (self.portfolio_value == settings.TRADING_INITIAL_CAPITAL
+                         and self.daily_start_value == settings.TRADING_INITIAL_CAPITAL)
 
         if is_first_sync:
             logger.info(
@@ -427,7 +427,7 @@ class RiskManager:
 
     def _check_sufficient_cash(self, order_value: float) -> Dict:
         """资金检查 — 坚决不使用杠杆"""
-        from backend.config import trading_config as tcfg
+        from configs.settings import settings as tcfg
         max_allowed = self.cash * tcfg.MAX_CASH_USAGE
         if order_value > max_allowed:
             return {
@@ -448,20 +448,20 @@ class RiskManager:
         total_position_value = current_position_value + add_value
         position_ratio = total_position_value / (self.portfolio_value + 1e-8)
 
-        if position_ratio > trading_config.MAX_POSITION_SIZE:
+        if position_ratio > settings.TRADING_MAX_POSITION_SIZE:
             return {
                 "passed": False,
-                "reason": f"仓位超限: {ticker} 占比 {position_ratio:.1%} > {trading_config.MAX_POSITION_SIZE:.0%}"
+                "reason": f"仓位超限: {ticker} 占比 {position_ratio:.1%} > {settings.TRADING_MAX_POSITION_SIZE:.0%}"
             }
         return {"passed": True}
 
     def _check_max_drawdown(self) -> Dict:
         """最大回撤检查"""
         dd = self.get_current_drawdown()
-        if dd > trading_config.MAX_DRAWDOWN:
+        if dd > settings.TRADING_MAX_DRAWDOWN:
             return {
                 "passed": False,
-                "reason": f"最大回撤触发: {dd:.1%} > {trading_config.MAX_DRAWDOWN:.0%}"
+                "reason": f"最大回撤触发: {dd:.1%} > {settings.TRADING_MAX_DRAWDOWN:.0%}"
             }
         return {"passed": True}
 
@@ -471,10 +471,10 @@ class RiskManager:
             return {"passed": True}
 
         returns = np.diff(self.price_history[ticker]) / (np.array(self.price_history[ticker][:-1]) + 1e-8)
-        var = np.percentile(returns, (1 - trading_config.VAR_CONFIDENCE) * 100)
+        var = np.percentile(returns, (1 - settings.TRADING_VAR_CONFIDENCE) * 100)
         potential_loss = abs(var * order_value)
 
-        risk_threshold = self.portfolio_value * trading_config.MAX_PORTFOLIO_RISK
+        risk_threshold = self.portfolio_value * settings.TRADING_MAX_PORTFOLIO_RISK
         if potential_loss > risk_threshold:
             return {
                 "passed": False,
@@ -495,8 +495,8 @@ class RiskManager:
 
         loss_pct = (current_price - avg_cost) / avg_cost
 
-        if loss_pct <= -trading_config.STOP_LOSS_PCT:
-            logger.warning(f"⚠️ {ticker} 触发止损: {loss_pct:.1%} ≤ {trading_config.STOP_LOSS_PCT:.0%}")
+        if loss_pct <= -settings.TRADING_STOP_LOSS_PCT:
+            logger.warning(f"⚠️ {ticker} 触发止损: {loss_pct:.1%} ≤ {settings.TRADING_STOP_LOSS_PCT:.0%}")
             return {"triggered": True, "loss_pct": loss_pct}
 
         return {"triggered": False}

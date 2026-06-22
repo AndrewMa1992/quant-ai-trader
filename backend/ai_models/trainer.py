@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from datetime import datetime
 from loguru import logger
-from backend.config import model_config
+from configs.settings import settings
 from backend.data_engine import MarketDataEngine, DataPipeline
 
 market_data = MarketDataEngine()
@@ -30,9 +30,9 @@ class ModelTrainer:
         logger.info("=" * 60)
 
         # ★ 使用配置的训练参数
-        train_count = model_config.TRAIN_TICKERS
-        train_period = model_config.TRAIN_PERIOD
-        lookback = model_config.TRANSFORMER_LOOKBACK
+        train_count = settings.MODEL_TRAIN_TICKERS
+        train_period = settings.MODEL_TRAIN_PERIOD
+        lookback = settings.MODEL_TRANSFORMER_LOOKBACK
 
         if tickers is None:
             # ★ 使用稳定美股列表（S&P 500 成分股，数据可靠）
@@ -45,7 +45,7 @@ class ModelTrainer:
             ]
             tickers = tickers[:train_count]
         logger.info(f"📊 训练: {len(tickers)}只美股 | {train_period}数据 | {lookback}天回看")
-        logger.info(f"🏗️ 模型: Transformer ({model_config.TRANSFORMER_D_MODEL_LARGE}d/{model_config.TRANSFORMER_N_LAYERS_LARGE}层/{model_config.TRANSFORMER_N_HEADS_LARGE}头)")
+        logger.info(f"🏗️ 模型: Transformer ({settings.MODEL_TRANSFORMER_D_MODEL_LARGE}d/{settings.MODEL_TRANSFORMER_N_LAYERS_LARGE}层/{settings.MODEL_TRANSFORMER_N_HEADS_LARGE}头)")
 
         data_dict = market_data.get_multi_ticker_data(tickers, period=train_period, interval="1d")
         if not data_dict:
@@ -75,6 +75,8 @@ class ModelTrainer:
             self._train_transformer(processed_dict, tickers, min_length)
         except Exception as e:
             logger.error(f"Transformer 训练失败: {e}")
+            import traceback
+            traceback.print_exc()
 
         try:
             self._train_rl_agent(processed_dict, tickers, min_length)
@@ -103,13 +105,22 @@ class ModelTrainer:
         改进:
         - NaN/posinf/neginf → 安全替换
         - 显式 float32 转换
-        - 从简单 80/20 分割升级为 Walk-forward 滚动窗口验证
+        - Walk-forward 滚动窗口验证
+        - FP16 混合精度 (CUDA)
+        - CosineAnnealingWarmRestarts + Linear Warmup
         - 记录每折验证指标，选择最佳模型
         """
-        lookback = model_config.TRANSFORMER_LOOKBACK
+        import torch
+
+        lookback = settings.MODEL_TRANSFORMER_LOOKBACK
         pred_len = 5
-        n_splits = model_config.WALK_FORWARD_SPLITS  # = 3
-        walk_forward_window = model_config.WALK_FORWARD_WINDOW  # = 252
+        n_splits = settings.MODEL_WALK_FORWARD_SPLITS
+        walk_forward_window = settings.MODEL_WALK_FORWARD_WINDOW
+
+        # GPU 混合精度检测
+        use_amp = (self.transformer.device.type == 'cuda') if hasattr(self.transformer, 'device') else False
+        if use_amp:
+            logger.info("🚀 FP16 混合精度训练已启用 (CUDA)")
 
         all_X, all_y = [], []
         for ticker in tickers:
@@ -142,9 +153,6 @@ class ModelTrainer:
         all_val_losses = []
 
         for fold in range(n_splits):
-            # 确定当前折的训练/验证边界
-            # 训练: [0, train_end), 验证: [train_end, val_end)
-            # 每折验证窗口递增，训练窗口也递增
             fold_size = total_samples // (n_splits + 1)
             train_end = total_samples - (n_splits - fold) * fold_size
             val_end = min(train_end + fold_size, total_samples)
@@ -157,15 +165,17 @@ class ModelTrainer:
             X_val = X[train_end:val_end]
             y_val = y[train_end:val_end]
 
-            # 仅第一折完整训练，后续折增量微调
-            epochs = 30 if fold == 0 else 10
-            lr = 1e-4 if fold == 0 else 5e-5
+            # 每折使用完整epochs进行训练
+            epochs = settings.MODEL_TRANSFORMER_EPOCHS
+            lr = settings.MODEL_TRANSFORMER_LEARNING_RATE
 
-            logger.info(f"  Fold {fold+1}/{n_splits}: train={X_train.shape}, val={X_val.shape} (epochs={epochs}, lr={lr})")
+            logger.info(f"  Fold {fold+1}/{n_splits}: train={X_train.shape}, val={X_val.shape} "
+                        f"(epochs={epochs}, lr={lr:.2e}, amp={use_amp})")
 
             val_loss = self.transformer.train(
                 X_train, y_train, X_val, y_val,
                 n_vars=X.shape[2], epochs=epochs, lr=lr, return_val_loss=True,
+                use_amp=use_amp,
             )
 
             all_val_losses.append(val_loss)
@@ -191,7 +201,8 @@ class ModelTrainer:
             logger.warning("Walk-forward 无法生成有效折叠，回退到简单训练")
             from sklearn.model_selection import train_test_split
             X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
-            self.transformer.train(X_train, y_train, X_val, y_val, n_vars=X.shape[2])
+            self.transformer.train(X_train, y_train, X_val, y_val, n_vars=X.shape[2],
+                                   use_amp=use_amp)
 
         self.transformer.save()
 
@@ -211,7 +222,7 @@ class ModelTrainer:
             return
         self.rl_agent.create_env(df_dict, close_dict=close_dict,
                                        feature_dim=min(40, list(df_dict.values())[0].shape[1]))
-        self.rl_agent.train(total_timesteps=30000)
+        self.rl_agent.train(total_timesteps=settings.MODEL_RL_TOTAL_TIMESTEPS)
         self.rl_agent.save()
 
     def get_training_summary(self):

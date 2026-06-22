@@ -116,9 +116,9 @@ async def get_tickers():
 
     # 兜底
     if not us:
-        from backend.config import data_config
-        us = data_config.US_TICKERS
-        hk = data_config.HK_TICKERS
+        from configs.settings import settings
+        us = settings.data_us_tickers_list
+        hk = settings.data_hk_tickers_list
 
     return {
         "all": all_info,

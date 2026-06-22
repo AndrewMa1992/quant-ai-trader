@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from services.model_train_service.api.routes import _training_runs, router as train_router
-from services.model_train_service.config import train_config
+from services.model_train_service.config import train_config, _cuda_available
 from shared.core.logger import setup_logger
 
 _START_TIME: float = time.time()
@@ -26,7 +26,16 @@ _TRAINING_JOBS_PATH: Path = Path("cache") / "training_jobs.json"
 async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {train_config.SERVICE_NAME} on port {train_config.PORT}")
-    logger.info(f"Device: {train_config.DEVICE}")
+
+    # GPU detection
+    cuda_ok = _cuda_available()
+    if cuda_ok:
+        import torch
+        gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "unknown"
+        gpu_mem = torch.cuda.get_device_properties(0).total_memory // (1024 ** 2) if torch.cuda.is_available() else 0
+        logger.info(f"GPU detected: {gpu_name} ({gpu_mem} MiB), device={train_config.DEVICE}")
+    else:
+        logger.info(f"No CUDA GPU detected, device={train_config.DEVICE}")
 
     # Restore _training_runs history from disk
     if _TRAINING_JOBS_PATH.exists():

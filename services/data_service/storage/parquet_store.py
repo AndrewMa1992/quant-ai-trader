@@ -135,6 +135,10 @@ class ParquetStore:
             else:
                 return df
 
+        # Strip timezone from index for consistent naive-timestamp comparisons
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+
         # Filter by date range
         if start:
             df = df[df.index >= pd.Timestamp(start)]

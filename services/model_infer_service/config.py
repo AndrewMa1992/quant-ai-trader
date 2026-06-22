@@ -1,12 +1,15 @@
 """services/model_infer_service/config.py – Model inference service configuration.
 
 Uses QAT_INFER_ environment prefix.
+DEVICE defaults to settings.TRAIN_DEVICE (from .env QAT_TRAIN_DEVICE).
 """
 
 from __future__ import annotations
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from configs.settings import settings
 
 
 class InferServiceConfig(BaseSettings):
@@ -22,7 +25,7 @@ class InferServiceConfig(BaseSettings):
     SERVICE_NAME: str = Field(default="model-infer-service")
     HOST: str = Field(default="0.0.0.0")
     PORT: int = Field(default=8014)
-    DEVICE: str = Field(default="cpu")
+    DEVICE: str = Field(default_factory=lambda: settings.TRAIN_DEVICE)
 
     # Ensemble
     BAYESIAN_WINDOW_DAYS: int = Field(default=60, description="Rolling window for Bayesian weight computation")

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
-from backend.config import data_config
+from configs.settings import settings
 from backend.data_engine.china_adapter import china_data_adapter
 
 # ★ 设置缓存到项目本地
@@ -193,7 +193,7 @@ class MarketDataEngine:
             {ticker: DataFrame}
         """
         if tickers is None:
-            tickers = data_config.ALL_TICKERS
+            tickers = settings.DATA_ALL_TICKERS
         result = {}
         for ticker in tickers:
             df = self.get_historical_data(ticker, period, interval)
@@ -225,8 +225,8 @@ class MarketDataEngine:
         """获取所有市场状态"""
         import pytz
         # MARKET_CONFIGS 是 config.py 的模块级变量
-        from backend import config as cfg
-        market_configs = cfg.MARKET_CONFIGS
+        from configs.settings import settings
+        market_configs = settings.market_configs_dict
 
         now_utc = datetime.now(pytz.UTC)
         markets = {}

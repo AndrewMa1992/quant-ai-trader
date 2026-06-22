@@ -22,9 +22,12 @@ class FakeTradingConfig:
     CIRCUIT_BREAKER_COOLDOWN: int = 900
 
 
-# ── Patch backend.config.trading_config BEFORE importing risk_manager ──
-import backend.config as _cfg
-_cfg.trading_config = FakeTradingConfig()
+# ── Patch configs.settings singleton BEFORE importing risk_manager ──
+import configs.settings as _cfg
+_cfg.settings.TRADING_INITIAL_CAPITAL = FakeTradingConfig.INITIAL_CAPITAL
+_cfg.settings.TRADING_MAX_DRAWDOWN = FakeTradingConfig.MAX_DRAWDOWN
+_cfg.settings.TRADING_DAILY_LOSS_LIMIT = FakeTradingConfig.DAILY_LOSS_LIMIT
+_cfg.settings.TRADING_CIRCUIT_BREAKER_COOLDOWN = FakeTradingConfig.CIRCUIT_BREAKER_COOLDOWN
 
 
 # ── Import risk_manager.py directly, bypassing __init__.py (which pulls pandas) ──

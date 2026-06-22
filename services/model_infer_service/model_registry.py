@@ -127,7 +127,7 @@ class ModelRegistry:
             os.path.abspath(checkpoint_dir),
             os.path.abspath(os.path.join("data", "models")),
         ]
-        extensions: tuple[str, ...] = (".pkl", ".pt", ".ckpt", ".joblib")
+        extensions: tuple[str, ...] = (".pkl", ".pt", ".ckpt", ".joblib", ".zip")
 
         candidates: list[tuple[int, str]] = []  # (version, path)
 

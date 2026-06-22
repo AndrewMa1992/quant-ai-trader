@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
-from backend.config import trading_config
+from configs.settings import settings
 
 
 class LotPredictor:
@@ -168,7 +168,7 @@ class LotPredictor:
         """
         lot_size = self.get_lot_size(ticker, market, tiger_client)
         currency = self._get_currency(ticker, market)
-        fx_rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+        fx_rate = settings.trading_currency_rates_dict.get(currency, 1.0)
 
         min_local = price * lot_size
         # 加佣金缓冲 0.5%
@@ -239,7 +239,7 @@ class LotPredictor:
 
             # 同币种现金判断
             currency = detail["currency"]
-            rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+            rate = settings.trading_currency_rates_dict.get(currency, 1.0)
             cash_in_ccy = available_cash_usd / rate if rate > 0 else 0
 
             if cash_in_ccy >= detail["min_local"]:

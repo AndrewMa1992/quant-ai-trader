@@ -9,7 +9,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from loguru import logger
-from backend.config import model_config, MODELS_DIR
+from configs.settings import settings
 
 
 class TradingEnv(gym.Env):
@@ -356,7 +356,7 @@ class TradingRLAgent:
 
     def create_env(self, df_dict, close_dict=None, feature_dim=40, lookback=60, initial_balance=100000.0):
         self.env = TradingEnv(df_dict, close_dict, feature_dim, lookback, initial_balance,
-                              max_position=model_config.RL_MAX_TRADE_PERCENT)
+                              max_position=settings.MODEL_RL_MAX_TRADE_PERCENT)
         return self.env
 
     def build_model(self):
@@ -364,16 +364,19 @@ class TradingRLAgent:
         from stable_baselines3 import PPO
         if self.env is None:
             raise ValueError("请先创建环境")
-        self.model = PPO("MlpPolicy", self.env, learning_rate=model_config.RL_LEARNING_RATE,
-                         n_steps=model_config.RL_N_STEPS, batch_size=model_config.RL_BATCH_SIZE,
-                         gamma=model_config.RL_GAMMA, verbose=0, device=self._device)
-        logger.info(f"PPO 模型构建完成 (device={self._device})")
+        self.model = PPO("MlpPolicy", self.env, learning_rate=settings.MODEL_RL_LEARNING_RATE,
+                         n_steps=settings.MODEL_RL_N_STEPS, batch_size=settings.MODEL_RL_BATCH_SIZE,
+                         gamma=settings.MODEL_RL_GAMMA, verbose=0, device=self._device,
+                         ent_coef=settings.MODEL_RL_ENT_COEF,
+                         clip_range=settings.MODEL_RL_CLIP_RANGE)
+        logger.info(f"PPO 模型构建完成 (device={self._device}, ent_coef={settings.MODEL_RL_ENT_COEF}, "
+                    f"clip_range={settings.MODEL_RL_CLIP_RANGE})")
         return self.model
 
     def train(self, total_timesteps=None):
         if self.model is None:
             self.build_model()
-        timesteps = total_timesteps or model_config.RL_TOTAL_TIMESTEPS
+        timesteps = total_timesteps or settings.MODEL_RL_TOTAL_TIMESTEPS
         logger.info(f"PPO 训练开始: {timesteps:,} timesteps (device={self._device})")
         self.model.learn(total_timesteps=timesteps, progress_bar=True)
         self._is_trained = True

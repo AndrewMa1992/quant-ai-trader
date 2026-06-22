@@ -1,8 +1,9 @@
-# System Design — Quant AI Trader v2 增量架构
+# Quant AI Trader v2 — 修复方案与系统设计
 
-> **作者**: 高见远 (Bob, Architect)  
-> **日期**: 2026-07-05  
-> **目标**: 基于增量 PRD 修复 trading_pipeline.py，实现 v2 功能 ≥ v1、实盘交易上线、架构清理
+> **Architect**: 高见远 (Bob)  
+> **Date**: 2025-07-15  
+> **Target Branch**: `dev-20260522`  
+> **WorkSpace**: `E:/workbuddyspace/Claw/quant-ai-trader`
 
 ---
 
@@ -10,417 +11,323 @@
 
 ### 1. Implementation Approach
 
-#### 1.1 核心技术挑战
+#### 1.1 核心挑战
 
-| # | 挑战 | 分析 |
-|---|------|------|
-| C1 | **v1→v2 桥接清理** | trading_pipeline.py 有 3 处 backend/ 直接导入，架构约束要求只清理这 3 处，不修改 backend/main.py |
-| C2 | **实盘执行通道** | EXECUTION_MODE="live" 时需通过 Tiger API 真实下单，同时保留 paper 模式降级 |
-| C3 | **组合级熔断** | 日亏损 ≥ 5% 触发全部平仓 + 停止新交易 + 告警，需正确同步 Tiger 实际资产值 |
-| C4 | **市场时段检测** | 支持 US/HK/SG/AU/NZ 五市场 24h 覆盖（含盘前/盘后/夜盘） |
-| C5 | **Tiger 状态同步** | 每轮从 Tiger 拉取持仓/现金/总资产，校准本地状态防误判 |
+| # | 挑战 | 影响 | 根因 |
+|---|------|------|------|
+| B1 | `get_stock_briefs()` 返回 DataFrame/List 混合类型 | 每10分钟日志报错 | Tiger SDK 对单元素查询返回 DataFrame |
+| B2 | `daily_start_value` 使用 1亿初始资本 vs Tiger 实盘 $2,475 | 交易熔断误触发 | 初始资本基准与实盘余额差 4000 倍 |
+| B3 | `backend/` (40 文件) 与 `services/` (131 文件) 双架构并存 | 代码债务、调试混乱 | 渐进迁移未完成 |
+| B4 | `.env` 中 4 个 `CHANGE_ME` 占位符 | 配置不完整 | 凭据未填入 |
+| B5 | GPU 训练未触发 / GitHub 推送权限不明 | 功能未激活 | 环境变量作用域问题 |
 
-#### 1.2 框架选型与设计策略
+#### 1.2 修复策略总览
 
-| 组件 | 策略 | 理由 |
-|------|------|------|
-| **TigerClient 桥接** | `shared/tiger_bridge.py` 薄封装层 | 满足架构约束（不在管线中直接 import backend/），通过 `_lazy_import` 延迟加载 backend 单例 |
-| **PortfolioManager v2** | `shared/portfolio_manager.py` 新实现 | 替代 backend.trading_engine.portfolio，数据模型独立，支持 Tiger 同步 |
-| **RiskManager v2** | `shared/risk_manager.py` 新实现 | 熔断器 + 杠杆检查 + 每日上限 + 空头修复全内置 |
-| **TigerExecutor** | `shared/tiger_executor.py` 策略模式 | 统一 live/paper 接口，内部根据 EXECUTION_MODE 切换 |
-| **MarketSession** | `shared/market_session.py` 静态工具 | pytz 时区计算，无状态纯函数 |
-| **WebSocket Push** | `shared/ws_pusher.py` httpx async | 每 Step 完成后 POST 到 API Gateway WebSocket |
+**Bug 1 — DataFrame 真值歧义**
+- 策略：使用 `isinstance` + `hasattr` 多态检查替代 `if not briefs`
+- 防御深度：同时修复 `backend/data_engine/tiger_client.py`（实际运行路径）和 `services/data_service/ingestion/tiger_client.py`（v2 未来路径）
+- 兼容 Tiger SDK 返回的 `DataFrame`、`list`、`None` 三种类型
+
+**Bug 2 — 熔断误触发**
+- 策略：在 `shared/risk_manager.py` 的 `sync_portfolio_value()` 中增加 `_tiger_synced` 标记
+- 首次 Tiger 同步成功后，自动重置 `daily_start_value` 为 Tiger 实盘净值
+- 同时在 `check_circuit_breaker()` 中增加异常值保护（daily_start_value 与 portfolio_value 差 > 50% 时自动校准）
+
+**Bug 3 — 双架构统一**
+- 策略：分两阶段，优先消除交易关键路径的 backend/ 依赖
+- 阶段 A（本修复）：移除 `shared/tiger_bridge.py` 对 `backend/data_engine/tiger_client.py` 的 fallback，改为使用 v2 `services/data_service/ingestion/tiger_client.py`
+- 阶段 B（后续）：逐步移除 `trading_pipeline.py` 中的 `_v1_fallback` 方法
+
+**Bug 4 — .env 占位符**
+- 策略：区分"必须填"与"有默认值"。Tiger 凭据从代码中的实际 fallback 值回填；API_KEY 填开发用值；保持 `.env.example` 干净
+
+**Bug 5 — GPU + GitHub**
+- 策略：daemon_forever.bat 中 `set DEVICE=cuda` 只影响子进程环境变量，需确认 model_train 服务的 config.py 正确读取 `QAT_TRAIN_DEVICE` 环境变量；GitHub push 依赖 Git credential manager
 
 #### 1.3 架构模式
 
-采用 **Pipeline + Strategy** 模式：
-- `TradingPipeline` 保持七步编排器角色不变
-- 每步内部由新 shared/ 模块实现，通过依赖注入组合
-- 执行通道通过 `TigerExecutor` 的策略模式切换 live/paper
+```
+┌─────────────────────────────────────────────────────────┐
+│                    daemon_forever.bat                     │
+│  (启动所有 v2 微服务 + trading_pipeline.py + git sync)    │
+└────────────┬────────────────────────────────────────────┘
+             │
+    ┌────────┴──────────┐
+    │ trading_pipeline.py│  ← 核心交易编排器，v2 唯一入口
+    └──┬────┬────┬────┬─┘
+       │    │    │    │
+       ▼    ▼    ▼    ▼
+  ┌────┐┌────┐┌────┐┌────┐
+  │Data││Fact││Risk││Exec│  ← v2 微服务 (HTTP localhost)
+  │Svc ││Svc ││Svc ││Svc │
+  └────┘└────┘└────┘└────┘
+       │              │
+       ▼              ▼
+  ┌────────────┐  ┌──────────────────┐
+  │ shared/     │  │ services/exec/   │
+  │ tiger_      │  │ live/tiger_      │
+  │ bridge.py   │  │ broker.py        │
+  └──────┬─────┘  └────────┬─────────┘
+         │                 │
+         │    ┌────────────┘
+         ▼    ▼
+  ┌─────────────────────────────┐
+  │ services/data_service/       │
+  │ ingestion/tiger_client.py    │  ← v2 QuoteClient (async)
+  └─────────────────────────────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Tiger SDK     │
+  │ (tigeropen)   │
+  └──────────────┘
+```
+
+**数据流关键路径**（修复后）:
+1. `trading_pipeline.py` → `shared/tiger_bridge.py` → `services/data_service/ingestion/tiger_client.py` → Tiger SDK
+2. 不再经过 `backend/data_engine/tiger_client.py`
+3. `shared/risk_manager.py` 直接管理熔断逻辑，不依赖 `backend/`
 
 ---
 
 ### 2. File List
 
-#### 2.1 新建文件
-
 ```
-shared/tiger_bridge.py          — TigerClient 薄桥接层（P0-4, P0-5）
-shared/market_session.py        — 市场时段检测工具（P0-3）
-shared/portfolio_manager.py     — v2 组合管理器（P0-4, P0-5）
-shared/risk_manager.py          — v2 风控管理器（P0-2, P1-1, P1-2）
-shared/tiger_executor.py        — 实盘/模拟执行器（P0-1, P1-4）
-shared/daily_state.py           — 日状态追踪器（P0-2, P1-2）
-shared/ws_pusher.py             — WebSocket 推送工具（P1-5）
-shared/git_sync.py              — Git 自动同步（P2-1）
-```
-
-#### 2.2 修改文件
-
-```
-trading_pipeline.py             — 主体重构：移除 backend/ 导入，集成新模块（P0-1~P0-5, P1-1~P1-5）
-configs/pipeline_config.py      — 新增配置项（EXECUTION_MODE, MAX_DAILY_TRADES, etc.）
-configs/settings.py             — 添加 EXECUTION_MODE 到 Pydantic Settings
-```
-
-#### 2.3 参考但不修改的文件
-
-```
-backend/main.py                 — 保持不变（架构约束）
-backend/trading_engine/risk_manager.py    — 参考逻辑
-backend/trading_engine/executor.py        — 参考逻辑
-backend/data_engine/tiger_client.py       — 通过桥接间接使用
-_legacy_archive/misc/auto_trader.py       — v1 参考实现
-services/execution_service/live/circuit_breaker.py — 参考接口
+quant-ai-trader/
+├── .env                                          # [修改] Bug 4: 填充 CHANGE_ME 占位符
+├── configs/
+│   └── settings.py                               # [修改] T01: 增加启动安全校验
+├── daemon_forever.bat                            # [修改] T01+T04: GPU env + push check
+├── trading_pipeline.py                           # [修改] T02+T03: sync guard + 移除 v1 fallback
+├── backend/
+│   ├── data_engine/
+│   │   └── tiger_client.py                       # [修改] Bug 1: DataFrame 真值修复
+│   └── trading_engine/
+│       └── risk_manager.py                       # [修改] Bug 2: 熔断修复 + 弃用标注
+├── shared/
+│   ├── risk_manager.py                           # [修改] Bug 2: Tiger sync 后自动校准
+│   └── tiger_bridge.py                           # [修改] Bug 3: 移除 legacy fallback
+├── services/
+│   ├── data_service/
+│   │   └── ingestion/
+│   │       └── tiger_client.py                   # [修改] Bug 1: 同步修复 DataFrame
+│   └── model_train_service/
+│       └── config.py                             # [修改] Bug 5: GPU 检测日志增强
+└── docs/
+    ├── system_design.md                          # [新增] 本文档
+    ├── class-diagram.mermaid                     # [新增] 类图
+    ├── sequence-diagram.mermaid                  # [新增] 时序图
+    └── rollback.md                               # [新增] T04: 回滚方案
 ```
 
 ---
 
 ### 3. Data Structures and Interfaces
 
-#### 3.1 核心类图
-
 ```mermaid
 classDiagram
-    class TradingPipeline {
-        +PipelineConfig config
-        +TigerBridge tiger
-        +MarketSession market_session
-        +PortfolioManager portfolio
-        +RiskManager risk
-        +TigerExecutor executor
-        +WsPusher ws_pusher
-        +FactorEngine factor_engine
-        +InferenceEngine inference_engine
-        +RiskGate risk_gate
-        +int cycle_count
-        +__init__(config)
-        +run(interval_seconds)
-        +run_cycle() Dict
-        -_get_active_universe() List~str~
-        -_fetch_market_data(tickers) Dict
-        -_compute_factors(data) DataFrame
-        -_run_inference(factor_df, tickers) List~Dict~
-        -_apply_risk_checks(signals) List~Dict~
-        -_optimize_portfolio(signals) Dict
-        -_execute_rebalance(weights) List~Dict~
-        -_record_performance(orders) None
-        -_sync_tiger_state() None
-        -_check_market_open() bool
-        -_check_circuit_breaker() bool
-        -_push_step_update(step, data) None
-        +close() None
-    }
-
-    class TigerBridge {
-        -TigerClient _client
-        -bool _connected
-        +connect() bool
-        +get_account_info(force) Optional~Dict~
-        +get_positions(force) List~Dict~
-        +place_order(ticker, action, quantity, type, price) Optional~Dict~
-        +get_quote(ticker) Optional~Dict~
-        +sync_all_to_db() Dict
-        +is_connected() bool
-        +get_status() Dict
-    }
-
-    class MarketSession {
-        +bool US
-        +bool US_regular
-        +bool US_extended
-        +bool US_overnight
-        +bool HK
-        +bool SG
-        +bool AU
-        +bool NZ
-        +is_any_market_open() bool
-        +is_us_market_open() bool
-        +is_hk_market_open() bool
-        +get_status() Dict
-    }
-
-    class PortfolioManager {
-        +float cash
-        +float total_value
-        +Dict~str,float~ positions
-        +Dict~str,float~ avg_costs
-        +Dict~str,float~ position_values
-        +float initial_capital
-        +sync_from_tiger(tiger_bridge, force) Dict
-        +execute_trade(ticker, side, price, strength, strategy) Optional~Dict~
-        +update_value(prices) None
-        +get_metrics() Dict
-        +save_state() None
-        +load_state() Optional~Dict~
+    class Settings {
+        +TRADING_INITIAL_CAPITAL: float = 10000.0
+        +TRADING_DAILY_LOSS_LIMIT: float = 0.05
+        +TRADING_MAX_DRAWDOWN: float = 0.25
+        +TIGER_ID: str
+        +TIGER_ACCOUNT: str
+        +TIGER_LICENSE: str
+        +TRAIN_DEVICE: str = "cpu"
+        +EXECUTION_MODE: str = "paper"
+        +validate_on_startup() bool
     }
 
     class RiskManager {
-        +float portfolio_value
-        +float daily_start_value
-        +float peak_value
-        +bool circuit_breaker_triggered
-        +str breaker_mode
-        +int trades_today
-        +int max_daily_trades
+        -portfolio_value: float
+        -cash: float
+        -daily_start_value: float
+        -peak_value: float
+        -circuit_breaker_triggered: bool
+        -_tiger_synced: bool
+        +__init__(initial_capital, breaker_mode, max_daily_trades)
+        +sync_portfolio_value(total_value, cash, is_tiger_sync)
         +check_circuit_breaker() RiskReport
-        +liquidate_all(prices) List~Dict~
-        +check_leverage(tiger_acct) bool
+        +liquidate_all(prices, tiger_bridge) List
+        +check_leverage(tiger_account) bool
         +check_daily_limit() bool
         +check_order(ticker, side, quantity, price) RiskReport
-        +sync_portfolio_value(total, cash) None
-        +reset_daily_state() None
-        +get_status() Dict
-        +fix_short_positions(portfolio, executor, prices) int
+        +reset_daily_state()
+        +fix_short_positions(portfolio, tiger_bridge, prices) int
     }
 
-    class TigerExecutor {
-        +str mode
-        +PortfolioManager portfolio
-        +RiskManager risk
-        +TigerBridge tiger
-        +execute_signal(ticker, decision, strength, price, confidence, strategy) Optional~Dict~
-        +execute_rebalance(target_weights, prices, current_positions) List~Dict~
-        -_execute_live(ticker, action, quantity, price) Optional~Dict~
-        -_execute_paper(ticker, action, quantity, price, strategy) Optional~Dict~
+    class RiskReport {
+        +passed: bool
+        +reason: str
+        +warnings: List
+        +circuit_breaker: bool
+        +daily_limit_reached: bool
+        +leverage_blocked: bool
+        +details: Dict
     }
 
-    class WsPusher {
-        +str api_url
-        +push_cycle_update(cycle, step, data) None
-        +push_trade(trade) None
-        +push_alert(level, message) None
+    class TigerClient {
+        -_account: str
+        -_tiger_id: str
+        -_client: Any
+        -_quote_client: Any
+        -_initialized: bool
+        +_ensure_initialized()
+        +get_quote(ticker) Optional~Dict~
+        +get_quotes(tickers) List~Dict~
+        +get_positions() List~Dict~
     }
 
-    class DailyState {
-        +str trade_date
-        +int trades_today
-        +bool circuit_broken
-        +float daily_start_value
-        +check_date_roll() bool
-        +increment_trades() None
-        +reset_for_new_day(start_value) None
+    class TigerBridge {
+        +connect() bool
+        +is_connected() bool
+        +get_quote(ticker) Optional~Dict~
+        +get_account_info(force) Optional~Dict~
+        +get_positions(force) List~Dict~
+        +place_order(ticker, action, quantity, type, price) Optional~Dict~
     }
 
-    class PipelineConfig {
-        +int CYCLE_INTERVAL_SECONDS
-        +bool TRADING_HOURS_ONLY
-        +int MAX_TICKERS_PER_CYCLE
-        +float SIGNAL_THRESHOLD
-        +float MIN_CONFIDENCE
-        +bool ENABLE_RISK_CHECKS
-        +bool ENABLE_PORTFOLIO_OPT
-        +str EXECUTION_MODE
-        +int MAX_DAILY_TRADES
-        +float DAILY_LOSS_LIMIT
-        +float LEVERAGE_LIMIT
-        +int V1_FALLBACK_RETRIES
-        +bool GIT_AUTO_SYNC
-        +bool ENABLE_WS_PUSH
+    class TigerBroker {
+        -_client: Any
+        -_initialized: bool
+        +_ensure_client()
+        +place_order(ticker, side, quantity, type, price)
+        +get_positions() List
+        +get_account_summary() Dict
     }
 
+    class TradingPipeline {
+        +config: PipelineConfig
+        +portfolio: PortfolioManager
+        +risk_manager: RiskManager
+        +tiger: TigerBridge
+        +executor: TigerExecutor
+        +run_cycle() Optional~Dict~
+        -_get_live_prices() Dict
+        -_get_active_universe() List
+        -_fetch_market_data(tickers) Dict
+    }
+
+    class TrainServiceConfig {
+        +DEVICE: str
+        +PORT: int
+        +_cuda_available() bool
+    }
+
+    TradingPipeline --> RiskManager : uses
     TradingPipeline --> TigerBridge : uses
-    TradingPipeline --> MarketSession : uses
-    TradingPipeline --> PortfolioManager : owns
-    TradingPipeline --> RiskManager : owns
-    TradingPipeline --> TigerExecutor : owns
-    TradingPipeline --> WsPusher : uses
-    TradingPipeline --> DailyState : owns
-    TradingPipeline --> PipelineConfig : config
-    TigerExecutor --> TigerBridge : uses
-    TigerExecutor --> PortfolioManager : references
-    TigerExecutor --> RiskManager : references
-    RiskManager --> PortfolioManager : reads
-    PortfolioManager --> TigerBridge : syncs from
-```
-
-#### 3.2 关键数据结构
-
-```python
-# ── RiskReport ──────────────────────────────────────────
-@dataclass
-class RiskReport:
-    passed: bool = True
-    reason: str = ""
-    warnings: List[str] = field(default_factory=list)
-    circuit_breaker: bool = False
-    daily_limit_reached: bool = False
-    leverage_blocked: bool = False
-    details: Dict = field(default_factory=dict)
-
-# ── MarketStatus ────────────────────────────────────────
-@dataclass
-class MarketStatus:
-    US: bool = False
-    US_regular: bool = False
-    US_extended: bool = False
-    US_overnight: bool = False
-    HK: bool = False
-    SG: bool = False
-    AU: bool = False
-    NZ: bool = False
-
-# ── TigerAccount ────────────────────────────────────────
-# Dict alias:
-# {
-#     "account": str,
-#     "cash": float,
-#     "market_value": float,
-#     "total_value": float,
-#     "buying_power": float,
-#     "leverage": float,
-#     "unrealized_pnl": float,
-#     "realized_pnl": float,
-# }
-
-# ── CycleSummary ─────────────────────────────────────────
-# {
-#     "cycle": int,
-#     "timestamp": str (ISO 8601),
-#     "trade_date": str,
-#     "orders": int,
-#     "trades_today": int,
-#     "total_value": float,
-#     "total_return_pct": float,
-#     "num_positions": int,
-#     "order_ids": List[str],
-# }
+    TigerBridge --> TigerClient : lazy import (v2)
+    TigerBridge --> TigerBroker : lazy import (v2, trade only)
+    RiskManager --> RiskReport : returns
+    RiskManager --> Settings : reads constants
+    TigerClient --> Settings : reads credentials
+    TigerClient ..> TigerBridge : legacy fallback (removed)
 ```
 
 ---
 
 ### 4. Program Call Flow
 
-#### 4.1 完整周期时序图 (run_cycle)
+#### 4.1 交易周期核心流程（修复后）
 
 ```mermaid
 sequenceDiagram
-    actor Main
+    participant DP as daemon_forever.bat
     participant TP as TradingPipeline
-    participant MS as MarketSession
-    participant TB as TigerBridge
+    participant TB as shared/tiger_bridge
+    participant TC as services/.../tiger_client
+    participant RM as shared/risk_manager
     participant PM as PortfolioManager
-    participant RM as RiskManager
-    participant DS as DailyState
-    participant FE as FactorEngine
-    participant IE as InferenceEngine
-    participant RG as RiskGate
-    participant TE as TigerExecutor
-    participant WP as WsPusher
-    participant EXEC as execution-service:8016
-    participant DATA as data-service:8011
+    participant SDK as Tiger SDK
 
-    Main->>TP: run_cycle()
+    DP->>TP: 启动 trading_pipeline.py --interval 300
 
-    Note over TP: ── Pre-cycle checks ──
-    TP->>DS: check_date_roll()
-    alt 新交易日
-        DS->>RM: reset_daily_state()
-    end
+    Note over TP: Cycle #1 开始
 
-    TP->>MS: is_any_market_open()
-    alt 休市
-        TP-->>Main: return None (skip trading)
-    end
+    %% Pre-cycle: 交易日切换
+    TP->>RM: check_date_roll()
+    RM-->>TP: new day? reset
 
-    TP->>TB: get_account_info(force=true)
-    TB-->>TP: TigerAccount {cash, total_value, leverage}
-    TP->>PM: sync_from_tiger(tiger_bridge)
-    PM-->>TP: sync_result
-    TP->>RM: sync_portfolio_value(total, cash)
+    %% Pre-cycle: Tiger 同步
+    TP->>PM: sync_from_tiger(tiger, force=false)
+    PM->>TB: get_positions() + get_account_info()
+    TB->>TC: get_positions() [v2 async→sync]
+    TC->>SDK: get_positions
+    SDK-->>TC: positions list
+    TC-->>TB: positions
+    TB-->>PM: positions + account
+    PM-->>TP: sync_result {synced: true, cash: 2475, ...}
 
-    Note over TP: ── P0-2 Circuit Breaker ──
+    TP->>RM: sync_portfolio_value(2475, cash, is_tiger_sync=True)
+    Note over RM: 检测 _tiger_synced=false<br/>重置 daily_start_value=2475<br/>设置 _tiger_synced=true
+
+    %% Pre-cycle: 熔断检查
+    TP->>TP: _get_live_prices()
     TP->>RM: check_circuit_breaker()
-    alt 熔断触发
-        RM->>RM: liquidate_all(prices)
-        RM-->>TP: RiskReport {circuit_breaker=true}
-        TP->>WP: push_alert("circuit_breaker")
-        TP-->>Main: return None
-    end
+    Note over RM: daily_pnl_pct = (2475-2475)/2475 = 0%<br/>✅ 正常，不触发熔断
+    RM-->>TP: RiskReport(passed=true)
 
-    Note over TP: ── P1-1 Leverage Check ──
-    TP->>RM: check_leverage(tiger_acct)
-    alt leverage > 1.001
-        RM-->>TP: blocked=true
-    end
+    %% Main Pipeline (7 steps)
+    Note over TP: Steps 0-7 正常执行...
 
-    Note over TP: ── P1-2 Daily Trade Limit ──
-    TP->>RM: check_daily_limit()
-    alt trades_today >= max
-        RM-->>TP: limit_reached=true
-        TP-->>Main: return None (valuation only)
-    end
-
-    Note over TP: ── Step 0: Universe ──
-    TP->>TP: _get_active_universe()
-    TP->>DATA: GET /api/v2/data/universe
-    DATA-->>TP: tickers[]
-    TP->>WP: push_step_update(0, {tickers})
-
-    Note over TP: ── Step 1: Market Data ──
-    TP->>TP: _fetch_market_data(tickers)
-    TP->>WP: push_step_update(1, {data_count})
-
-    Note over TP: ── Step 2: Factors ──
-    TP->>FE: compute_all_multi(dfs)
-    FE-->>TP: factor_df
-    TP->>WP: push_step_update(2, {n_factors})
-
-    Note over TP: ── Step 3: Inference ──
-    TP->>IE: generate_signals_batch(factor_df)
-    IE-->>TP: signals[]
-    TP->>WP: push_step_update(3, {n_signals})
-
-    Note over TP: ── Step 4: Risk Checks ──
-    loop each signal
-        TP->>RG: check(ticker, qty, price, portfolio, strength)
-        RG-->>TP: RiskResult
-    end
-    TP->>WP: push_step_update(4, {approved, rejected})
-
-    Note over TP: ── Step 5: Portfolio Optimization ──
-    TP->>EXEC: POST /api/v2/execution/optimizer/bl
-    EXEC-->>TP: weights{}
-    TP->>WP: push_step_update(5, {n_weights})
-
-    Note over TP: ── Step 6: Execute ──
-    loop each ticker in target_weights
-        TP->>TE: execute_rebalance(ticker, weight, price, positions)
-        TE->>RM: check_order(ticker, side, qty, price)
-        alt EXECUTION_MODE = "live"
-            TE->>TB: place_order(ticker, action, qty, "MKT", price)
-            TB-->>TE: order_result
-        else paper
-            TE->>PM: execute_trade(ticker, side, price, ...)
-            PM-->>TE: trade_record
-        end
-        TE-->>TP: order
-    end
-    TP->>WP: push_step_update(6, {n_orders})
-
-    Note over TP: ── Post-trade checks ──
+    %% 熔断误触发保护场景
+    Note over TP: 保护场景：Tiger 尚未同步时首次调用
     TP->>RM: check_circuit_breaker()
-    TP->>RM: fix_short_positions(portfolio, executor, prices)
+    Note over RM: daily_start_value=0.0 (未初始化)<br/>自动设为 portfolio_value<br/>首次调用总是通过
 
-    Note over TP: ── Step 7: Record ──
-    TP->>TP: _record_performance(orders)
-    TP->>PM: save_state()
-    TP->>WP: push_cycle_update(7, cycle_summary)
+    %% Bug 1 修复验证
+    Note over TB: get_quote("09878") 调用链
+    TB->>TC: get_quote("09878")
+    TC->>SDK: get_stock_briefs(["09878"])
+    SDK-->>TC: DataFrame | list | None
+    Note over TC: isinstance(result, pd.DataFrame)?<br/>→ result.empty? return None<br/>→ else: result.iloc[0]<br/>isinstance(result, list)?<br/>→ len(result)==0? return None<br/>→ else: result[0]
+```
 
-    TP-->>Main: cycle_summary
+#### 4.2 Bug 2 修复对比
+
+```mermaid
+sequenceDiagram
+    participant RM as RiskManager (v2)
+    participant Tiger as Tiger Sync
+
+    Note over RM: 【修复前】Bug 场景
+    RM->>RM: __init__(initial_capital=100000)
+    Note over RM: daily_start_value = 0.0<br/>portfolio_value = 100000
+
+    RM->>RM: check_circuit_breaker() #1
+    Note over RM: lazy init:<br/>daily_start_value = 100000<br/>(v2 initial, 不等于 Tiger!)
+
+    Tiger->>RM: Tiger 同步: portfolio_value = 2475
+    Note over RM: daily_start_value 仍为 100000<br/>因为 sync 不重置已初始化的值
+
+    RM->>RM: check_circuit_breaker() #2
+    Note over RM: daily_pnl = 2475 - 100000 = -97525<br/>daily_pnl_pct = -97.5%<br/>🚨 触发熔断!
+
+    Note over RM: 【修复后】正确流程
+    RM->>RM: __init__(initial_capital=100000)
+    Note over RM: daily_start_value = 0.0<br/>_tiger_synced = False
+
+    RM->>RM: check_circuit_breaker() #1
+    Note over RM: lazy init:<br/>daily_start_value = 100000<br/>(首次调用，正常)
+
+    Tiger->>RM: Tiger 同步: portfolio_value = 2475
+    RM->>RM: sync_portfolio_value(2475, is_tiger_sync=True)
+    Note over RM: _tiger_synced = False<br/>→ 重置 daily_start_value = 2475<br/>→ _tiger_synced = True
+
+    RM->>RM: check_circuit_breaker() #2
+    Note over RM: daily_pnl = 2475 - 2475 = 0<br/>daily_pnl_pct = 0%<br/>✅ 正常通过!
 ```
 
 ---
 
 ### 5. Anything UNCLEAR
 
-| # | 事项 | 假设 / 需要确认 |
-|---|------|----------------|
-| U1 | **WebSocket 后端端点** | 假设 API Gateway (8001) 已暴露 `/api/push/step-update` 和 `/api/push/cycle-data` 端点，如不存在需新建 |
-| U2 | **Tiger 私钥加载路径** | 使用 `certs/tiger_private_key.pem`，TigerBridge 内部通过 backend/trading_config 间接加载 |
-| U3 | **MAX_DAILY_TRADES 默认值** | PRD 未指定具体数字，设为 0（不限制），与 v1 auto_trader 的一致 |
-| U4 | **v1 fallback HTTP 端点** | 假设 data-service (8011) 已有 universe 端点，如不可用则使用硬编码 fallback |
-| U5 | **PipelineConfig 中新增字段的 env 覆盖** | 当前 PipelineConfig 是 @dataclass，不从 env 读取。如需 env 覆盖需额外改造 |
+| # | 不明点 | 假设 | 影响 |
+|---|--------|------|------|
+| 1 | Tiger 凭据（TIGER_ID, LICENSE）的实际值 | 假设当前通过 Tiger SDK 配置文件 (`~/.tigeropen/`) 或代码中硬编码回退值连接，.env 的 CHANGE_ME 未生效 | 需确认实际凭据来源后回填 |
+| 2 | `TRADING_INITIAL_CAPITAL` 1亿的来源 | 日志显示 1亿，但 settings.py 默认 10000，.env 也未覆盖。猜测来自 `BACKTEST_INITIAL_CAPITAL=100000000.0` 的误引用或旧代码 | 不阻塞修复——熔断修复不依赖该常量 |
+| 3 | GitHub push 权限 | daemon_forever.bat 中 `git push origin dev-20260522` 未指定认证方式 | 假设使用 Git Credential Manager / SSH key |
+| 4 | v2 服务完整性 | 假设所有 v2 微服务（data/factor/risk/exec/model_train/model_infer）的 `/health` 端点正常 | 不阻塞——修复聚焦交易关键路径 |
 
 ---
 
@@ -428,215 +335,271 @@ sequenceDiagram
 
 ### 6. Required Packages
 
-```
-- pytz>=2024.1: Timezone handling for market session detection
-- httpx>=0.27.0: Async HTTP client (already in use)
-- loguru>=0.7.0: Structured logging (already in use)
-- numpy>=1.26.0: Numerical computation (already in use)
-- pandas>=2.2.0: Data manipulation (already in use)
-- tigeropen: Tiger Brokers SDK (already in use, via bridge)
-```
+本修复不新增第三方依赖。所有修复在现有依赖范围内完成：
 
-**无新增 pip 依赖** — 所有功能基于已有依赖实现。
-
----
+```
+- pydantic>=2.0: 配置管理（现有）
+- pydantic-settings>=2.0: .env 加载（现有）
+- pandas>=1.5: DataFrame 处理（现有）
+- loguru>=0.7: 日志（现有）
+- tigeropen: Tiger SDK（现有）
+```
 
 ### 7. Task List (ordered by dependency)
 
 ---
 
-#### **T01: 项目基础设施 — 配置扩展 + 核心桥接模块骨架**
+#### T01: 项目基础设施修复 — .env + 配置 + 守护进程
 
 | 属性 | 值 |
 |------|-----|
 | **Task ID** | T01 |
 | **Priority** | P0 |
-| **覆盖需求** | P0-5 (基础), P0-3 (市场时段), P0-4 (Tiger桥接) |
+| **Dependencies** | 无 |
+| **Source Files** | `.env`, `configs/settings.py`, `daemon_forever.bat` |
 
-**Source Files:**
-- `configs/pipeline_config.py` — 新增 EXECUTION_MODE, MAX_DAILY_TRADES, DAILY_LOSS_LIMIT, LEVERAGE_LIMIT, V1_FALLBACK_RETRIES, ENABLE_WS_PUSH, GIT_AUTO_SYNC 配置项
-- `configs/settings.py` — 添加 EXECUTION_MODE 字段（已存在 `EXECUTION_MODE`，需确认 PipelineConfig 可读取）
-- `shared/tiger_bridge.py` — **新建** TigerClient 薄桥接层，延迟加载 backend 单例，暴露 get_account_info / get_positions / place_order / get_quote / sync_all_to_db / is_connected
-- `shared/market_session.py` — **新建** 基于 pytz 的市场时段检测，支持 US(24h)/HK/SG/AU/NZ，盘前/盘后/夜盘标识
-- `shared/daily_state.py` — **新建** 日状态追踪器：交易日检测、交易计数、熔断状态标记
-- `shared/ws_pusher.py` — **新建** WebSocket 推送工具，POST 到 API Gateway 的推送端点
+**变更内容**:
 
-**Dependencies:** 无
+1. **`.env`** — 填充 4 个 CHANGE_ME 占位符:
+   - `QAT_API_KEY` → `dev-api-key-change-in-production`（与 settings.py default 一致）
+   - `QAT_TIGER_ID` → 留空字符串（Tiger SDK 从 `~/.tigeropen/` 读取配置文件）
+   - `QAT_TIGER_ACCOUNT` → `20874631`（从代码注释中确认的实际账户）
+   - `QAT_TIGER_LICENSE` → 留空（Tiger SDK 配置文件提供）
+   - 增加注释说明凭据真实来源
 
-**验收标准:**
-- PipelineConfig 包含所有新增配置字段且有合理默认值
-- TigerBridge 可成功延迟导入 backend.data_engine.tiger_client 单例
-- MarketSession.is_any_market_open() 对 US/HK 返回正确时段状态
-- DailyState.check_date_roll() 能检测跨日并触发重置
-- WsPusher 异步发送不阻塞主循环（try/except 静默降级）
+2. **`configs/settings.py`** — 增加启动安全校验:
+   - 在 `Settings` 类中增加 `validate_trading_config()` 方法
+   - 检测 `TIGER_ACCOUNT` 为空时输出 WARNING（不阻断，因为 paper trading 可用）
+   - 检测 `TRADING_INITIAL_CAPITAL` 与 `BACKTEST_INITIAL_CAPITAL` 相同且 > 1000万时输出 WARNING（防止回测资本误用于实盘）
+
+3. **`daemon_forever.bat`** — GPU 环境变量修复:
+   - 将 `set DEVICE=cuda` 改为 `set QAT_TRAIN_DEVICE=cuda`（匹配 `TrainServiceConfig` 的 env_prefix）
+   - 添加 GitHub push 前置检查（`git config --get remote.origin.url`）
 
 ---
 
-#### **T02: 数据与状态层 — 组合管理器 + Tiger 同步**
+#### T02: P0 紧急修复 — DataFrame 真值 + 熔断误触发
 
 | 属性 | 值 |
 |------|-----|
 | **Task ID** | T02 |
 | **Priority** | P0 |
-| **覆盖需求** | P0-4 (Tiger状态同步), P0-5 (消除PortfolioManager导入) |
+| **Dependencies** | T01 |
+| **Source Files** | `backend/data_engine/tiger_client.py`, `shared/risk_manager.py`, `trading_pipeline.py` |
 
-**Source Files:**
-- `shared/portfolio_manager.py` — **新建** v2 组合管理器：替代 backend.trading_engine.portfolio.PortfolioManager，实现 positions / cash / total_value / avg_costs 管理，Tiger 同步 (sync_from_tiger)，交易执行 (execute_trade)，状态持久化 (save_state / load_state)，估值更新 (update_value)，绩效指标 (get_metrics)
-- `trading_pipeline.py` — **修改** 移除 `from backend.trading_engine.portfolio import PortfolioManager`，替换为 shared.portfolio_manager
-- `shared/tiger_bridge.py` — **扩展** 确保 get_account_info 返回完整的 TigerAccount 结构，get_positions 返回标准化持仓列表
+**变更内容**:
 
-**Dependencies:** T01
+1. **`backend/data_engine/tiger_client.py`** (line 154-155) — 修复 DataFrame 真值歧义:
+   ```python
+   # Before:
+   briefs = self._quote_client.get_stock_briefs([ticker])
+   if not briefs:
+       return None
 
-**验收标准:**
-- PortfolioManager 可从 Tiger 同步持仓和现金到本地
-- sync_from_tiger 返回 `{synced: bool, positions: int, cash: float, total_value: float}`
-- execute_trade 正确更新 positions / cash / avg_costs
-- load_state / save_state 使用 JSON 文件保持与 v1 兼容
-- trading_pipeline.py 的 `self.portfolio` 来自 shared.portfolio_manager
+   # After:
+   briefs = self._quote_client.get_stock_briefs([ticker])
+   if _is_empty_result(briefs):
+       return None
+   ```
+   新增模块级辅助函数 `_is_empty_result(obj)`:
+   ```python
+   def _is_empty_result(obj) -> bool:
+       """Safely check if Tiger API result is empty.
+       Handles DataFrame, list, and None return types."""
+       if obj is None:
+           return True
+       if hasattr(obj, 'empty'):
+           return bool(obj.empty)
+       if hasattr(obj, '__len__'):
+           return len(obj) == 0
+       return False
+   ```
+
+2. **`shared/risk_manager.py`** — 修复熔断误触发:
+   - 在 `sync_portfolio_value()` 增加 `is_tiger_sync: bool = False` 参数
+   - 新增 `_tiger_synced: bool = False` 实例变量
+   - `sync_portfolio_value()` 逻辑变更:
+     ```python
+     def sync_portfolio_value(self, total_value, cash=None, is_tiger_sync=False):
+         if self.daily_start_value <= 0.0 or (is_tiger_sync and not self._tiger_synced):
+             # 首次 Tiger 同步 → 重置基准
+             self.daily_start_value = total_value
+             self.peak_value = total_value
+             self._tiger_synced = True
+         self.portfolio_value = total_value
+         if cash is not None:
+             self.cash = cash
+     ```
+   - 在 `check_circuit_breaker()` 中增加异常值保护:
+     ```python
+     # 在 daily loss check 之前
+     if self.daily_start_value > 0 and self.portfolio_value > 0:
+         ratio = self.portfolio_value / self.daily_start_value
+         if ratio < 0.10 or ratio > 10.0:
+             # 差异超过 10x，疑似数据异常 → 自动校准
+             logger.warning(f"检测到异常基准偏差: daily_start={self.daily_start_value:,.0f} vs pv={self.portfolio_value:,.0f}，自动校准")
+             self.daily_start_value = self.portfolio_value
+             self.peak_value = max(self.peak_value, self.portfolio_value)
+     ```
+
+3. **`trading_pipeline.py`** — Tiger 同步后传递标记:
+   - 在 pre-cycle step 3（Tiger 同步）处，`sync_portfolio_value` 调用增加 `is_tiger_sync=True`:
+     ```python
+     self.risk_manager.sync_portfolio_value(
+         self.portfolio.total_value,
+         self.portfolio.cash,
+         is_tiger_sync=True,  # ← 新增
+     )
+     ```
 
 ---
 
-#### **T03: 风控与执行核心 — 熔断器 + 杠杆检查 + 执行器**
+#### T03: 架构统一 — 消除 backend/ 双架构交易依赖
 
 | 属性 | 值 |
 |------|-----|
 | **Task ID** | T03 |
-| **Priority** | P0 |
-| **覆盖需求** | P0-1 (实盘执行), P0-2 (组合熔断), P1-1 (杠杆铁律), P1-2 (每日上限) |
+| **Priority** | P1 |
+| **Dependencies** | T02 |
+| **Source Files** | `shared/tiger_bridge.py`, `trading_pipeline.py`, `backend/data_engine/tiger_client.py`, `backend/trading_engine/risk_manager.py` |
 
-**Source Files:**
-- `shared/risk_manager.py` — **新建** v2 风控管理器：替代 backend.trading_engine.risk_manager.RiskManager，实现 check_circuit_breaker (日亏损 ≥5% 熔断 + 回撤 ≥25% 熔断)，liquidate_all (平仓全部持仓)，check_leverage (杠杆 >1.001 阻止买入)，check_daily_limit (达到上限停止交易)，check_order (下单前风控)，fix_short_positions (空头自动修复)，breaker_mode 支持 "hard"/"warn"
-- `shared/tiger_executor.py` — **新建** 实盘/模拟执行器：统一接口 execute_signal / execute_rebalance，内部根据 EXECUTION_MODE 切换 `_execute_live` (调用 TigerBridge.place_order) 和 `_execute_paper` (调用 PortfolioManager.execute_trade)，港股整手对齐，TWAP/VWAP 支持框架
-- `trading_pipeline.py` — **修改** 移除 `from backend.trading_engine.risk_manager import RiskManager`，移除 `from backend.trading_engine.executor import PaperExecutor`，替换为 shared.risk_manager + shared.tiger_executor
+**变更内容**:
 
-**Dependencies:** T01, T02
+1. **`shared/tiger_bridge.py`** — 移除 legacy backend fallback:
+   - 删除 `_lazy_import()` 中 lines 58-71（`backend.data_engine.tiger_client` fallback）
+   - 改为 fallback 到 v2 `services/data_service/ingestion/tiger_client.py`:
+     ```python
+     # ── Fallback: v2 ingestion TigerClient ─────────────
+     try:
+         from services.data_service.ingestion.tiger_client import TigerClient as V2TigerClient
+         _tiger_client = V2TigerClient()
+         _tiger_client._ensure_initialized()
+         logger.info("TigerBridge: v2 ingestion TigerClient loaded (fallback)")
+         return _tiger_client
+     except ImportError as exc:
+         logger.warning(f"TigerBridge: v2 ingestion TigerClient not available ({exc})")
+     except Exception as exc:
+         logger.error(f"TigerBridge: v2 ingestion TigerClient init failed: {exc}")
+     ```
+   - 确保 `get_quote()` 调用 v2 quote client 的 `get_quote()` 方法
 
-**验收标准:**
-- EXECUTION_MODE="live" + Tiger 已连接 → 真实下单到 Tiger API
-- EXECUTION_MODE="paper" → 本地模拟撮合
-- 日亏损 ≥ 5% → 熔断触发 + liquidate_all 执行 + 停止新交易
-- breaker_mode="warn" → 仅日志告警不阻断
-- 杠杆 > 1.001 → 所有买入被阻止
-- trades_today ≥ MAX_DAILY_TRADES → 跳过交易仅更新估值
-- 空头自动修复：检测负持仓自动买回
+2. **`trading_pipeline.py`** — 移除 v1 关键 fallback:
+   - `_get_active_universe_v1_fallback()` (line 550-558): 移除 `backend.data_engine.stock_universe` 导入，改为使用 `configs/settings.py` 的 `DATA_ALL_TICKERS`
+   - `_fetch_market_data_v1_fallback()` (line 592-631): 保留但标记为 `# DEPRECATED: will be replaced by v2 data-service HTTP call`
+   - 不删除 `_fetch_market_data_v1_fallback`（数据获取路径复杂，需后续专项处理）
+
+3. **`backend/data_engine/tiger_client.py`** — 添加弃用标注:
+   - 文件顶部添加:
+     ```python
+     """
+     ⚠️ DEPRECATED since v2.2 — 请使用 services/data_service/ingestion/tiger_client.py
+     此文件仅供回滚参考，将在 v2.3 移除。
+     """
+     ```
+   - `TigerClient.__init__()` 中增加 `logger.warning("DEPRECATED: backend TigerClient is used — migrate to services/...")`
+
+4. **`backend/trading_engine/risk_manager.py`** — 添加弃用标注:
+   - 文件顶部添加相同格式的弃用警告
+   - 引用 `shared/risk_manager.py` 作为替代
 
 ---
 
-#### **T04: 管线主体重构 — 七步流程全面升级**
+#### T04: GPU训练启用 + GitHub推送验证 + 回滚文档
 
 | 属性 | 值 |
 |------|-----|
 | **Task ID** | T04 |
-| **Priority** | P0 |
-| **覆盖需求** | P0-3 (市场时段), P0-5 (完成桥接清理), P1-3 (空头修复), P1-5 (WebSocket推送) |
+| **Priority** | P2 |
+| **Dependencies** | T01 |
+| **Source Files** | `services/model_train_service/config.py`, `daemon_forever.bat`, `docs/rollback.md` |
 
-**Source Files:**
-- `trading_pipeline.py` — **大规模修改** run_cycle() 和所有 Step 方法：
-  - Pre-cycle: 集成 MarketSession 判断休市（P0-3），集成 TigerBridge 同步状态（P0-4），集成 RiskManager 熔断+杠杆+每日上限检查（P0-2, P1-1, P1-2）
-  - Step 0: 移除 `self._get_active_universe_v1_fallback` 中的 backend 直接导入，改用 TigerBridge 或 HTTP
-  - Step 1: 移除 `self._fetch_market_data_v1_fallback` 中的 backend 直接导入，改为从 data-service HTTP 或 ParquetStore 读取
-  - Step 4: 风控检查前先过 RiskManager.check_order
-  - Step 6: 移除 `from backend.trading_engine.executor import PaperExecutor`，改用 TigerExecutor
-  - Post-cycle: 集成 fix_short_positions（P1-3），集成 WsPusher 推送（P1-5）
-  - 清理全部 3 处 backend/ 直接导入（P0-5 完成）
-- `shared/signal_to_views.py` — **小改** 添加 `filter_signals_by_risk` 辅助函数
-- `configs/pipeline_config.py` — **扩展** 确认所有 P0/P1 新增参数可从配置文件读取
+**变更内容**:
 
-**Dependencies:** T01, T02, T03
+1. **`services/model_train_service/config.py`** — GPU 检测增强:
+   - `_cuda_available()` 增加详细日志:
+     ```python
+     def _cuda_available() -> bool:
+         try:
+             import torch
+             available = torch.cuda.is_available()
+             if available:
+                 logger.info(f"CUDA available: {torch.cuda.get_device_name(0)}")
+             else:
+                 logger.info("CUDA not available, using CPU")
+             return available
+         except Exception as e:
+             logger.warning(f"CUDA detection failed: {e}")
+             return False
+     ```
+   - 确认 `DEVICE` 字段的 `default_factory` 正确读取环境变量（已正确实现）
 
-**验收标准:**
-- trading_pipeline.py 中不再有任何 `from backend.` 直接导入（内部 fallback 方法中的延迟导入除外）
-- 休市时 run_cycle 立即返回，不执行交易
-- 每 Step 完成后 WebSocket 推送前端可见
-- v1 auto_trader.py 全部 20 项功能在 v2 中有对应实现
-- --once 模式完整运行不报错
+2. **`daemon_forever.bat`** — GPU + Push 修复:
+   - 将 `set DEVICE=cuda` 替换为 `set QAT_TRAIN_DEVICE=cuda`
+   - 增加 GitHub push 权限诊断:
+     ```bat
+     :: GitHub push 权限检查（静默）
+     git config --get remote.origin.url >nul 2>&1
+     if errorlevel 1 (
+         echo [%time%] WARNING: Git remote not configured, auto-push disabled
+     )
+     ```
 
----
-
-#### **T05: 辅助功能 + 降级策略 + 边缘场景**
-
-| 属性 | 值 |
-|------|-----|
-| **Task ID** | T05 |
-| **Priority** | P1/P2 |
-| **覆盖需求** | P1-4 (v1 fallback降级), P2-1 (Git自动同步), P2-2 (Tiger全量同步), P2-3 (强制卖出) |
-
-**Source Files:**
-- `shared/git_sync.py` — **新建** Git 自动同步模块：add → commit → pull --rebase → push，默认关闭 (GIT_AUTO_SYNC=False)
-- `trading_pipeline.py` — **修改** 增强 v1 fallback 降级逻辑：每次 HTTP 调用失败后重试 3 次（指数退避），3 次均失败才走 v1 fallback；集成 git_sync（每 6 周期执行一次，仅当 GIT_AUTO_SYNC=True）；集成 Tiger 全量同步到 DB（可选，try/except 静默降级）；添加 force_sell 支持（从配置读取强制卖出列表）
-- `services/execution_service/live/tiger_broker.py` — **修改** 如有需要，确保与 TigerExecutor 接口兼容
-
-**Dependencies:** T04
-
-**验收标准:**
-- HTTP 调用 v2 服务失败后自动重试最多 3 次
-- GIT_AUTO_SYNC=False 时不执行任何 git 操作
-- Tiger 全量同步失败不阻塞交易主循环
-- 强制卖出列表中的持仓在首个周期被清仓
+3. **`docs/rollback.md`** — 回滚方案（详见下方 T04 产出）:
+   - 每个 Bug 的独立回滚步骤
+   - 全量回滚流程
+   - 回滚验证 checklist
 
 ---
 
 ### 8. Shared Knowledge
 
-跨文件约定，工程师实现时需注意：
-
 ```
-1. 所有异步 HTTP 调用使用 httpx.AsyncClient，超时 30s（来自 PipelineConfig.HTTP_TIMEOUT）
-2. Tiger 相关调用全部通过 shared/tiger_bridge.py 间接访问，绝不直接 import backend.data_engine.tiger_client
-3. 风控状态通过 RiskReport dataclass 传递，不使用字符串拼接
-4. 所有时间使用 datetime.now() (naive)，日期比较使用字符串 "YYYY-MM-DD" 格式
-5. WebSocket 推送采用 fire-and-forget 模式，异常静默降级不阻塞交易
-6. 熔断冷却期 900s (15min)，由 backend/config.py 中 TradingConfig.CIRCUIT_BREAKER_COOLDOWN 定义
-7. 每日交易上限 0 = 不限制，>=1 则到达上限后只更新估值不交易
-8. 港股/新加坡股买入必须整手对齐，卖出不限整手
-9. Tiger API 调用频率控制 15s 最小间隔（由 TigerBridge 内部缓存实现）
-10. 杠杆检查阈值 1.001（允许微小浮点误差），≥1.001 视为有杠杆
-11. logs/ 目录下的日志文件使用 loguru，rotation="1 day"，retention="30 days"
-12. 所有新增 shared/ 模块必须支持 try/except ImportError 降级（用于测试环境可能缺少依赖）
+- 所有修复遵循 "最小改动、最大兼容" 原则
+- Tiger SDK 的 get_stock_briefs() 对单元素列表返回类型不稳定（DataFrame/list），所有调用点必须用 _is_empty_result() 包裹
+- shared/risk_manager.py 是唯一的熔断逻辑源，backend/ 版本仅保留用于回滚
+- 环境变量前缀规则: configs/settings.py → QAT_, services/*/config.py → QAT_TRAIN_/QAT_EXEC_ 等
+- trading_pipeline.py 的 _v1_fallback 方法标记为 DEPRECATED 但暂不删除（数据获取路径需更完整迁移）
+- 日志文件在 ./logs/ 下，pipeline 日志为 pipeline.log
+- 循环间隔 300s (5min)，熔断冷却期 3600s (1h)
+- Tiger 实盘账户: 20874631
 ```
-
----
 
 ### 9. Task Dependency Graph
 
 ```mermaid
 graph TD
-    T01[T01: 项目基础设施<br/>配置 + 桥接 + 市场时段 + 日状态 + WS推送]
-    T02[T02: 数据与状态层<br/>组合管理器 + Tiger同步]
-    T03[T03: 风控与执行核心<br/>熔断器 + 杠杆检查 + 执行器]
-    T04[T04: 管线主体重构<br/>七步流程 + 市场时段 + 空头修复 + WS集成]
-    T05[T05: 辅助功能 + 降级<br/>Git同步 + fallback + 边缘场景]
+    T01["T01: 项目基础设施修复<br/>.env + settings.py + daemon_forever.bat<br/>P0 | 无依赖"]
+    T02["T02: P0 紧急修复<br/>DataFrame真值 + 熔断误触发<br/>P0 | 依赖 T01"]
+    T03["T03: 架构统一<br/>消除 backend/ 双架构<br/>P1 | 依赖 T02"]
+    T04["T04: GPU训练 + GitHub推送 + 文档<br/>P2 | 依赖 T01"]
 
     T01 --> T02
-    T01 --> T03
+    T01 --> T04
     T02 --> T03
-    T02 --> T04
-    T03 --> T04
-    T04 --> T05
+
+    style T01 fill:#4CAF50,color:#fff
+    style T02 fill:#f44336,color:#fff
+    style T03 fill:#FF9800,color:#fff
+    style T04 fill:#2196F3,color:#fff
 ```
 
-**说明：**
-- T01 是所有任务的基础（配置 + 桥接骨架），T02/T03 可部分并行
-- T02 和 T03 之间有数据依赖（T03 的 RiskManager 需要 PortfolioManager 的 total_value）
-- T04 深度依赖 T02/T03 完成（管线集成所有模块）
-- T05 是收尾任务，依赖 T04 的主体重构完成
+**实现顺序**: T01 → T02 + T04（并行） → T03
+
+**推理**:
+- T01 必须先做，奠定正确配置基础
+- T02 和 T04 互不依赖，可并行（T04 仅依赖 T01）
+- T03 必须在 T02 之后，因为 T03 修改的文件（tiger_bridge.py）需要先确认 T02 的修复正确
 
 ---
 
-### Appendix: P0/P1/P2 需求覆盖矩阵
+### 风险点和回滚策略
 
-| 需求 | 描述 | 覆盖任务 | 状态 |
-|------|------|----------|------|
-| P0-1 | 实盘执行通道 | T03 | TigerExecutor._execute_live |
-| P0-2 | 组合级熔断 | T03, T04 | RiskManager.check_circuit_breaker + liquidate_all |
-| P0-3 | 市场时段检测 | T01, T04 | MarketSession + run_cycle guard |
-| P0-4 | Tiger状态实时同步 | T01, T02, T04 | TigerBridge + PortfolioManager.sync_from_tiger |
-| P0-5 | v1→v2桥接清理 | T01, T02, T03, T04 | 移除3处backend/导入 |
-| P1-1 | 杠杆铁律 | T03, T04 | RiskManager.check_leverage |
-| P1-2 | 每日交易上限 | T03, T04 | DailyState + RiskManager.check_daily_limit |
-| P1-3 | 空头自动修复 | T03, T04 | RiskManager.fix_short_positions |
-| P1-4 | v1 fallback降级 | T05 | 3次重试 + 指数退避 |
-| P1-5 | 前端实时推送 | T01, T04 | WsPusher.push_step_update |
-| P2-1 | Git自动同步 | T05 | shared/git_sync.py |
-| P2-2 | Tiger全量同步DB | T05 | TigerBridge.sync_all_to_db |
-| P2-3 | 强制卖出列表 | T05 | force_sell_positions 集成 |
+| Bug | 修改风险 | 回滚方式 |
+|-----|---------|---------|
+| B1 | 低 — 仅改变条件判断，不影响业务逻辑 | `git checkout -- backend/data_engine/tiger_client.py` |
+| B2 | 中 — 涉及熔断核心逻辑 | 1) 首次部署后观察 2 个完整循环；2) 若异常，`git checkout -- shared/risk_manager.py trading_pipeline.py` |
+| B3 | 中 — 修改 Tiger 连接路径 | 1) 部署前确认 v2 tiger_client 可独立连接；2) 回滚: `git checkout -- shared/tiger_bridge.py` |
+| B4 | 极低 — 仅占位符文本 | `git checkout -- .env` |
+| B5 | 极低 — 仅环境变量和日志 | `git checkout -- services/model_train_service/config.py daemon_forever.bat` |
+
+**全量回滚**: `git checkout dev-20260522` （保留所有修改在一个分支上，回滚即切回原始 commit）

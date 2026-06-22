@@ -156,13 +156,20 @@ class TFTTrainer(TrainerBase):
         self._validate_data(X, y)
         self._feature_names = list(X.columns)
 
+        # ── NaN safeguard ──
+        X_arr = np.nan_to_num(X.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
+        y_arr = np.nan_to_num(y.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
+
         epochs = kwargs.get("epochs", train_config.EPOCHS)
         batch_size = kwargs.get("batch_size", train_config.BATCH_SIZE)
         lr = kwargs.get("lr", train_config.LEARNING_RATE)
 
-        X_seqs, y_seqs = self._build_sequences(X.values, y.values)
+        X_seqs, y_seqs = self._build_sequences(X_arr, y_arr)
         if X_valid is not None and y_valid is not None:
-            X_vs, y_vs = self._build_sequences(X_valid.values, y_valid.values)
+            X_vs, y_vs = self._build_sequences(
+                np.nan_to_num(X_valid.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
+                np.nan_to_num(y_valid.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
+            )
         else:
             split = int(len(X_seqs) * 0.8)
             X_vs, y_vs = X_seqs[split:], y_seqs[split:]

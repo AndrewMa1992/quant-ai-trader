@@ -29,12 +29,32 @@ class RLInference:
         """Load RL model.
 
         Args:
-            path: Checkpoint path.
+            path: Checkpoint path (supports .zip for SB3 native, .joblib/.pkl for mock).
 
         Returns:
             True if loaded.
         """
+        import os
         try:
+            # .zip files are SB3 native format — load directly
+            if path.lower().endswith(".zip"):
+                try:
+                    from stable_baselines3 import PPO, SAC
+                    if "sac" in path.lower():
+                        self.model = SAC.load(path, device=self.device)
+                        self._algo = "SAC"
+                    else:
+                        self.model = PPO.load(path, device=self.device)
+                        self._algo = "PPO"
+                    self.loaded = True
+                    logger.info(f"RL model ({self._algo}) loaded from {path}")
+                    return True
+                except ImportError:
+                    logger.warning("stable-baselines3 not installed")
+                    self.loaded = False
+                    return False
+
+            # Non-zip: try joblib first (mock or older format)
             import joblib
             data = joblib.load(path)
 

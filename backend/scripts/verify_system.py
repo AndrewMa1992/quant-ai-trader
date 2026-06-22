@@ -6,7 +6,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 PROJ_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
-from backend.config import DB_PATH
+from configs.settings import settings
 import sqlite3
 
 BASE = "http://localhost:8001"
@@ -75,7 +75,7 @@ else:
 # 6. 数据库持久化
 print("\n6. 数据库持久化")
 try:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(settings.DB_PATH))
     tables = [t[0] for t in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     expected = ['market_metadata', 'trades', 'portfolio_positions', 'portfolio_account', 'portfolio_snapshots', 'signals']
     missing = [t for t in expected if t not in tables]
@@ -93,8 +93,8 @@ except Exception as e:
 
 # 7. 模型文件
 print("\n7. 模型文件")
-from backend.config import MODELS_DIR
-model_files = list(MODELS_DIR.glob("*"))
+from configs.settings import settings
+model_files = list(settings.MODELS_DIR.glob("*"))
 for f in model_files:
     print(f"   📁 {f.name} ({f.stat().st_size / 1024:.0f} KB)")
 if not model_files:

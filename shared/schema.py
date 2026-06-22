@@ -90,13 +90,17 @@ class ErrorResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
+    """Health check response with aggregated downstream service status."""
 
-    status: str = Field(default="healthy", description="Service status")
+    status: str = Field(default="healthy", description="Overall service status")
     version: str = Field(..., description="API version")
     uptime_seconds: float = Field(default=0.0, description="Server uptime in seconds")
     database: str = Field(default="unknown", description="Database connection status")
     redis: str = Field(default="unknown", description="Redis connection status")
+    services: dict[str, str] = Field(
+        default_factory=dict,
+        description="Downstream microservice health statuses",
+    )
 
 
 def success_response(data: Any = None, message: str = "OK") -> dict:

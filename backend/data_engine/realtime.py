@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
-from backend.config import data_config
+from configs.settings import settings
 from backend.data_engine.market_data import MarketDataEngine
 from backend.data_engine.data_pipeline import DataPipeline
 
@@ -31,7 +31,7 @@ class RealtimeEngine:
             "error": [],     # 错误
         }
         self._running = False
-        self._tick_interval = data_config.UPDATE_INTERVAL  # 秒
+        self._tick_interval = settings.DATA_UPDATE_INTERVAL  # 秒
         self._base_data: Dict[str, pd.DataFrame] = {}
         self._current_prices: Dict[str, float] = {}
         self._last_update: Dict[str, datetime] = {}
@@ -137,7 +137,7 @@ class RealtimeEngine:
     async def _process_tick(self):
         """处理一次 tick 更新，支持多市场"""
         ticks = []
-        for ticker in data_config.ALL_TICKERS:
+        for ticker in settings.DATA_ALL_TICKERS:
             tick = self._generate_simulated_tick(ticker)
             if tick:
                 ticks.append(tick)
@@ -164,7 +164,7 @@ class RealtimeEngine:
             except Exception as e:
                 logger.warning(f"⚠️ {ticker} 数据加载失败: {e}")
 
-        for ticker in data_config.ALL_TICKERS:
+        for ticker in settings.DATA_ALL_TICKERS:
             await _load_one(ticker)
             # 让出事件循环，避免阻塞 HTTP 请求
             await asyncio.sleep(0)

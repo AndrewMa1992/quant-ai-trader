@@ -1,114 +1,80 @@
 sequenceDiagram
-    actor Main
+    participant DP as daemon_forever.bat
     participant TP as TradingPipeline
-    participant MS as MarketSession
-    participant TB as TigerBridge
+    participant TB as shared/tiger_bridge
+    participant TC as services/ingestion/tiger_client
+    participant RM as shared/risk_manager
     participant PM as PortfolioManager
-    participant RM as RiskManager
-    participant DS as DailyState
-    participant FE as FactorEngine
-    participant IE as InferenceEngine
-    participant RG as RiskGate
-    participant TE as TigerExecutor
-    participant WP as WsPusher
-    participant EXEC as execution-service:8016
-    participant DATA as data-service:8011
+    participant SDK as Tiger SDK
 
-    Main->>TP: run_cycle()
+    DP->>TP: 启动 trading_pipeline.py
 
-    Note over TP: ── Pre-cycle checks ──
-    TP->>DS: check_date_roll()
-    alt 新交易日
-        DS->>RM: reset_daily_state()
+    Note over TP: ===== Cycle #1 开始 =====
+
+    %% Step: 交易日切换
+    TP->>RM: reset_daily_state() if new day
+
+    %% Step: Tiger 同步 (关键修复点)
+    TP->>PM: sync_from_tiger(tiger, force=false)
+    PM->>TB: get_positions() + get_account_info()
+    TB->>TC: get_positions() [v2 async→sync bridge]
+    TC->>SDK: trade_client.get_positions()
+    SDK-->>TC: positions list
+    TC-->>TB: positions
+    TB-->>PM: positions + account
+    PM-->>TP: sync_result {synced: true}
+
+    rect rgb(255, 230, 230)
+        Note over TP,RM: 【Bug 2 修复】Tiger 同步后传递标记
+        TP->>RM: sync_portfolio_value(2475, cash, is_tiger_sync=True)
+        Note over RM: _tiger_synced=False → 重置<br/>daily_start_value=2475<br/>peak_value=2475<br/>_tiger_synced=True
     end
 
-    TP->>MS: is_any_market_open()
-    alt 休市
-        TP-->>Main: return None (skip trading)
-    end
-
-    TP->>TB: get_account_info(force=true)
-    TB-->>TP: TigerAccount {cash, total_value, leverage}
-    TP->>PM: sync_from_tiger(tiger_bridge)
-    PM-->>TP: sync_result
-    TP->>RM: sync_portfolio_value(total, cash)
-
-    Note over TP: ── P0-2 Circuit Breaker ──
+    %% Step: 熔断检查
+    TP->>TP: _get_live_prices() via HTTP
     TP->>RM: check_circuit_breaker()
-    alt 熔断触发
-        RM->>RM: liquidate_all(prices)
-        RM-->>TP: RiskReport {circuit_breaker=true}
-        TP->>WP: push_alert("circuit_breaker")
-        TP-->>Main: return None
+
+    rect rgb(230, 255, 230)
+        Note over RM: daily_pnl_pct = (2475-2475)/2475<br/>= 0% ✅ 正常
+        RM-->>TP: RiskReport(passed=true)
     end
 
-    Note over TP: ── P1-1 Leverage Check ──
-    TP->>RM: check_leverage(tiger_acct)
-    alt leverage > 1.001
-        RM-->>TP: blocked=true
+    %% Step: 杠杆检查
+    TP->>TB: get_account_info()
+    TB-->>TP: account info
+    TP->>RM: check_leverage(account)
+    RM-->>TP: False (safe)
+
+    Note over TP: ===== 主循环 7 步 =====
+    TP->>TP: Step 0: _get_active_universe()
+    TP->>TP: Step 1: _fetch_market_data()
+    TP->>TP: Step 2: _compute_factors()
+    TP->>TP: Step 3: _run_inference()
+    TP->>TP: Step 4: _apply_risk_checks()
+    TP->>TP: Step 5: _optimize_portfolio()
+    TP->>TP: Step 6: _execute_rebalance()
+    TP->>TP: Step 7: _record_performance()
+
+    Note over TP: Post-cycle: 空头修复 + 状态保存
+
+    %% ===== Bug 1 修复验证 =====
+    rect rgb(255, 240, 230)
+        Note over TB,SDK: 【Bug 1 修复】get_quote 调用链
+        TP->>TB: get_quote("09878")
+        TB->>TC: get_quote("09878") [v2 async→sync]
+        TC->>SDK: get_stock_briefs(["09878"])
+        SDK-->>TC: DataFrame | list | None
+        Note over TC: _is_empty_result(obj)<br/>→ None? True<br/>→ DataFrame.empty? True<br/>→ len(list)==0? True<br/>安全处理所有类型
+        TC-->>TB: quote dict | None
+        TB-->>TP: quote dict | None
     end
 
-    Note over TP: ── P1-2 Daily Trade Limit ──
-    TP->>RM: check_daily_limit()
-    alt trades_today >= max
-        RM-->>TP: limit_reached=true
-        TP-->>Main: return None (valuation only)
+    %% ===== 熔断保护场景 =====
+    rect rgb(230, 230, 255)
+        Note over RM: 【保护场景】Tiger 未同步前首次调用
+        TP->>RM: check_circuit_breaker()
+        Note over RM: daily_start_value=0.0<br/>→ 自动设为 portfolio_value<br/>首次调用总是通过
+        RM-->>TP: RiskReport(passed=true)
     end
 
-    Note over TP: ── Step 0: Universe ──
-    TP->>TP: _get_active_universe()
-    TP->>DATA: GET /api/v2/data/universe
-    DATA-->>TP: tickers[]
-    TP->>WP: push_step_update(0, {tickers})
-
-    Note over TP: ── Step 1: Market Data ──
-    TP->>TP: _fetch_market_data(tickers)
-    TP->>WP: push_step_update(1, {data_count})
-
-    Note over TP: ── Step 2: Factors ──
-    TP->>FE: compute_all_multi(dfs)
-    FE-->>TP: factor_df
-    TP->>WP: push_step_update(2, {n_factors})
-
-    Note over TP: ── Step 3: Inference ──
-    TP->>IE: generate_signals_batch(factor_df)
-    IE-->>TP: signals[]
-    TP->>WP: push_step_update(3, {n_signals})
-
-    Note over TP: ── Step 4: Risk Checks ──
-    loop each signal
-        TP->>RG: check(ticker, qty, price, portfolio, strength)
-        RG-->>TP: RiskResult
-    end
-    TP->>WP: push_step_update(4, {approved, rejected})
-
-    Note over TP: ── Step 5: Portfolio Optimization ──
-    TP->>EXEC: POST /api/v2/execution/optimizer/bl
-    EXEC-->>TP: weights{}
-    TP->>WP: push_step_update(5, {n_weights})
-
-    Note over TP: ── Step 6: Execute ──
-    loop each ticker in target_weights
-        TP->>TE: execute_rebalance(ticker, weight, price, positions)
-        TE->>RM: check_order(ticker, side, qty, price)
-        alt EXECUTION_MODE = "live"
-            TE->>TB: place_order(ticker, action, qty, "MKT", price)
-            TB-->>TE: order_result
-        else paper
-            TE->>PM: execute_trade(ticker, side, price, ...)
-            PM-->>TE: trade_record
-        end
-        TE-->>TP: order
-    end
-    TP->>WP: push_step_update(6, {n_orders})
-
-    Note over TP: ── Post-trade checks ──
-    TP->>RM: check_circuit_breaker()
-    TP->>RM: fix_short_positions(portfolio, executor, prices)
-
-    Note over TP: ── Step 7: Record ──
-    TP->>TP: _record_performance(orders)
-    TP->>PM: save_state()
-    TP->>WP: push_cycle_update(7, cycle_summary)
-
-    TP-->>Main: cycle_summary
+    Note over TP: Cycle #1 完成，休眠 300s...

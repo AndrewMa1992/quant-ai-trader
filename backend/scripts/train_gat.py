@@ -74,8 +74,8 @@ def main():
                     f"signal={signal['signal']}")
 
     # 4. 检查模型文件
-    from backend.config import MODELS_DIR
-    model_path = MODELS_DIR / "gat_model.pt"
+    from configs.settings import settings
+    model_path = settings.MODELS_DIR / "gat_model.pt"
     if model_path.exists():
         logger.info(f"✅ GAT 模型已保存: {model_path} ({model_path.stat().st_size / 1024:.1f} KB)")
     else:

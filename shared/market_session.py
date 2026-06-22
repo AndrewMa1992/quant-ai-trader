@@ -34,8 +34,15 @@ _MARKETS: Dict[str, Dict[str, time]] = {
 }
 
 
+def _is_weekday() -> bool:
+    """Check if today is a weekday (Mon-Fri)."""
+    return datetime.now(timezone.utc).weekday() < 5
+
+
 def _is_market_open(market: str, now_utc: time) -> bool:
     """Check whether *market* is open at *now_utc*."""
+    if not _is_weekday():
+        return False
     sched = _MARKETS.get(market)
     if sched is None:
         return False

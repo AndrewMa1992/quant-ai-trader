@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-from backend.config import trading_config
+from configs.settings import settings
 from backend.trading_engine.portfolio import PortfolioManager
 from backend.trading_engine.risk_manager import RiskManager
 
@@ -48,7 +48,7 @@ class Backtester:
         Returns:
             回测结果报告
         """
-        capital = initial_capital or trading_config.INITIAL_CAPITAL
+        capital = initial_capital or settings.TRADING_INITIAL_CAPITAL
 
         portfolio = PortfolioManager(capital)
         risk_mgr = RiskManager()
@@ -195,11 +195,11 @@ class Backtester:
         # 盈亏比 (简化)
         profit_factor = 0
         total_profit = sum(
-            t["value"] - t["value"] * trading_config.COMMISSION_RATE
+            t["value"] - t["value"] * settings.TRADING_COMMISSION_RATE
             for t in trades if t["side"] == "sell"
         )
         total_loss = sum(
-            t["value"] * (1 + trading_config.COMMISSION_RATE)
+            t["value"] * (1 + settings.TRADING_COMMISSION_RATE)
             for t in trades if t["side"] == "buy"
         )
         if total_loss > 0:

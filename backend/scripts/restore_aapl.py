@@ -4,9 +4,9 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import sqlite3
-from backend.config import DB_PATH
+from configs.settings import settings
 
-conn = sqlite3.connect(str(DB_PATH))
+conn = sqlite3.connect(str(settings.DB_PATH))
 
 # 创建表（如果不存在）
 conn.execute("""

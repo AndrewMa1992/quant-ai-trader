@@ -119,4 +119,10 @@ export const executionApi = {
     const { data } = await apiClient.get(`${BASE}/trades`, { params: { date } })
     return data.data
   },
+
+  // Rollback
+  async rollback(): Promise<{ success: boolean; message: string; timestamp: string }> {
+    const { data } = await apiClient.post(`${BASE}/rollback`)
+    return data
+  },
 }

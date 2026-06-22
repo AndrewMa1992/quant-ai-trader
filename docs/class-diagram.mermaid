@@ -1,162 +1,130 @@
 classDiagram
-    class TradingPipeline {
-        +PipelineConfig config
-        +TigerBridge tiger
-        +MarketSession market_session
-        +PortfolioManager portfolio
-        +RiskManager risk
-        +TigerExecutor executor
-        +WsPusher ws_pusher
-        +FactorEngine factor_engine
-        +InferenceEngine inference_engine
-        +RiskGate risk_gate
-        +int cycle_count
-        +__init__(config)
-        +run(interval_seconds)
-        +run_cycle() Dict
-        -_get_active_universe() List~str~
-        -_fetch_market_data(tickers) Dict
-        -_compute_factors(data) DataFrame
-        -_run_inference(factor_df, tickers) List~Dict~
-        -_apply_risk_checks(signals) List~Dict~
-        -_optimize_portfolio(signals) Dict
-        -_execute_rebalance(weights) List~Dict~
-        -_record_performance(orders) None
-        -_sync_tiger_state() None
-        -_check_market_open() bool
-        -_check_circuit_breaker() bool
-        -_push_step_update(step, data) None
-        +close() None
-    }
-
-    class TigerBridge {
-        -TigerClient _client
-        -bool _connected
-        +connect() bool
-        +get_account_info(force) Optional~Dict~
-        +get_positions(force) List~Dict~
-        +place_order(ticker, action, quantity, type, price) Optional~Dict~
-        +get_quote(ticker) Optional~Dict~
-        +sync_all_to_db() Dict
-        +is_connected() bool
-        +get_status() Dict
-    }
-
-    class MarketSession {
-        +bool US
-        +bool US_regular
-        +bool US_extended
-        +bool US_overnight
-        +bool HK
-        +bool SG
-        +bool AU
-        +bool NZ
-        +is_any_market_open() bool
-        +is_us_market_open() bool
-        +is_hk_market_open() bool
-        +get_status() Dict
-    }
-
-    class PortfolioManager {
-        +float cash
-        +float total_value
-        +Dict~str,float~ positions
-        +Dict~str,float~ avg_costs
-        +Dict~str,float~ position_values
-        +float initial_capital
-        +sync_from_tiger(tiger_bridge, force) Dict
-        +execute_trade(ticker, side, price, strength, strategy) Optional~Dict~
-        +update_value(prices) None
-        +get_metrics() Dict
-        +save_state() None
-        +load_state() Optional~Dict~
+    class Settings {
+        +TRADING_INITIAL_CAPITAL: float
+        +TRADING_DAILY_LOSS_LIMIT: float
+        +TRADING_MAX_DRAWDOWN: float
+        +TRADING_CIRCUIT_BREAKER_COOLDOWN: int
+        +TIGER_ID: str
+        +TIGER_ACCOUNT: str
+        +TIGER_LICENSE: str
+        +TIGER_PRIVATE_KEY_PATH: str
+        +TRAIN_DEVICE: str
+        +EXECUTION_MODE: str
+        +validate_trading_config() bool
     }
 
     class RiskManager {
-        +float portfolio_value
-        +float daily_start_value
-        +float peak_value
-        +bool circuit_breaker_triggered
-        +str breaker_mode
-        +int trades_today
-        +int max_daily_trades
+        +portfolio_value: float
+        +cash: float
+        +daily_start_value: float
+        +peak_value: float
+        +circuit_breaker_triggered: bool
+        -_tiger_synced: bool
+        +breaker_mode: str
+        +__init__(initial_capital, breaker_mode, max_daily_trades)
+        +sync_portfolio_value(total_value, cash, is_tiger_sync)
         +check_circuit_breaker() RiskReport
-        +liquidate_all(prices) List~Dict~
-        +check_leverage(tiger_acct) bool
+        +liquidate_all(prices, tiger_bridge) List
+        +check_leverage(tiger_account) bool
         +check_daily_limit() bool
         +check_order(ticker, side, quantity, price) RiskReport
-        +sync_portfolio_value(total, cash) None
-        +reset_daily_state() None
+        +reset_daily_state()
+        +fix_short_positions(portfolio, tiger_bridge, prices) int
         +get_status() Dict
-        +fix_short_positions(portfolio, executor, prices) int
-    }
-
-    class TigerExecutor {
-        +str mode
-        +PortfolioManager portfolio
-        +RiskManager risk
-        +TigerBridge tiger
-        +execute_signal(ticker, decision, strength, price, confidence, strategy) Optional~Dict~
-        +execute_rebalance(target_weights, prices, current_positions) List~Dict~
-        -_execute_live(ticker, action, quantity, price) Optional~Dict~
-        -_execute_paper(ticker, action, quantity, price, strategy) Optional~Dict~
-    }
-
-    class WsPusher {
-        +str api_url
-        +push_cycle_update(cycle, step, data) None
-        +push_trade(trade) None
-        +push_alert(level, message) None
-    }
-
-    class DailyState {
-        +str trade_date
-        +int trades_today
-        +bool circuit_broken
-        +float daily_start_value
-        +check_date_roll() bool
-        +increment_trades() None
-        +reset_for_new_day(start_value) None
-    }
-
-    class PipelineConfig {
-        +int CYCLE_INTERVAL_SECONDS
-        +bool TRADING_HOURS_ONLY
-        +int MAX_TICKERS_PER_CYCLE
-        +float SIGNAL_THRESHOLD
-        +float MIN_CONFIDENCE
-        +bool ENABLE_RISK_CHECKS
-        +bool ENABLE_PORTFOLIO_OPT
-        +str EXECUTION_MODE
-        +int MAX_DAILY_TRADES
-        +float DAILY_LOSS_LIMIT
-        +float LEVERAGE_LIMIT
-        +int V1_FALLBACK_RETRIES
-        +bool GIT_AUTO_SYNC
-        +bool ENABLE_WS_PUSH
+        +force_reset_circuit()
     }
 
     class RiskReport {
-        +bool passed
-        +str reason
-        +List~str~ warnings
-        +bool circuit_breaker
-        +bool daily_limit_reached
-        +bool leverage_blocked
-        +Dict details
+        +passed: bool
+        +reason: str
+        +warnings: List~str~
+        +circuit_breaker: bool
+        +daily_limit_reached: bool
+        +leverage_blocked: bool
+        +details: Dict
     }
 
+    class TigerClient {
+        -_account: str
+        -_tiger_id: str
+        -_client: Any
+        -_quote_client: Any
+        -_initialized: bool
+        -_rate_limit: float
+        +__init__()
+        +_ensure_initialized()
+        +get_quote(ticker) Optional~Dict~
+        +get_quotes(tickers) List~Dict~
+        +get_positions() List~Dict~
+    }
+
+    class TigerBridge {
+        +connect() bool
+        +is_connected() bool
+        +get_quote(ticker) Optional~Dict~
+        +get_account_info(force) Optional~Dict~
+        +get_positions(force) List~Dict~
+        +place_order(ticker, action, quantity, type, price) Optional~Dict~
+        +sync_all_to_db() Dict
+    }
+
+    class TigerBroker {
+        -_client: Any
+        -_initialized: bool
+        +account: str
+        +_ensure_client()
+        +place_order(ticker, side, quantity, type, price)
+        +get_positions() List
+        +get_account_summary() Dict
+    }
+
+    class TradingPipeline {
+        +config: PipelineConfig
+        +portfolio: PortfolioManager
+        +risk_manager: RiskManager
+        +tiger: TigerBridge
+        +executor: TigerExecutor
+        +cycle_count: int
+        +run_cycle() Optional~Dict~
+        -_get_live_prices() Dict
+        -_get_active_universe() List
+        -_fetch_market_data(tickers) Dict
+        -_compute_factors(data) DataFrame
+        -_run_inference(factor_df, tickers) List
+        -_apply_risk_checks(signals) List
+        -_optimize_portfolio(signals) Dict
+        -_execute_rebalance(weights) List
+        -_record_performance(orders)
+    }
+
+    class PortfolioManager {
+        +total_value: float
+        +cash: float
+        +positions: Dict
+        +sync_from_tiger(tiger, force) Dict
+        +update_value(prices)
+        +execute_trade(ticker, side, price, quantity, strategy)
+        +save_state()
+        +load_state(path)
+    }
+
+    class TrainServiceConfig {
+        +DEVICE: str
+        +PORT: int
+        +_cuda_available() bool
+    }
+
+    class TigerExecutor {
+        +mode: str
+        +execute_rebalance(target_weights, prices, current_positions) List
+    }
+
+    TradingPipeline --> RiskManager : uses
     TradingPipeline --> TigerBridge : uses
-    TradingPipeline --> MarketSession : uses
     TradingPipeline --> PortfolioManager : owns
-    TradingPipeline --> RiskManager : owns
     TradingPipeline --> TigerExecutor : owns
-    TradingPipeline --> WsPusher : uses
-    TradingPipeline --> DailyState : owns
-    TradingPipeline --> PipelineConfig : config
-    TigerExecutor --> TigerBridge : uses
-    TigerExecutor --> PortfolioManager : references
-    TigerExecutor --> RiskManager : references
-    RiskManager --> PortfolioManager : reads
-    PortfolioManager --> TigerBridge : syncs from
-    RiskManager --> RiskReport : produces
+    TigerBridge --> TigerClient : lazy import (primary)
+    TigerBridge --> TigerBroker : lazy import (trade only)
+    TigerClient --> Settings : reads credentials
+    RiskManager --> RiskReport : returns
+    RiskManager --> Settings : reads thresholds

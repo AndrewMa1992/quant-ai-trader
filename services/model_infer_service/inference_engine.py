@@ -116,14 +116,14 @@ class InferenceEngine:
             }
 
         # Prepare features (use OHLCV + returns as minimal feature set)
-        df = df.tail(252).copy()
+        df = df.tail(504).copy()  # 2 years of daily data for sufficient context
         for p in [1, 5, 21, 63]:
             col = "adj_close" if "adj_close" in df.columns else "close"
             df[f"ret_{p}d"] = df[col].pct_change(p)
 
         # Drop date-level cols for prediction
         feature_cols = [c for c in df.columns if c not in ("open", "high", "low", "close", "adj_close")]
-        X = df[feature_cols].fillna(0.0).tail(128)
+        X = df[feature_cols].fillna(0.0).tail(252)  # 1 year window for sequence models
 
         predictions: dict[str, Any] = {}
 

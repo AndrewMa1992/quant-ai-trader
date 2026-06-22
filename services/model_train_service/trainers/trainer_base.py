@@ -12,6 +12,8 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
+from configs.settings import settings
+
 
 class TrainerBase(ABC):
     """Abstract base class for all ML/DL model trainers.
@@ -21,15 +23,15 @@ class TrainerBase(ABC):
     Attributes:
         model: The underlying model object (set after fit).
         model_name: Human-readable model name.
-        device: Compute device string (cpu/cuda/mps).
+        device: Compute device string (cpu/cuda/mps). Defaults to settings.TRAIN_DEVICE.
     """
 
     model_name: str = "base"
     model: Any = None
-    device: str = "cpu"
+    device: str = "cpu"  # Overridden in __init__ from settings.TRAIN_DEVICE
 
-    def __init__(self, device: str = "cpu") -> None:
-        self.device = device
+    def __init__(self, device: str | None = None) -> None:
+        self.device = device or settings.TRAIN_DEVICE
         self._feature_names: list[str] = []
 
     @abstractmethod

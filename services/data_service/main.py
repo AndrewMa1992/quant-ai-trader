@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         await get_redis()
         logger.info("Redis connected")
     except Exception as e:
-        logger.warning(f"Redis connection failed (non-fatal): {e}")
+        logger.info(f"Redis not configured — running without cache: {e}")
 
     yield
 

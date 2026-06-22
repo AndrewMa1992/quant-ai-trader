@@ -12,7 +12,7 @@ from typing import Dict, Optional, List
 from dataclasses import dataclass, field
 
 from loguru import logger
-from backend.config import trading_config
+from configs.settings import settings
 
 
 # 币种列表
@@ -87,7 +87,7 @@ class ForexManager:
         # 1. 计算各市场当前可用现金 (USD 等价)
         cash_usd = {}
         for ccy in SUPPORTED_CURRENCIES:
-            rate = trading_config.CURRENCY_RATES.get(ccy, 1.0)
+            rate = settings.trading_currency_rates_dict.get(ccy, 1.0)
             seg = account_segments.get(ccy, {})
             local_cash = seg.get("cash", 0)
             cash_usd[ccy] = local_cash * rate
@@ -102,14 +102,14 @@ class ForexManager:
             if trade.get("side") != "buy":
                 continue
             ccy = trade.get("currency", "USD")
-            value_usd = trade.get("value", 0) * trading_config.CURRENCY_RATES.get(ccy, 1.0)
+            value_usd = trade.get("value", 0) * settings.trading_currency_rates_dict.get(ccy, 1.0)
             demand_usd[ccy] += value_usd
 
         # 3. 检测缺口 — 哪些市场现金不足
         orders = []
         for ccy in ["HKD", "SGD", "USD"]:
             available = cash_usd.get(ccy, 0)
-            buffer = MARKET_BUFFER.get(ccy, 50) * trading_config.CURRENCY_RATES.get(ccy, 1.0)
+            buffer = MARKET_BUFFER.get(ccy, 50) * settings.trading_currency_rates_dict.get(ccy, 1.0)
             needed = demand_usd.get(ccy, 0) + buffer
 
             if needed > available:
@@ -120,16 +120,16 @@ class ForexManager:
                         continue
                     src_available = cash_usd.get(src_ccy, 0)
                     src_demand = demand_usd.get(src_ccy, 0)
-                    src_buffer = MARKET_BUFFER.get(src_ccy, 50) * trading_config.CURRENCY_RATES.get(src_ccy, 1.0)
+                    src_buffer = MARKET_BUFFER.get(src_ccy, 50) * settings.trading_currency_rates_dict.get(src_ccy, 1.0)
                     src_surplus = src_available - src_demand - src_buffer
 
                     if src_surplus > MIN_FOREX_AMOUNT_USD and deficit > MIN_FOREX_AMOUNT_USD:
                         amount_usd = min(deficit, src_surplus)
                         # 转回源币种数量
-                        src_rate = trading_config.CURRENCY_RATES.get(src_ccy, 1.0)
+                        src_rate = settings.trading_currency_rates_dict.get(src_ccy, 1.0)
                         amount_from = amount_usd / src_rate
                         # 汇率: from→to
-                        to_rate = trading_config.CURRENCY_RATES.get(ccy, 1.0)
+                        to_rate = settings.trading_currency_rates_dict.get(ccy, 1.0)
                         exchange_rate = src_rate / to_rate
 
                         order = ForexOrder(
@@ -244,8 +244,8 @@ class ForexManager:
     @staticmethod
     def get_fx_rate(from_ccy: str, to_ccy: str) -> float:
         """获取两种币种间汇率"""
-        from_rate = trading_config.CURRENCY_RATES.get(from_ccy, 1.0)
-        to_rate = trading_config.CURRENCY_RATES.get(to_ccy, 1.0)
+        from_rate = settings.trading_currency_rates_dict.get(from_ccy, 1.0)
+        to_rate = settings.trading_currency_rates_dict.get(to_ccy, 1.0)
         return from_rate / to_rate
 
     # ── 工具: 计算交易本地货币价值 ──
@@ -262,7 +262,7 @@ class ForexManager:
         currency = pm._get_currency(ticker) if hasattr(pm, '_get_currency') else "USD"
 
         local_value = quantity * price
-        usd_value = local_value * trading_config.CURRENCY_RATES.get(currency, 1.0)
+        usd_value = local_value * settings.trading_currency_rates_dict.get(currency, 1.0)
 
         return {
             "currency": currency,

@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from loguru import logger
-from backend.config import model_config, MODELS_DIR
+from configs.settings import settings
 
 
 class PatchEmbedding(nn.Module):
@@ -104,8 +104,21 @@ class PatchTST(nn.Module):
 
 
 class TransformerPredictor:
-    def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def __init__(self, device: str | None = None):
+        if device is not None:
+            self.device = torch.device(device)
+        else:
+            # Read device from env/settings with GPU auto-detection fallback
+            import os
+            env_device = os.getenv("QAT_TRAIN_DEVICE", "").strip()
+            if env_device in ("cuda", "cpu", "mps"):
+                if env_device == "cuda" and not torch.cuda.is_available():
+                    logger.warning("QAT_TRAIN_DEVICE=cuda but CUDA unavailable, falling back to CPU")
+                    self.device = torch.device("cpu")
+                else:
+                    self.device = torch.device(env_device)
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = None
         self.scaler_mean = None
         self.scaler_std = None
@@ -122,25 +135,36 @@ class TransformerPredictor:
         
         self.model = PatchTST(
             n_vars=n_vars, seq_len=seq_len, pred_len=pred_len,
-            patch_len=model_config.TRANSFORMER_LOOKBACK // 5,
-            stride=model_config.TRANSFORMER_LOOKBACK // 8,
+            patch_len=settings.MODEL_TRANSFORMER_LOOKBACK // 5,
+            stride=settings.MODEL_TRANSFORMER_LOOKBACK // 8,
             d_model=d_model, n_heads=n_heads,
             n_layers=n_layers, d_ff=d_ff,
-            dropout=model_config.TRANSFORMER_DROPOUT,
+            dropout=settings.MODEL_TRANSFORMER_DROPOUT,
         ).to(self.device)
         logger.info(f"模型构建: {sum(p.numel() for p in self.model.parameters()):,} 参数")
         return self.model
 
     def train(self, X_train, y_train, X_val=None, y_val=None, n_vars=40,
-              epochs=None, lr=None, return_val_loss=False):
-        """Transformer 训练 — 支持 Walk-forward 参数覆盖"""
+              epochs=None, lr=None, return_val_loss=False, use_amp: bool = False):
+        """Transformer 训练 — 支持 Walk-forward 参数覆盖, FP16 混合精度, Warmup + CosineAnnealing"""
         self.build_model(n_vars=n_vars)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Re-evaluate device from env in case it changed since __init__
+        import os
+        env_device = os.getenv("QAT_TRAIN_DEVICE", "").strip()
+        if env_device in ("cuda", "cpu", "mps"):
+            if env_device == "cuda" and not torch.cuda.is_available():
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device(env_device)
         self.model = self.model.to(self.device)
 
         # 使用参数或默认配置
-        _epochs = epochs if epochs is not None else model_config.TRANSFORMER_EPOCHS
-        _lr = lr if lr is not None else model_config.TRANSFORMER_LEARNING_RATE
+        _epochs = epochs if epochs is not None else settings.MODEL_TRANSFORMER_EPOCHS
+        _lr = lr if lr is not None else settings.MODEL_TRANSFORMER_LEARNING_RATE
+
+        # GPU 混合精度训练设置
+        amp_enabled = use_amp and self.device.type == 'cuda'
+        scaler = torch.cuda.amp.GradScaler() if amp_enabled else None
 
         # 清理 NaN/Inf
         X_train = np.nan_to_num(X_train, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -158,24 +182,53 @@ class TransformerPredictor:
         X_t = torch.FloatTensor(X_norm).permute(0, 2, 1).to(self.device)
         y_t = torch.FloatTensor(y_norm).unsqueeze(-1).expand(-1, -1, 3).contiguous().to(self.device)
 
-        loader = DataLoader(TensorDataset(X_t, y_t), batch_size=model_config.TRANSFORMER_BATCH_SIZE, shuffle=True)
+        loader = DataLoader(TensorDataset(X_t, y_t), batch_size=settings.MODEL_TRANSFORMER_BATCH_SIZE, shuffle=True)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=_lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=_epochs)
+
+        # CosineAnnealingWarmRestarts 学习率调度器
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=20, T_mult=2, eta_min=1e-6
+        )
+
+        # Warmup: 前5个epoch线性增加学习率
+        warmup_epochs = 5
 
         self.model.train()
         for epoch in range(_epochs):
+            # Warmup 阶段: 线性增加 lr
+            if epoch < warmup_epochs:
+                lr_scale = (epoch + 1) / warmup_epochs
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = _lr * lr_scale
+
             loss_total = 0
             for bx, by in loader:
                 optimizer.zero_grad()
-                pred = self.model(bx)
-                loss = F.smooth_l1_loss(pred[:, :, 1], by[:, :, 1])
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
+                if scaler is not None:
+                    with torch.cuda.amp.autocast():
+                        pred = self.model(bx)
+                        loss = F.smooth_l1_loss(pred[:, :, 1], by[:, :, 1])
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    pred = self.model(bx)
+                    loss = F.smooth_l1_loss(pred[:, :, 1], by[:, :, 1])
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    optimizer.step()
                 loss_total += loss.item()
-            scheduler.step()
+
+            # Warmup 后再用 scheduler
+            if epoch >= warmup_epochs:
+                scheduler.step()
+
             if (epoch + 1) % max(1, _epochs // 5) == 0:
-                logger.info(f"  Epoch {epoch+1}/{_epochs} Loss: {loss_total/len(loader):.6f}")
+                current_lr = optimizer.param_groups[0]['lr']
+                logger.info(f"  Epoch {epoch+1}/{_epochs} Loss: {loss_total/len(loader):.6f} LR: {current_lr:.2e}")
+
         self._is_trained = True
 
         # 计算验证损失（如果提供了验证集）

@@ -18,6 +18,11 @@ class TrainRequest(BaseModel):
     tickers: list[str] = Field(..., description="List of ticker symbols for training", min_length=1)
     start_date: str = Field(..., description="Training start date (YYYY-MM-DD)")
     end_date: str = Field(..., description="Training end date (YYYY-MM-DD)")
+    device: str = Field(
+        default="cpu",
+        description="Compute device: cpu / cuda / mps. Set to cuda to use GPU for this training job.",
+        examples=["cpu", "cuda"],
+    )
     hyperparams: Optional[dict] = Field(
         default=None, description="Optional hyperparameter overrides"
     )

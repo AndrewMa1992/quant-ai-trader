@@ -15,7 +15,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from loguru import logger
-from backend.config import CACHE_DIR
+from configs.settings import settings
 from pathlib import Path
 
 torch_cache = CACHE_DIR / "torch"
@@ -154,7 +154,7 @@ class GATSignalGenerator:
 
     def load_model(self, path: str = None):
         """加载预训练 GAT 模型"""
-        from backend.config import MODELS_DIR
+        from configs.settings import settings
         model_path = path or str(MODELS_DIR / "gat_model.pt")
         try:
             self.model = StockGAT().to(self.device)
@@ -380,7 +380,7 @@ class GATSignalGenerator:
             optimizer.step()
 
         # 保存
-        from backend.config import MODELS_DIR
+        from configs.settings import settings
         save_path = MODELS_DIR / "gat_model.pt"
         torch.save(self.model.state_dict(), save_path)
         logger.info(f"✅ GAT 训练完成, 已保存: {save_path}")

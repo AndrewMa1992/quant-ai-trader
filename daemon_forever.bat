@@ -23,6 +23,10 @@ set HF_HUB_DOWNLOAD_TIMEOUT=15
 set PATH=%NODE%;%NPM_PREFIX%\node_modules\.bin;%PATH%
 set NODE_PATH=%NPM_PREFIX%\node_modules
 
+set QAT_TRAIN_DEVICE=cuda
+set QAT_TRAIN_EPOCHS=50
+set QAT_TRAIN_BATCH_SIZE=64
+
 set CHECK_INTERVAL=30
 set GIT_PULL_EVERY=20
 set GIT_PUSH_EVERY=10
@@ -191,6 +195,17 @@ goto :loop
 :: 子程序: 启动全部 v2 服务
 :: ═══════════════════════════════════════════════
 :start_all
+:: === 先杀掉所有 v2 端口上的残留进程，防止端口占用导致启动失败 ===
+echo [%time%] Killing stale processes on v2 ports...
+for %%p in (%API_PORT% %DATA_PORT% %FACTOR_PORT% %TRAIN_PORT% %INFER_PORT% %RISK_PORT% %EXEC_PORT% %FRONTEND_PORT%) do (
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%p.*LISTENING" 2^>nul') do (
+        taskkill /PID %%a /F >nul 2>&1
+    )
+)
+taskkill /FI "WINDOWTITLE eq QuantAI*" /F >nul 2>&1
+timeout /t 2 /nobreak >nul
+echo [%time%] Stale ports cleared, launching services...
+
 start "QuantAI-API" /MIN "%PY%" -m uvicorn api_gateway.main:app --host 0.0.0.0 --port %API_PORT%
 timeout /t 3 /nobreak >nul
 
@@ -198,6 +213,7 @@ start "QuantAI-DataSvc" /MIN "%PY%" -m uvicorn services.data_service.main:app --
 timeout /t 2 /nobreak >nul
 start "QuantAI-FactorSvc" /MIN "%PY%" -m uvicorn services.factor_service.main:app --host 0.0.0.0 --port %FACTOR_PORT%
 timeout /t 2 /nobreak >nul
+set QAT_TRAIN_DEVICE=cuda
 start "QuantAI-TrainSvc" /MIN "%PY%" -m uvicorn services.model_train_service.main:app --host 0.0.0.0 --port %TRAIN_PORT%
 timeout /t 2 /nobreak >nul
 start "QuantAI-InferSvc" /MIN "%PY%" -m uvicorn services.model_infer_service.main:app --host 0.0.0.0 --port %INFER_PORT%

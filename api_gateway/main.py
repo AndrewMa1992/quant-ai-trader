@@ -15,9 +15,10 @@ import socket
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from loguru import logger
 from sqlalchemy import text
 
@@ -53,13 +54,19 @@ async def lifespan(app: FastAPI):
         redis = await get_redis()
         logger.info("Redis client initialized")
     except Exception as e:
-        logger.warning(f"Redis initialization failed (non-fatal): {e}")
+        logger.info(f"Redis not configured — running without cache: {e}")
 
     logger.info(f"API Gateway ready on {settings.API_HOST}:{settings.API_PORT}")
+
+    # Initialize httpx client for reverse proxy to microservices
+    app.state.http_client = httpx.AsyncClient(timeout=30.0)
+    logger.info("HTTPX reverse proxy client initialized")
+
     yield
 
     # ── Shutdown ─────────────────────────────────────────────
     logger.info("Shutting down API Gateway...")
+    await app.state.http_client.aclose()
     await close_redis()
     await close_engine()
     logger.info("API Gateway shutdown complete")
@@ -117,14 +124,20 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 # ── Health Check ─────────────────────────────────────────────
 @app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check() -> HealthResponse:
+async def health_check(request: Request) -> HealthResponse:
     """Health check endpoint for load balancers and monitoring.
 
-    Wraps DB and Redis checks in asyncio.wait_for() with 2-second
-    timeouts each so the endpoint always responds in <3 seconds.
+    Aggregates status from:
+    - Database (async connection check)
+    - Redis (ping check)
+    - All 6 downstream microservices (HTTP /health probe)
+
+    Each check has a 2-second timeout so the endpoint always
+    responds in <3 seconds.
     """
     db_status = "unknown"
     redis_status = "unknown"
+    services_status: dict[str, str] = {}
 
     # ── Database check with 2s timeout ───────────────────────
     async def _check_db() -> str:
@@ -145,23 +158,60 @@ async def health_check() -> HealthResponse:
     # ── Redis check with 2s timeout ──────────────────────────
     async def _check_redis() -> str:
         redis = await get_redis()
+        if redis.is_degraded:
+            return redis.mode
         await redis.ping()
-        return "healthy"
+        return redis.mode
 
     try:
         redis_status = await asyncio.wait_for(_check_redis(), timeout=2.0)
     except asyncio.TimeoutError:
-        redis_status = "timeout"
+        redis_status = "degraded (timeout)"
         logger.warning("Health check: redis timed out after 2s")
     except Exception as exc:
-        redis_status = "unhealthy"
+        redis_status = "degraded (unreachable)"
         logger.warning(f"Health check: redis error: {exc}")
 
-    # Determine overall status
-    if db_status == "healthy" and redis_status == "healthy":
+    # ── Downstream service health probes ─────────────────────
+    # Probe each canonical service (no aliases) via HTTP GET /health
+
+    async def _probe_service(name: str, port: int) -> tuple[str, str]:
+        """Probe a single downstream service via HTTP GET /health."""
+        client: httpx.AsyncClient = request.app.state.http_client
+        try:
+            resp = await client.get(
+                f"http://127.0.0.1:{port}/health", timeout=2.0
+            )
+            if resp.status_code == 200:
+                return (name, "healthy")
+            return (name, f"degraded (HTTP {resp.status_code})")
+        except httpx.ConnectError:
+            return (name, "unreachable")
+        except httpx.TimeoutException:
+            return (name, "timeout")
+        except Exception as exc:
+            return (name, f"error: {exc}")
+
+    probe_tasks = [
+        _probe_service(name, port) for name, port in SERVICE_PORT_MAP.items()
+    ]
+    probe_results = await asyncio.gather(*probe_tasks)
+    services_status = dict(probe_results)
+
+    # ── Determine overall status ──────────────────────────────
+    infra_healthy = db_status == "healthy"
+    redis_healthy = redis_status.startswith("healthy")
+    services_healthy = all(
+        s == "healthy" for s in services_status.values()
+    )
+    any_unreachable = any(
+        s == "unreachable" for s in services_status.values()
+    )
+
+    if infra_healthy and redis_healthy and services_healthy:
         overall = "healthy"
-    elif db_status == "timeout" or redis_status == "timeout":
-        overall = "degraded"
+    elif any_unreachable or db_status == "unhealthy":
+        overall = "unhealthy"
     else:
         overall = "degraded"
 
@@ -172,6 +222,7 @@ async def health_check() -> HealthResponse:
         uptime_seconds=round(uptime, 2),
         database=db_status,
         redis=redis_status,
+        services=services_status,
     )
 
 
@@ -188,11 +239,7 @@ async def root() -> dict:
     }
 
 
-# ── Sub-router Registration (placeholder) ────────────────────
-# Full routers will be registered when microservices are built.
-# Each service exposes its own FastAPI app; the gateway proxies
-# or delegates to them. For now, we include stub health routes.
-
+# ── API v2 Status ───────────────────────────────────────────
 @app.get("/api/v2/status", tags=["System"])
 async def api_status() -> dict:
     """API v2 status with live service health probes.
@@ -242,6 +289,11 @@ async def api_status() -> dict:
 from api_gateway.routes.dashboard import router as dashboard_router
 
 app.include_router(dashboard_router, prefix="/api/v2", tags=["Dashboard"])
+
+# ── v2 Rollback Router ───────────────────────────────────────
+from api_gateway.routes.rollback import router as rollback_router
+
+app.include_router(rollback_router, prefix="/api/v2", tags=["Execution"])
 
 # ── WebSocket Manager ────────────────────────────────────────
 from api_gateway.websocket_manager import websocket_manager
@@ -307,6 +359,82 @@ async def push_tiger_snapshot(data: dict) -> dict:
         "recipients": websocket_manager.room_size("tiger"),
     }
 
+
+# ── Microservice Reverse Proxy ──────────────────────────────
+# /api/v2/status (above) is registered first so it takes
+# precedence over the catch-all proxy route below.
+SERVICE_PORT_MAP: dict[str, int] = {
+    "data": 8011,
+    "factor": 8012,
+    "model_train": 8013,
+    "model_infer": 8014,
+    "risk": 8015,
+    "execution": 8016,
+}
+
+# User-facing route name → canonical service name aliases
+SERVICE_ALIASES: dict[str, str] = {
+    "trade": "execution",
+    "model": "model_infer",
+}
+
+# Combined lookup: canonical names + aliases (for 404 validation)
+_ALL_SERVICE_NAMES: set[str] = set(SERVICE_PORT_MAP.keys()) | set(SERVICE_ALIASES.keys())
+
+
+@app.api_route(
+    "/api/v2/{service}/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def proxy_to_service(service: str, path: str, request: Request) -> Response:
+    """Reverse-proxy /api/v2/{service}/* to the matching microservice port.
+
+    Supports canonical service names (data, factor, model_train, model_infer,
+    risk, execution) and user-facing aliases (trade→execution, model→model_infer).
+    """
+    if service not in _ALL_SERVICE_NAMES:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {service}")
+
+    # Resolve alias to canonical service name for the target URL
+    canonical = SERVICE_ALIASES.get(service, service)
+    port = SERVICE_PORT_MAP[canonical]
+    target_url = f"http://127.0.0.1:{port}/api/v2/{canonical}/{path}"
+
+    if request.query_params:
+        target_url += f"?{request.query_params}"
+
+    try:
+        body = await request.body() if request.method in ("POST", "PUT", "PATCH") else None
+        # Strip hop-by-hop headers that httpx handles internally
+        headers = {
+            k: v
+            for k, v in request.headers.items()
+            if k.lower() not in ("host", "content-length", "transfer-encoding")
+        }
+
+        client: httpx.AsyncClient = request.app.state.http_client
+        resp = await client.request(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=body,
+            timeout=30.0,
+        )
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+        )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service {service} (port {port}) is not available",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Service {service} timed out",
+        )
 
 # ── SPA Catch-all (must be last route registered) ────────────
 @app.get("/{full_path:path}", tags=["SPA"])

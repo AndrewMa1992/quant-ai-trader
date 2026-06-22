@@ -9,6 +9,15 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _cuda_available() -> bool:
+    """Check if CUDA GPU is available for training."""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
 class TrainServiceConfig(BaseSettings):
     """Configuration for the Model Training microservice."""
 
@@ -27,36 +36,39 @@ class TrainServiceConfig(BaseSettings):
     TRAIN_WINDOW_DAYS: int = Field(default=252, description="Training window in trading days")
     VALID_WINDOW_DAYS: int = Field(default=63, description="Validation window days")
     TEST_WINDOW_DAYS: int = Field(default=63, description="Test window days")
-    WALK_FORWARD_STEP_DAYS: int = Field(default=90, description="Walk-forward step size days")
+    WALK_FORWARD_STEP_DAYS: int = Field(default=63, description="Walk-forward step size days")  # 90→63
     EPOCHS: int = Field(default=100)
     BATCH_SIZE: int = Field(default=256)
-    LEARNING_RATE: float = Field(default=0.001)
+    LEARNING_RATE: float = Field(default=0.0005)  # 0.001→0.0005
     EARLY_STOPPING_PATIENCE: int = Field(default=10)
 
-    # GPU
-    DEVICE: str = Field(default="cpu", description="Compute device (cuda/cpu/mps)")
+    # GPU – auto-detect CUDA, fallback to CPU
+    DEVICE: str = Field(
+        default_factory=lambda: "cuda" if _cuda_available() else "cpu",
+        description="Compute device (cpu / cuda / mps). Auto-detects CUDA; falls back to cpu.",
+    )
 
     # Model Architecture defaults
     TRANSFORMER_D_MODEL_GPU: int = Field(default=512)
     TRANSFORMER_D_MODEL_CPU: int = Field(default=128)
     TRANSFORMER_N_HEADS: int = Field(default=8)
-    TRANSFORMER_N_LAYERS: int = Field(default=4)
+    TRANSFORMER_N_LAYERS: int = Field(default=8)  # 4→8
     TRANSFORMER_DROPOUT: float = Field(default=0.1)
-    GRADIENT_CLIP_VAL: float = Field(default=1.0)
+    GRADIENT_CLIP_VAL: float = Field(default=0.5)  # 1.0→0.5
 
     # GBDT
     GBDT_DEFAULT: str = Field(default="lightgbm", description="Default GBDT: xgboost/lightgbm/catboost")
 
     # RL
     RL_DEFAULT_ALGO: str = Field(default="PPO", description="Default RL: PPO or SAC")
-    RL_TIMESTEPS: int = Field(default=100000, description="RL training timesteps")
+    RL_TIMESTEPS: int = Field(default=200000, description="RL training timesteps")  # 100K→200K
 
     # Hyperopt
     HYPEROPT_N_TRIALS: int = Field(default=100, description="Optuna trials per study")
     HYPEROPT_N_JOBS: int = Field(default=1, description="Parallel Optuna jobs")
 
     # Checkpoint / output
-    MODEL_SAVE_DIR: str = Field(default="./cache/models", description="Model checkpoint directory")
+    MODEL_SAVE_DIR: str = Field(default="./data/models", description="Model checkpoint directory")
     MODEL_REGISTRY_STAGE: str = Field(default="staging", description="Initial MLflow stage")
 
     # Job management

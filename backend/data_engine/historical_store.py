@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
-from backend.config import DB_PATH, DATA_DIR
+from configs.settings import settings
 
 
 class HistoricalStore:

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 
-from backend.config import api_config, data_config
+from configs.settings import settings
 from backend.data_engine import MarketDataEngine, DataPipeline
 from backend.services.signal_history import SignalHistory
 from backend.data_engine.realtime import RealtimeEngine
@@ -153,9 +153,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Quant AI Trader started")
     logger.info(f"Model status: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
-    logger.info(f"US: {len(data_config.US_TICKERS)} stocks, HK: {len(data_config.HK_TICKERS)} stocks")
-    logger.info(f"Web UI: http://localhost:{api_config.PORT}")
-    logger.info(f"API:    http://localhost:{api_config.PORT}/docs")
+    logger.info(f"US: {len(settings.data_us_tickers_list)} stocks, HK: {len(settings.data_hk_tickers_list)} stocks")
+    logger.info(f"Web UI: http://localhost:{settings.API_PORT}")
+    logger.info(f"API:    http://localhost:{settings.API_PORT}/docs")
 
     yield
 
@@ -178,7 +178,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=api_config.CORS_ORIGINS,
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -219,7 +219,7 @@ async def websocket_endpoint(ws: WebSocket):
                 await ws.send_json({"type": "subscribed", "channels": msg.get("channels", [])})
 
             elif msg.get("type") == "analyze_now":
-                tickers = msg.get("tickers", data_config.ALL_TICKERS)
+                tickers = msg.get("tickers", settings.DATA_ALL_TICKERS)
                 data_dict = await build_data_dict(tickers)
                 prices = realtime.get_current_prices()
                 results = strategy_engine.analyze_and_trade(tickers, data_dict, prices)
