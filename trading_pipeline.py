@@ -982,13 +982,19 @@ class TradingPipeline:
                 except Exception:
                     pass
 
-            # Fallback: use prices from signals
-            if not prices and signals:
-                for sig in signals:
-                    t = sig.get("ticker", "")
-                    p = sig.get("price", sig.get("close", 0.0))
-                    if t in target_weights and p > 0 and t not in prices:
-                        prices[t] = float(p)
+            # Fallback: use last close from ParquetStore for prices
+            if not prices:
+                try:
+                    from services.data_service.storage.parquet_store import ParquetStore
+                    store = ParquetStore()
+                    for ticker in target_weights:
+                        df = store.read_daily(ticker)
+                        if df is not None and len(df) > 0:
+                            px = float(df["close"].iloc[-1])
+                            if px > 0:
+                                prices[ticker] = px
+                except Exception:
+                    pass
 
             if not prices:
                 logger.warning("Step 6: 无有效价格，跳过执行")
