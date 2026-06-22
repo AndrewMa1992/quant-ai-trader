@@ -198,8 +198,14 @@ class TigerClient:
             )
             result = []
             for pos in (positions or []):
+                # Tiger SDK: symbol lives under contract.symbol, not position.symbol
+                ticker = ""
+                if hasattr(pos, "contract") and pos.contract is not None:
+                    ticker = getattr(pos.contract, "symbol", "") or ""
+                if not ticker:
+                    ticker = getattr(pos, "symbol", "")
                 result.append({
-                    "ticker": getattr(pos, "symbol", ""),
+                    "ticker": ticker,
                     "quantity": getattr(pos, "quantity", 0),
                     "avg_cost": getattr(pos, "average_cost", 0.0),
                     "market_price": getattr(pos, "market_price", 0.0),
@@ -228,12 +234,14 @@ class TigerClient:
             )
             if account and len(account) > 0:
                 acc = account[0]
+                # Tiger SDK: account fields live under acc.summary (e.g. summary.net_liquidation)
+                summary = getattr(acc, "summary", acc)
                 return {
                     "account_id": getattr(acc, "account", self._account),
-                    "nav": getattr(acc, "net_liquidation", 0.0),
-                    "cash": getattr(acc, "cash", 0.0),
-                    "margin_used": getattr(acc, "margin", 0.0),
-                    "buying_power": getattr(acc, "buying_power", 0.0),
+                    "nav": getattr(summary, "net_liquidation", 0.0),
+                    "cash": getattr(summary, "cash", 0.0),
+                    "margin_used": getattr(summary, "margin", 0.0),
+                    "buying_power": getattr(summary, "buying_power", 0.0),
                 }
             return {"error": "No account data"}
         except Exception as e:

@@ -191,15 +191,21 @@ class TigerBroker:
 
         try:
             positions = await asyncio.to_thread(self._client.get_positions)
-            return [
-                {
-                    "ticker": getattr(p, "symbol", ""),
+            result: list[dict[str, Any]] = []
+            for p in (positions or []):
+                # Tiger SDK: symbol lives under contract.symbol, not position.symbol
+                ticker = ""
+                if hasattr(p, "contract") and p.contract is not None:
+                    ticker = getattr(p.contract, "symbol", "") or ""
+                if not ticker:
+                    ticker = getattr(p, "symbol", "")
+                result.append({
+                    "ticker": ticker,
                     "quantity": getattr(p, "quantity", 0),
                     "avg_cost": getattr(p, "average_cost", 0.0),
                     "market_value": getattr(p, "market_value", 0.0),
-                }
-                for p in (positions or [])
-            ]
+                })
+            return result
         except Exception as e:
             logger.error(f"Failed to get positions: {e}")
             return []
@@ -218,11 +224,13 @@ class TigerBroker:
             accounts = await asyncio.to_thread(self._client.get_accounts)
             if accounts and len(accounts) > 0:
                 acc = accounts[0]
+                # Tiger SDK: account fields live under acc.summary (e.g. summary.net_liquidation)
+                summary = getattr(acc, "summary", acc)
                 return {
                     "account": self.account,
-                    "nav": getattr(acc, "net_liquidation", 0.0),
-                    "cash": getattr(acc, "cash", 0.0),
-                    "buying_power": getattr(acc, "buying_power", 0.0),
+                    "nav": getattr(summary, "net_liquidation", 0.0),
+                    "cash": getattr(summary, "cash", 0.0),
+                    "buying_power": getattr(summary, "buying_power", 0.0),
                 }
         except Exception as e:
             logger.error(f"Failed to get account: {e}")
