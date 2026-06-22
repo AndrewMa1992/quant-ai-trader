@@ -173,9 +173,9 @@ class RiskManager:
         daily_loss_pct: float = -daily_pnl / max(self.daily_start_value, 1.0)
 
         # ── Guard: auto-calibrate on extreme gap from first Tiger sync ─
-        if abs(daily_pnl_pct) > 0.10 and not self._tiger_synced:
+        if abs(daily_loss_pct) > 0.10 and not self._tiger_synced:
             logger.warning(
-                f"⚠️ 检测到异常日损益 {daily_pnl_pct:.1%} (pv=${self.portfolio_value:,.0f} "
+                f"⚠️ 检测到异常日损益 {daily_loss_pct:.1%} (pv=${self.portfolio_value:,.0f} "
                 f"vs daily_start=${self.daily_start_value:,.0f}) — "
                 f"推测尚未完成 Tiger 同步，自动校准并跳过本轮"
             )
