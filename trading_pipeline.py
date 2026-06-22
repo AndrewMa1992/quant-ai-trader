@@ -887,6 +887,7 @@ class TradingPipeline:
             http = await self._get_http()
             payload: Dict = {
                 "views": views,
+                "tickers": [v["ticker"] for v in views],
                 "constraints": {
                     "max_position_size": 0.20,
                     "min_position_size": 0.0,
@@ -964,7 +965,7 @@ class TradingPipeline:
             return []
 
         try:
-            # 获取实时价格
+            # 获取实时价格（优先HTTP，失败则用信号自带price）
             prices: Dict[str, float] = {}
             for ticker in target_weights:
                 try:
@@ -980,6 +981,14 @@ class TradingPipeline:
                             prices[ticker] = px
                 except Exception:
                     pass
+
+            # Fallback: use prices from signals
+            if not prices and signals:
+                for sig in signals:
+                    t = sig.get("ticker", "")
+                    p = sig.get("price", sig.get("close", 0.0))
+                    if t in target_weights and p > 0 and t not in prices:
+                        prices[t] = float(p)
 
             if not prices:
                 logger.warning("Step 6: 无有效价格，跳过执行")
