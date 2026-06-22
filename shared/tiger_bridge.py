@@ -24,10 +24,17 @@ def _run_async(coro, timeout: float = 30.0):
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return _run_async(coro)
-    # Inside running event loop → run in separate thread
+        return asyncio.run(coro)
+    # Inside running event loop → run in separate thread with fresh loop
+    def _run_in_new_loop():
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            return new_loop.run_until_complete(coro)
+        finally:
+            new_loop.close()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        return ex.submit(lambda: _run_async(coro)).result(timeout=timeout)
+        return ex.submit(_run_in_new_loop).result(timeout=timeout)
 
 
 def _lazy_import() -> Optional[Any]:
