@@ -27,7 +27,10 @@ async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {train_config.SERVICE_NAME} on port {train_config.PORT}")
 
-    # GPU detection
+    # GPU detection – honour QAT_TRAIN_DEVICE from env (set by daemon / .env)
+    device = train_config.DEVICE
+    logger.info(f"[INFO] Using device: {device}")
+
     cuda_ok = _cuda_available()
     if cuda_ok:
         import torch

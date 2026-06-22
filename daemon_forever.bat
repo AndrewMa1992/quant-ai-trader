@@ -119,9 +119,14 @@ if !PUSH_COUNTER! geq %GIT_PUSH_EVERY% (
     set /a PUSH_COUNTER=0
     echo [%time%] Git: auto-push to origin...
     cd /d "%PROJ%"
-    git add -A 2>nul
-    git commit -m "auto: daemon push %date% %time%" 2>nul
-    git push origin dev-20260522 2>nul
+    git remote get-url origin >nul 2>&1
+    if errorlevel 1 (
+        echo [%time%] Git: no remote configured, skipping push
+    ) else (
+        git add -A 2>nul
+        git commit -m "auto: daemon push %date% %time%" 2>nul
+        git push origin dev-20260522 2>nul
+    )
     cd /d "%PROJ%"
 )
 
