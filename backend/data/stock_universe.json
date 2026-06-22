@@ -1,898 +1,19 @@
 {
-  "last_update": "2026-06-19T21:21:47.466351",
+  "last_update": "2026-06-22T13:34:36.580016",
   "us_count": 200,
   "hk_count": 157,
   "sg_count": 97,
   "au_count": 30,
   "nz_count": 30,
+  "cn_count": 40,
   "stocks": [
     {
-      "ticker": "AMD",
-      "name": "超威半导体",
-      "market_cap": 0,
-      "avg_volume": 43805645,
-      "price": 537.37,
-      "volatility": 0.844633839791385,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XPEV",
-      "name": "小鹏集团",
-      "market_cap": 0,
-      "avg_volume": 10074328,
-      "price": 13.21,
-      "volatility": 0.49660248279792,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "WMT",
-      "name": "沃尔玛",
-      "market_cap": 0,
-      "avg_volume": 36526766,
-      "price": 117.18,
-      "volatility": 0.3387014930716662,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AMZN",
-      "name": "亚马逊",
-      "market_cap": 0,
-      "avg_volume": 75624415,
-      "price": 244.39,
-      "volatility": 0.32053482465318067,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BILI",
-      "name": "哔哩哔哩",
-      "market_cap": 0,
-      "avg_volume": 2312631,
-      "price": 17.2,
-      "volatility": 0.5196816027739772,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "LULU",
-      "name": "露露乐蒙",
-      "market_cap": 0,
-      "avg_volume": 6175520,
-      "price": 111.77,
-      "volatility": 0.4848014968505884,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DE",
-      "name": "迪尔股份",
-      "market_cap": 0,
-      "avg_volume": 1436238,
-      "price": 589.24,
-      "volatility": 0.36490992197624256,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "COF",
-      "name": "第一资本信贷",
-      "market_cap": 0,
-      "avg_volume": 8115466,
-      "price": 201.53,
-      "volatility": 0.3495855904052256,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NOW",
-      "name": "现在服务公司",
-      "market_cap": 0,
-      "avg_volume": 36337231,
-      "price": 95.04,
-      "volatility": 0.8842623221066233,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CVX",
-      "name": "雪佛龙",
-      "market_cap": 0,
-      "avg_volume": 19146123,
-      "price": 173.63,
-      "volatility": 0.2576105013082754,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BMY",
-      "name": "施贵宝",
-      "market_cap": 0,
-      "avg_volume": 31700381,
-      "price": 54.0,
-      "volatility": 0.288727463562615,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DIS",
-      "name": "迪士尼",
-      "market_cap": 0,
-      "avg_volume": 22943613,
-      "price": 103.89,
-      "volatility": 0.17330063036180815,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "EOG",
-      "name": "EOG能源",
-      "market_cap": 0,
-      "avg_volume": 12213411,
-      "price": 129.98,
-      "volatility": 0.2976611440441676,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PLD",
-      "name": "安博",
-      "market_cap": 0,
-      "avg_volume": 6701237,
-      "price": 140.54,
-      "volatility": 0.2564794441663181,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AIG",
-      "name": "美国国际集团",
-      "market_cap": 0,
-      "avg_volume": 5858354,
-      "price": 74.02,
-      "volatility": 0.20722152773138994,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SAP",
-      "name": "思爱普",
-      "market_cap": 0,
-      "avg_volume": 3037137,
-      "price": 155.22,
-      "volatility": 0.49510736015479617,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "O",
-      "name": "Realty Income Corporation",
-      "market_cap": 0,
-      "avg_volume": 12961677,
-      "price": 60.24,
-      "volatility": 0.20116705427812848,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ICE",
-      "name": "洲际交易所",
-      "market_cap": 0,
-      "avg_volume": 6109547,
-      "price": 133.88,
-      "volatility": 0.2644421837339279,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "RNG",
-      "name": "铃盛",
-      "market_cap": 0,
-      "avg_volume": 2081360,
-      "price": 35.02,
-      "volatility": 0.7018786137278014,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AFL",
-      "name": "美国家庭寿险",
-      "market_cap": 0,
-      "avg_volume": 6380129,
-      "price": 115.47,
-      "volatility": 0.19571191686568404,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BAC",
-      "name": "美国银行",
-      "market_cap": 0,
-      "avg_volume": 70438836,
-      "price": 56.2,
-      "volatility": 0.19142621863314543,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AMT",
-      "name": "美国电塔",
-      "market_cap": 0,
-      "avg_volume": 4453095,
-      "price": 176.05,
-      "volatility": 0.28775294058873285,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PSX",
-      "name": "Phillips 66",
-      "market_cap": 0,
-      "avg_volume": 5626599,
-      "price": 166.14,
-      "volatility": 0.2852252953861305,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ROK",
-      "name": "罗克韦尔自动化",
-      "market_cap": 0,
-      "avg_volume": 1154564,
-      "price": 473.79,
-      "volatility": 0.31891975640662423,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BP",
-      "name": "英国石油",
-      "market_cap": 0,
-      "avg_volume": 14304712,
-      "price": 39.1,
-      "volatility": 0.2755807182884567,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PG",
-      "name": "宝洁",
-      "market_cap": 0,
-      "avg_volume": 17076435,
-      "price": 150.38,
-      "volatility": 0.25378760310803355,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ISRG",
-      "name": "直觉外科公司",
-      "market_cap": 0,
-      "avg_volume": 4404200,
-      "price": 406.78,
-      "volatility": 0.32025565057108446,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BIDU",
-      "name": "百度",
-      "market_cap": 0,
-      "avg_volume": 2135238,
-      "price": 111.76,
-      "volatility": 0.470501470030293,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TMO",
-      "name": "赛默飞世尔",
-      "market_cap": 0,
-      "avg_volume": 3358552,
-      "price": 464.61,
-      "volatility": 0.3817527112319448,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "COP",
-      "name": "康菲石油",
-      "market_cap": 0,
-      "avg_volume": 22893388,
-      "price": 107.74,
-      "volatility": 0.30250712297486926,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DLR",
-      "name": "数字房地产信托公司",
-      "market_cap": 0,
-      "avg_volume": 5037345,
-      "price": 188.15,
-      "volatility": 0.28861775282724467,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "QCOM",
-      "name": "高通",
-      "market_cap": 0,
-      "avg_volume": 47081544,
-      "price": 226.11,
-      "volatility": 0.9397381227221347,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "IWM",
-      "name": "罗素2000指数ETF",
-      "market_cap": 0,
-      "avg_volume": 32463155,
-      "price": 295.59,
-      "volatility": 0.2346940239664559,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TJX",
-      "name": "TJX公司",
-      "market_cap": 0,
-      "avg_volume": 9069831,
-      "price": 163.81,
-      "volatility": 0.28394927637976297,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ADI",
-      "name": "亚德诺",
-      "market_cap": 0,
-      "avg_volume": 11868962,
-      "price": 434.46,
-      "volatility": 0.5345585422510569,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MA",
-      "name": "万事达",
-      "market_cap": 0,
-      "avg_volume": 6675004,
-      "price": 489.79,
-      "volatility": 0.22845833042218405,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ROST",
-      "name": "罗斯百货",
-      "market_cap": 0,
-      "avg_volume": 4161561,
-      "price": 232.8,
-      "volatility": 0.40354669405330534,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TRV",
-      "name": "旅行者财产险集团",
-      "market_cap": 0,
-      "avg_volume": 5783587,
-      "price": 307.81,
-      "volatility": 0.20421868680214023,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLF",
-      "name": "金融行业ETF",
-      "market_cap": 0,
-      "avg_volume": 37816814,
-      "price": 53.57,
-      "volatility": 0.14415868767356127,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ANET",
-      "name": "Arista Networks, Inc.",
-      "market_cap": 0,
-      "avg_volume": 11130444,
-      "price": 169.67,
-      "volatility": 0.5618483461066843,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SCHW",
-      "name": "嘉信理财",
-      "market_cap": 0,
-      "avg_volume": 27430151,
-      "price": 91.7,
-      "volatility": 0.2715645215472427,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "KMB",
-      "name": "金佰利",
-      "market_cap": 0,
-      "avg_volume": 8851294,
-      "price": 102.56,
-      "volatility": 0.3204708791602018,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "GE",
-      "name": "GE航天航空",
-      "market_cap": 0,
-      "avg_volume": 7763392,
-      "price": 357.64,
-      "volatility": 0.36114773504676334,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MCD",
-      "name": "麦当劳",
-      "market_cap": 0,
-      "avg_volume": 8106427,
-      "price": 278.61,
-      "volatility": 0.16841601992007008,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "UNH",
-      "name": "联合健康",
-      "market_cap": 0,
-      "avg_volume": 11896852,
-      "price": 400.96,
-      "volatility": 0.2799796750632081,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLY",
-      "name": "消费品指数-SPDR",
-      "market_cap": 0,
-      "avg_volume": 8728589,
-      "price": 117.16,
-      "volatility": 0.23399945164447059,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "FDX",
-      "name": "联邦快递",
-      "market_cap": 0,
-      "avg_volume": 2531818,
-      "price": 326.2,
-      "volatility": 0.35304414514375543,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MCK",
-      "name": "麦克森",
-      "market_cap": 0,
-      "avg_volume": 2477060,
-      "price": 750.63,
-      "volatility": 0.20187559343485975,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AVGO",
-      "name": "博通",
-      "market_cap": 0,
-      "avg_volume": 45076052,
-      "price": 411.35,
-      "volatility": 0.7089090898826182,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PYPL",
-      "name": "Paypal",
-      "market_cap": 0,
-      "avg_volume": 27215235,
-      "price": 42.51,
-      "volatility": 0.3052080043048158,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AAPL",
-      "name": "苹果",
-      "market_cap": 0,
-      "avg_volume": 85962201,
-      "price": 298.01,
-      "volatility": 0.2500401806345262,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "REGN",
-      "name": "再生元制药公司",
-      "market_cap": 0,
-      "avg_volume": 2609258,
-      "price": 609.94,
-      "volatility": 0.2729181609893626,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TWLO",
-      "name": "Twilio Inc.",
-      "market_cap": 0,
-      "avg_volume": 4716680,
-      "price": 186.17,
-      "volatility": 0.8568035936650042,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BABA",
-      "name": "阿里巴巴",
-      "market_cap": 0,
-      "avg_volume": 14602988,
-      "price": 107.1,
-      "volatility": 0.28196512955213887,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "JNJ",
-      "name": "强生",
-      "market_cap": 0,
-      "avg_volume": 18989761,
-      "price": 228.39,
-      "volatility": 0.19959923192755286,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MDLZ",
-      "name": "亿滋",
-      "market_cap": 0,
-      "avg_volume": 25599322,
-      "price": 60.12,
-      "volatility": 0.2126982152594259,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "HCA",
-      "name": "HCA医疗",
-      "market_cap": 0,
-      "avg_volume": 2656836,
-      "price": 375.17,
-      "volatility": 0.29275910947944606,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SBUX",
-      "name": "星巴克",
-      "market_cap": 0,
-      "avg_volume": 10603877,
-      "price": 100.65,
-      "volatility": 0.2647703396753758,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "EL",
-      "name": "雅诗兰黛",
-      "market_cap": 0,
-      "avg_volume": 5699950,
-      "price": 84.81,
-      "volatility": 0.5976185160204018,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ULTA",
-      "name": "犹他美容",
-      "market_cap": 0,
-      "avg_volume": 1409090,
-      "price": 456.13,
-      "volatility": 0.34250725955929745,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CB",
-      "name": "安达保险",
-      "market_cap": 0,
-      "avg_volume": 2960305,
-      "price": 323.4,
-      "volatility": 0.19995197518855584,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XOM",
-      "name": "埃克森美孚",
-      "market_cap": 0,
-      "avg_volume": 48063443,
-      "price": 137.81,
-      "volatility": 0.2948372234170294,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "EQIX",
-      "name": "易昆尼克斯",
-      "market_cap": 0,
-      "avg_volume": 807852,
-      "price": 1092.19,
-      "volatility": 0.2060406910029637,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AXP",
-      "name": "美国运通",
-      "market_cap": 0,
-      "avg_volume": 4490783,
-      "price": 338.0,
-      "volatility": 0.2619434670836297,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "GS",
-      "name": "高盛",
-      "market_cap": 0,
-      "avg_volume": 4499162,
-      "price": 1096.56,
-      "volatility": 0.39776181708704295,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DHR",
-      "name": "丹纳赫",
-      "market_cap": 0,
-      "avg_volume": 7258518,
-      "price": 177.17,
-      "volatility": 0.32459760064006615,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SQ",
-      "name": "Block Inc",
-      "market_cap": 0,
-      "avg_volume": 0,
-      "price": 86.96,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NKE",
-      "name": "耐克",
-      "market_cap": 0,
-      "avg_volume": 32320291,
-      "price": 45.2,
-      "volatility": 0.3746081928620389,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CSCO",
-      "name": "思科",
-      "market_cap": 0,
-      "avg_volume": 52284353,
-      "price": 119.54,
-      "volatility": 0.415652159230507,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PANW",
-      "name": "派拓网络",
-      "market_cap": 0,
-      "avg_volume": 12194739,
-      "price": 287.78,
-      "volatility": 0.5869902203919802,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ABT",
-      "name": "雅培",
-      "market_cap": 0,
-      "avg_volume": 41964841,
-      "price": 88.41,
-      "volatility": 0.25850865737119927,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NSC",
-      "name": "诺福克南方",
-      "market_cap": 0,
-      "avg_volume": 1885206,
-      "price": 300.08,
-      "volatility": 0.2894193221510251,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TFC",
-      "name": "Truist Financial Corporation",
-      "market_cap": 0,
-      "avg_volume": 18836926,
-      "price": 48.33,
-      "volatility": 0.3540749132721559,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "GILD",
-      "name": "吉利德科学",
-      "market_cap": 0,
-      "avg_volume": 14348342,
-      "price": 123.76,
-      "volatility": 0.2921326437423141,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DLTR",
-      "name": "美元树公司",
-      "market_cap": 0,
-      "avg_volume": 4434186,
-      "price": 111.65,
-      "volatility": 0.757583013391434,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MSFT",
-      "name": "微软",
-      "market_cap": 0,
-      "avg_volume": 59714157,
-      "price": 379.4,
-      "volatility": 0.3855730988781703,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLK",
-      "name": "科技行业精选指数ETF",
-      "market_cap": 0,
-      "avg_volume": 12101594,
-      "price": 191.44,
-      "volatility": 0.40439870272405654,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "COST",
-      "name": "好市多",
-      "market_cap": 0,
-      "avg_volume": 3742885,
-      "price": 951.45,
-      "volatility": 0.23044803242438244,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "KLAC",
-      "name": "科磊",
-      "market_cap": 0,
-      "avg_volume": 26167269,
-      "price": 259.56,
-      "volatility": 0.8173173988197969,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PRU",
-      "name": "保德信金融",
-      "market_cap": 0,
-      "avg_volume": 3582979,
-      "price": 106.53,
-      "volatility": 0.20881571843916527,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ITW",
-      "name": "伊利诺伊机械",
-      "market_cap": 0,
-      "avg_volume": 2590005,
-      "price": 264.09,
-      "volatility": 0.18466602050871528,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BX",
-      "name": "黑石",
-      "market_cap": 0,
-      "avg_volume": 10280667,
-      "price": 123.79,
-      "volatility": 0.4322567396445228,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "LRCX",
-      "name": "泛林集团",
-      "market_cap": 0,
-      "avg_volume": 22686620,
-      "price": 389.04,
-      "volatility": 0.774524413038483,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "FTNT",
-      "name": "飞塔信息",
-      "market_cap": 0,
-      "avg_volume": 18432871,
-      "price": 144.73,
-      "volatility": 0.4853265046210699,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BLK",
-      "name": "贝莱德",
-      "market_cap": 0,
-      "avg_volume": 1032316,
-      "price": 1050.09,
-      "volatility": 0.24619952651615132,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BDX",
-      "name": "碧迪医疗",
-      "market_cap": 0,
-      "avg_volume": 6231987,
-      "price": 143.98,
-      "volatility": 0.20904823585946672,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DELL",
-      "name": "戴尔科技",
-      "market_cap": 0,
-      "avg_volume": 15360635,
-      "price": 409.5,
-      "volatility": 1.4121053846354545,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TM",
-      "name": "丰田汽车",
-      "market_cap": 0,
-      "avg_volume": 459437,
-      "price": 173.94,
-      "volatility": 0.2646920141142233,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BA",
-      "name": "波音",
-      "market_cap": 0,
-      "avg_volume": 8822530,
-      "price": 222.72,
-      "volatility": 0.4123976790713987,
+      "ticker": "AMAT",
+      "name": "应用材料",
+      "market_cap": 0,
+      "avg_volume": 16781180,
+      "price": 617.11,
+      "volatility": 0.7477865429632347,
       "beta": 1.0,
       "sector": ""
     },
@@ -902,617 +23,7 @@
       "market_cap": 0,
       "avg_volume": 58384713,
       "price": 400.49,
-      "volatility": 0.47239475009267384,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ASML",
-      "name": "阿斯麦",
-      "market_cap": 0,
-      "avg_volume": 2406148,
-      "price": 1929.68,
-      "volatility": 0.6063384030787945,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ORCL",
-      "name": "甲骨文",
-      "market_cap": 0,
-      "avg_volume": 31386081,
-      "price": 184.29,
-      "volatility": 0.8390173838426314,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "LMT",
-      "name": "洛克希德马丁",
-      "market_cap": 0,
-      "avg_volume": 3978809,
-      "price": 510.95,
-      "volatility": 0.25036904981677555,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TXN",
-      "name": "德州仪器",
-      "market_cap": 0,
-      "avg_volume": 21929631,
-      "price": 322.86,
-      "volatility": 0.5309082784549644,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "T",
-      "name": "美国电话电报",
-      "market_cap": 0,
-      "avg_volume": 94242931,
-      "price": 22.01,
-      "volatility": 0.2725129325770896,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DOCU",
-      "name": "Docusign, Inc.",
-      "market_cap": 0,
-      "avg_volume": 9475165,
-      "price": 43.47,
-      "volatility": 0.5672054065756703,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NTAP",
-      "name": "美国网存",
-      "market_cap": 0,
-      "avg_volume": 8151500,
-      "price": 159.71,
-      "volatility": 0.9966371815772462,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CI",
-      "name": "信诺",
-      "market_cap": 0,
-      "avg_volume": 2445956,
-      "price": 279.27,
-      "volatility": 0.2956516937669235,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MU",
-      "name": "美光科技",
-      "market_cap": 0,
-      "avg_volume": 64642538,
-      "price": 1133.99,
-      "volatility": 1.1850785803766704,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "VLO",
-      "name": "瓦莱罗能源",
-      "market_cap": 0,
-      "avg_volume": 6141232,
-      "price": 236.3,
-      "volatility": 0.3568917446534919,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CMG",
-      "name": "奇波雷墨西哥烧烤",
-      "market_cap": 0,
-      "avg_volume": 31478893,
-      "price": 32.49,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MET",
-      "name": "大都会人寿",
-      "market_cap": 0,
-      "avg_volume": 8338284,
-      "price": 85.58,
-      "volatility": 0.2332229417573429,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CAT",
-      "name": "卡特彼勒",
-      "market_cap": 0,
-      "avg_volume": 6175042,
-      "price": 985.82,
-      "volatility": 0.43538102459217803,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "HPQ",
-      "name": "惠普",
-      "market_cap": 0,
-      "avg_volume": 31304236,
-      "price": 23.5,
-      "volatility": 0.8350518282713856,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "HD",
-      "name": "家得宝",
-      "market_cap": 0,
-      "avg_volume": 10604443,
-      "price": 334.28,
-      "volatility": 0.2605905003264341,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NVDA",
-      "name": "英伟达",
-      "market_cap": 0,
-      "avg_volume": 241272013,
-      "price": 210.69,
-      "volatility": 0.44146122165142077,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "C",
-      "name": "花旗集团",
-      "market_cap": 0,
-      "avg_volume": 29331203,
-      "price": 143.06,
-      "volatility": 0.26717342734875243,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CHTR",
-      "name": "特许通讯",
-      "market_cap": 0,
-      "avg_volume": 17934238,
-      "price": 126.23,
-      "volatility": 0.49342946521839076,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "JPM",
-      "name": "摩根大通",
-      "market_cap": 0,
-      "avg_volume": 20111030,
-      "price": 325.22,
-      "volatility": 0.23970219065909443,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "QQQ",
-      "name": "纳指100ETF",
-      "market_cap": 0,
-      "avg_volume": 50154595,
-      "price": 740.62,
-      "volatility": 0.2921524196339496,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "VZ",
-      "name": "威瑞森通信",
-      "market_cap": 0,
-      "avg_volume": 66305278,
-      "price": 45.37,
-      "volatility": 0.2457102155122424,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SPY",
-      "name": "标普500指数ETF-SPDR",
-      "market_cap": 0,
-      "avg_volume": 80875657,
-      "price": 746.74,
-      "volatility": 0.16372592252865545,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "LLY",
-      "name": "礼来",
-      "market_cap": 0,
-      "avg_volume": 4470535,
-      "price": 1098.57,
-      "volatility": 0.30898547367226903,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "YUM",
-      "name": "Yum! Brands",
-      "market_cap": 0,
-      "avg_volume": 4792297,
-      "price": 151.99,
-      "volatility": 0.22251835199528425,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SONY",
-      "name": "索尼",
-      "market_cap": 0,
-      "avg_volume": 5524897,
-      "price": 20.33,
-      "volatility": 0.3004697749374092,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "BK",
-      "name": "纽约梅隆银行",
-      "market_cap": 0,
-      "avg_volume": 0,
-      "price": 137.16,
-      "volatility": 0.21501089275327465,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NIO",
-      "name": "蔚来",
-      "market_cap": 0,
-      "avg_volume": 33400067,
-      "price": 5.02,
-      "volatility": 0.6131111416159971,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "WDAY",
-      "name": "Workday",
-      "market_cap": 0,
-      "avg_volume": 11755627,
-      "price": 116.93,
-      "volatility": 0.7091726947165382,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CL",
-      "name": "高露洁",
-      "market_cap": 0,
-      "avg_volume": 11201312,
-      "price": 89.48,
-      "volatility": 0.2859525509439445,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ZTS",
-      "name": "硕腾",
-      "market_cap": 0,
-      "avg_volume": 17092116,
-      "price": 78.71,
-      "volatility": 0.264906873321219,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NFLX",
-      "name": "奈飞",
-      "market_cap": 0,
-      "avg_volume": 91920414,
-      "price": 77.38,
-      "volatility": 0.21920111043179827,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ADSK",
-      "name": "欧特克",
-      "market_cap": 0,
-      "avg_volume": 9213532,
-      "price": 193.82,
-      "volatility": 0.48049253787934143,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLE",
-      "name": "能源指数ETF",
-      "market_cap": 0,
-      "avg_volume": 39645690,
-      "price": 53.77,
-      "volatility": 0.24779695662147558,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "UBER",
-      "name": "优步",
-      "market_cap": 0,
-      "avg_volume": 27203330,
-      "price": 71.64,
-      "volatility": 0.37346193011005685,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AMAT",
-      "name": "应用材料",
-      "market_cap": 0,
-      "avg_volume": 16781180,
-      "price": 617.11,
-      "volatility": 0.7040461568955134,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "IBM",
-      "name": "IBM",
-      "market_cap": 0,
-      "avg_volume": 16619749,
-      "price": 249.1,
-      "volatility": 0.8038702100923503,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DAL",
-      "name": "达美航空",
-      "market_cap": 0,
-      "avg_volume": 14843814,
-      "price": 84.18,
-      "volatility": 0.5318009716152096,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "META",
-      "name": "Meta Platforms, Inc.",
-      "market_cap": 0,
-      "avg_volume": 28824630,
-      "price": 577.22,
-      "volatility": 0.44492186238378245,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "LI",
-      "name": "理想汽车",
-      "market_cap": 0,
-      "avg_volume": 3303384,
-      "price": 13.21,
-      "volatility": 0.41125914699045824,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SLB",
-      "name": "斯伦贝谢",
-      "market_cap": 0,
-      "avg_volume": 41856505,
-      "price": 48.09,
-      "volatility": 0.39069722547994856,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DIA",
-      "name": "道琼斯指数ETF",
-      "market_cap": 0,
-      "avg_volume": 7134373,
-      "price": 515.52,
-      "volatility": 0.15281357980712507,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "RTX",
-      "name": "雷神技术",
-      "market_cap": 0,
-      "avg_volume": 8866358,
-      "price": 185.6,
-      "volatility": 0.2908832373800877,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CCI",
-      "name": "冠城国际",
-      "market_cap": 0,
-      "avg_volume": 7437280,
-      "price": 82.05,
-      "volatility": 0.29319782093531654,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "GOOGL",
-      "name": "谷歌-A",
-      "market_cap": 0,
-      "avg_volume": 44470070,
-      "price": 368.03,
-      "volatility": 0.28572924812774914,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CME",
-      "name": "芝加哥商品交易所",
-      "market_cap": 0,
-      "avg_volume": 6953865,
-      "price": 246.38,
-      "volatility": 0.3680619193196968,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CVS",
-      "name": "西维斯健康",
-      "market_cap": 0,
-      "avg_volume": 21578828,
-      "price": 98.32,
-      "volatility": 0.2602574273731769,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DG",
-      "name": "美国达乐公司",
-      "market_cap": 0,
-      "avg_volume": 5886213,
-      "price": 113.45,
-      "volatility": 0.3753888479808372,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PDD",
-      "name": "拼多多",
-      "market_cap": 0,
-      "avg_volume": 11026060,
-      "price": 79.56,
-      "volatility": 0.4829542680639744,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "AVB",
-      "name": "阿湾物产",
-      "market_cap": 0,
-      "avg_volume": 2821975,
-      "price": 177.32,
-      "volatility": 0.20251528236764,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CDNS",
-      "name": "铿腾电子",
-      "market_cap": 0,
-      "avg_volume": 7092233,
-      "price": 387.39,
-      "volatility": 0.5849047021778646,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CRM",
-      "name": "赛富时",
-      "market_cap": 0,
-      "avg_volume": 57940830,
-      "price": 151.78,
-      "volatility": 0.5940362016411259,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "KO",
-      "name": "可口可乐",
-      "market_cap": 0,
-      "avg_volume": 46857949,
-      "price": 79.39,
-      "volatility": 0.2446767504121544,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TMUS",
-      "name": "T-Mobile Us, Inc.",
-      "market_cap": 0,
-      "avg_volume": 12545508,
-      "price": 181.67,
-      "volatility": 0.2548580811212418,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TER",
-      "name": "泰瑞达",
-      "market_cap": 0,
-      "avg_volume": 17958153,
-      "price": 437.92,
-      "volatility": 0.8826767849118102,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "INTU",
-      "name": "财捷",
-      "market_cap": 0,
-      "avg_volume": 10059120,
-      "price": 267.0,
-      "volatility": 0.923664145677521,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MS",
-      "name": "摩根士丹利",
-      "market_cap": 0,
-      "avg_volume": 11933213,
-      "price": 223.17,
-      "volatility": 0.2964412701106276,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CRWD",
-      "name": "Crowdstrike Holdings, Inc.",
-      "market_cap": 0,
-      "avg_volume": 5379367,
-      "price": 684.86,
-      "volatility": 0.6518429944071555,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ANTM",
-      "name": "Anthem Inc",
-      "market_cap": 0,
-      "avg_volume": 0,
-      "price": 482.58,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SNPS",
-      "name": "新思科技",
-      "market_cap": 0,
-      "avg_volume": 3227786,
-      "price": 455.51,
-      "volatility": 0.490524461623833,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ZM",
-      "name": "Zoom通讯",
-      "market_cap": 0,
-      "avg_volume": 8136342,
-      "price": 86.36,
-      "volatility": 0.6521689253531517,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "DDOG",
-      "name": "Datadog, Inc.",
-      "market_cap": 0,
-      "avg_volume": 8482324,
-      "price": 223.0,
-      "volatility": 0.693051831921441,
+      "volatility": 0.4840621003644208,
       "beta": 1.0,
       "sector": ""
     },
@@ -1522,17 +33,137 @@
       "market_cap": 0,
       "avg_volume": 8271241,
       "price": 117.81,
-      "volatility": 1.2874266049403915,
+      "volatility": 1.4017966542052636,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "ADBE",
-      "name": "Adobe Inc.",
+      "ticker": "CRWD",
+      "name": "Crowdstrike Holdings, Inc.",
       "market_cap": 0,
-      "avg_volume": 15852478,
-      "price": 195.16,
-      "volatility": 0.565115954058788,
+      "avg_volume": 5379367,
+      "price": 684.86,
+      "volatility": 0.6765202444201633,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AVGO",
+      "name": "博通",
+      "market_cap": 0,
+      "avg_volume": 45076052,
+      "price": 411.35,
+      "volatility": 0.7881628947338621,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "REGN",
+      "name": "再生元制药公司",
+      "market_cap": 0,
+      "avg_volume": 2609258,
+      "price": 609.94,
+      "volatility": 0.2615904429580965,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SBUX",
+      "name": "星巴克",
+      "market_cap": 0,
+      "avg_volume": 10603877,
+      "price": 100.65,
+      "volatility": 0.27142388660385913,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ROST",
+      "name": "罗斯百货",
+      "market_cap": 0,
+      "avg_volume": 4161561,
+      "price": 232.8,
+      "volatility": 0.2979252870880743,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "INTC",
+      "name": "英特尔",
+      "market_cap": 0,
+      "avg_volume": 233906555,
+      "price": 133.99,
+      "volatility": 1.0154195602510894,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DDOG",
+      "name": "Datadog, Inc.",
+      "market_cap": 0,
+      "avg_volume": 8482324,
+      "price": 223.0,
+      "volatility": 0.7461686311005947,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MU",
+      "name": "美光科技",
+      "market_cap": 0,
+      "avg_volume": 64642538,
+      "price": 1133.99,
+      "volatility": 1.1084014062518155,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TER",
+      "name": "泰瑞达",
+      "market_cap": 0,
+      "avg_volume": 17958153,
+      "price": 437.92,
+      "volatility": 0.9140391486693381,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DLTR",
+      "name": "美元树公司",
+      "market_cap": 0,
+      "avg_volume": 4434186,
+      "price": 111.65,
+      "volatility": 0.8254884811615754,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "WDAY",
+      "name": "Workday",
+      "market_cap": 0,
+      "avg_volume": 11755627,
+      "price": 116.93,
+      "volatility": 0.7313394672434856,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MNST",
+      "name": "怪物饮料",
+      "market_cap": 0,
+      "avg_volume": 12605489,
+      "price": 91.34,
+      "volatility": 0.178197532570653,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ZM",
+      "name": "Zoom通讯",
+      "market_cap": 0,
+      "avg_volume": 8136342,
+      "price": 86.36,
+      "volatility": 0.5493673788020591,
       "beta": 1.0,
       "sector": ""
     },
@@ -1542,137 +173,77 @@
       "market_cap": 0,
       "avg_volume": 8151089,
       "price": 337.6,
-      "volatility": 0.27884557344937805,
+      "volatility": 0.2974024278612524,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "ZS",
-      "name": "Zscaler, Inc.",
+      "ticker": "KLAC",
+      "name": "科磊",
       "market_cap": 0,
-      "avg_volume": 16570856,
-      "price": 124.85,
-      "volatility": 1.335958597826448,
+      "avg_volume": 26167269,
+      "price": 259.56,
+      "volatility": 0.9019757703550175,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "LUV",
-      "name": "西南航空",
+      "ticker": "YUM",
+      "name": "Yum! Brands",
       "market_cap": 0,
-      "avg_volume": 11291363,
-      "price": 47.97,
-      "volatility": 0.48793517124243013,
+      "avg_volume": 4792297,
+      "price": 151.99,
+      "volatility": 0.2225870163031368,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "TSM",
-      "name": "台积电",
+      "ticker": "CI",
+      "name": "信诺",
       "market_cap": 0,
-      "avg_volume": 25817106,
-      "price": 462.12,
-      "volatility": 0.46317898521433415,
+      "avg_volume": 2445956,
+      "price": 279.27,
+      "volatility": 0.29621079139111106,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "MRK",
-      "name": "默沙东",
+      "ticker": "GE",
+      "name": "GE航天航空",
       "market_cap": 0,
-      "avg_volume": 29521620,
-      "price": 113.87,
-      "volatility": 0.3491030710311268,
+      "avg_volume": 7763392,
+      "price": 357.64,
+      "volatility": 0.3536416747767052,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "HPE",
-      "name": "慧与",
+      "ticker": "TME",
+      "name": "腾讯音乐",
       "market_cap": 0,
-      "avg_volume": 53337786,
-      "price": 47.41,
-      "volatility": 1.039985217410128,
+      "avg_volume": 18945303,
+      "price": 8.73,
+      "volatility": 0.33608838347353126,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "SPG",
-      "name": "西蒙地产",
+      "ticker": "V",
+      "name": "Visa",
       "market_cap": 0,
-      "avg_volume": 3655356,
-      "price": 211.33,
-      "volatility": 0.22173559172934018,
+      "avg_volume": 14716741,
+      "price": 327.24,
+      "volatility": 0.20418348941746362,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "USB",
-      "name": "美国合众银行",
+      "ticker": "XLF",
+      "name": "金融行业ETF",
       "market_cap": 0,
-      "avg_volume": 22023998,
-      "price": 58.14,
-      "volatility": 0.28419325457684136,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PNC",
-      "name": "PNC金融",
-      "market_cap": 0,
-      "avg_volume": 4931983,
-      "price": 232.04,
-      "volatility": 0.25642616560088316,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "HUM",
-      "name": "哈门那",
-      "market_cap": 0,
-      "avg_volume": 3571218,
-      "price": 360.65,
-      "volatility": 0.43417796776926887,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "VRTX",
-      "name": "福泰制药",
-      "market_cap": 0,
-      "avg_volume": 2993021,
-      "price": 451.63,
-      "volatility": 0.2454570007164405,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SHOP",
-      "name": "Shopify Inc.",
-      "market_cap": 0,
-      "avg_volume": 10064141,
-      "price": 108.85,
-      "volatility": 0.575114404253859,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "HON",
-      "name": "霍尼韦尔",
-      "market_cap": 0,
-      "avg_volume": 6654228,
-      "price": 229.01,
-      "volatility": 0.4180896863120453,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "NET",
-      "name": "科赋锐",
-      "market_cap": 0,
-      "avg_volume": 4440905,
-      "price": 224.06,
-      "volatility": 0.7597132854907954,
+      "avg_volume": 37816814,
+      "price": 53.57,
+      "volatility": 0.14626580951811535,
       "beta": 1.0,
       "sector": ""
     },
@@ -1682,7 +253,907 @@
       "market_cap": 0,
       "avg_volume": 6813321,
       "price": 222.2,
-      "volatility": 0.2991992576869063,
+      "volatility": 0.30210709739496805,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PG",
+      "name": "宝洁",
+      "market_cap": 0,
+      "avg_volume": 17076435,
+      "price": 150.38,
+      "volatility": 0.24785107241496043,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BAC",
+      "name": "美国银行",
+      "market_cap": 0,
+      "avg_volume": 70438836,
+      "price": 56.2,
+      "volatility": 0.1908747556697972,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SNPS",
+      "name": "新思科技",
+      "market_cap": 0,
+      "avg_volume": 3227786,
+      "price": 455.51,
+      "volatility": 0.4795118518147565,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MDLZ",
+      "name": "亿滋",
+      "market_cap": 0,
+      "avg_volume": 25599322,
+      "price": 60.12,
+      "volatility": 0.2295012860247315,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ITW",
+      "name": "伊利诺伊机械",
+      "market_cap": 0,
+      "avg_volume": 2590005,
+      "price": 264.09,
+      "volatility": 0.18069160481185711,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BK",
+      "name": "纽约梅隆银行",
+      "market_cap": 0,
+      "avg_volume": 0,
+      "price": 137.16,
+      "volatility": 0.21531238724084467,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NFLX",
+      "name": "奈飞",
+      "market_cap": 0,
+      "avg_volume": 91920414,
+      "price": 77.38,
+      "volatility": 0.2276279164697861,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ABT",
+      "name": "雅培",
+      "market_cap": 0,
+      "avg_volume": 41964841,
+      "price": 88.41,
+      "volatility": 0.25198507057923747,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NOW",
+      "name": "现在服务公司",
+      "market_cap": 0,
+      "avg_volume": 36337231,
+      "price": 95.04,
+      "volatility": 0.8619279272878,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AMT",
+      "name": "美国电塔",
+      "market_cap": 0,
+      "avg_volume": 4453095,
+      "price": 176.05,
+      "volatility": 0.2966910396487163,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TFC",
+      "name": "Truist Financial Corporation",
+      "market_cap": 0,
+      "avg_volume": 18836926,
+      "price": 48.33,
+      "volatility": 0.3451543886924483,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "VLO",
+      "name": "瓦莱罗能源",
+      "market_cap": 0,
+      "avg_volume": 6141232,
+      "price": 236.3,
+      "volatility": 0.34971896176019435,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LLY",
+      "name": "礼来",
+      "market_cap": 0,
+      "avg_volume": 4470535,
+      "price": 1098.57,
+      "volatility": 0.3065465294532717,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XLE",
+      "name": "能源指数ETF",
+      "market_cap": 0,
+      "avg_volume": 39645690,
+      "price": 53.77,
+      "volatility": 0.24444567657594599,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DHR",
+      "name": "丹纳赫",
+      "market_cap": 0,
+      "avg_volume": 7258518,
+      "price": 177.17,
+      "volatility": 0.3172111850040186,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ADI",
+      "name": "亚德诺",
+      "market_cap": 0,
+      "avg_volume": 11868962,
+      "price": 434.46,
+      "volatility": 0.5110884519583538,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ULTA",
+      "name": "犹他美容",
+      "market_cap": 0,
+      "avg_volume": 1409090,
+      "price": 456.13,
+      "volatility": 0.3270079946601734,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AXP",
+      "name": "美国运通",
+      "market_cap": 0,
+      "avg_volume": 4490783,
+      "price": 338.0,
+      "volatility": 0.2589041023185379,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "WFC",
+      "name": "富国银行",
+      "market_cap": 0,
+      "avg_volume": 36738626,
+      "price": 82.2,
+      "volatility": 0.24403500350763052,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "O",
+      "name": "Realty Income Corporation",
+      "market_cap": 0,
+      "avg_volume": 12961677,
+      "price": 60.24,
+      "volatility": 0.19669378463051432,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TRV",
+      "name": "旅行者财产险集团",
+      "market_cap": 0,
+      "avg_volume": 5783587,
+      "price": 307.81,
+      "volatility": 0.1998952675088137,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BX",
+      "name": "黑石",
+      "market_cap": 0,
+      "avg_volume": 10280667,
+      "price": 123.79,
+      "volatility": 0.424341116150591,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BMY",
+      "name": "施贵宝",
+      "market_cap": 0,
+      "avg_volume": 31700381,
+      "price": 54.0,
+      "volatility": 0.29036418636374195,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TGT",
+      "name": "塔吉特",
+      "market_cap": 0,
+      "avg_volume": 7529316,
+      "price": 130.74,
+      "volatility": 0.33877581495845466,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CMCSA",
+      "name": "康卡斯特",
+      "market_cap": 0,
+      "avg_volume": 74561805,
+      "price": 22.43,
+      "volatility": 0.30457156104986327,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PYPL",
+      "name": "Paypal",
+      "market_cap": 0,
+      "avg_volume": 27215235,
+      "price": 42.51,
+      "volatility": 0.33158854431572815,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "COST",
+      "name": "好市多",
+      "market_cap": 0,
+      "avg_volume": 3742885,
+      "price": 951.45,
+      "volatility": 0.22653797130892023,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PRU",
+      "name": "保德信金融",
+      "market_cap": 0,
+      "avg_volume": 3582979,
+      "price": 106.53,
+      "volatility": 0.205435264802288,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XLY",
+      "name": "消费品指数-SPDR",
+      "market_cap": 0,
+      "avg_volume": 8728589,
+      "price": 117.16,
+      "volatility": 0.23328760130229675,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TMO",
+      "name": "赛默飞世尔",
+      "market_cap": 0,
+      "avg_volume": 3358552,
+      "price": 464.61,
+      "volatility": 0.37240977264310515,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NVDA",
+      "name": "英伟达",
+      "market_cap": 0,
+      "avg_volume": 241272013,
+      "price": 210.69,
+      "volatility": 0.4851230545329705,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DIA",
+      "name": "道琼斯指数ETF",
+      "market_cap": 0,
+      "avg_volume": 7134373,
+      "price": 515.52,
+      "volatility": 0.14898800017076558,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DLR",
+      "name": "数字房地产信托公司",
+      "market_cap": 0,
+      "avg_volume": 5037345,
+      "price": 188.15,
+      "volatility": 0.2818458870611909,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MA",
+      "name": "万事达",
+      "market_cap": 0,
+      "avg_volume": 6675004,
+      "price": 489.79,
+      "volatility": 0.22361404952289415,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TM",
+      "name": "丰田汽车",
+      "market_cap": 0,
+      "avg_volume": 459437,
+      "price": 173.94,
+      "volatility": 0.260388771758298,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BA",
+      "name": "波音",
+      "market_cap": 0,
+      "avg_volume": 8822530,
+      "price": 222.72,
+      "volatility": 0.4055845741968414,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XLV",
+      "name": "医疗保健精选行业指数ETF-SPDR",
+      "market_cap": 0,
+      "avg_volume": 10879276,
+      "price": 149.4,
+      "volatility": 0.17697531880869902,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TSM",
+      "name": "台积电",
+      "market_cap": 0,
+      "avg_volume": 25817106,
+      "price": 462.12,
+      "volatility": 0.5029726626270109,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ANET",
+      "name": "Arista Networks, Inc.",
+      "market_cap": 0,
+      "avg_volume": 11130444,
+      "price": 169.67,
+      "volatility": 0.5521991245905579,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AVB",
+      "name": "阿湾物产",
+      "market_cap": 0,
+      "avg_volume": 2821975,
+      "price": 177.32,
+      "volatility": 0.20132322726937815,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PDD",
+      "name": "拼多多",
+      "market_cap": 0,
+      "avg_volume": 11026060,
+      "price": 79.56,
+      "volatility": 0.49634660156558413,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DE",
+      "name": "迪尔股份",
+      "market_cap": 0,
+      "avg_volume": 1436238,
+      "price": 589.24,
+      "volatility": 0.3557131885589097,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ASML",
+      "name": "阿斯麦",
+      "market_cap": 0,
+      "avg_volume": 2406148,
+      "price": 1929.68,
+      "volatility": 0.6284169944604039,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "T",
+      "name": "美国电话电报",
+      "market_cap": 0,
+      "avg_volume": 94242931,
+      "price": 22.01,
+      "volatility": 0.2699768883354028,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "JD",
+      "name": "京东",
+      "market_cap": 0,
+      "avg_volume": 7942563,
+      "price": 27.57,
+      "volatility": 0.2429476358086008,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "GS",
+      "name": "高盛",
+      "market_cap": 0,
+      "avg_volume": 4499162,
+      "price": 1096.56,
+      "volatility": 0.3896699837969284,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LRCX",
+      "name": "泛林集团",
+      "market_cap": 0,
+      "avg_volume": 22686620,
+      "price": 389.04,
+      "volatility": 0.8020562450080718,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CRM",
+      "name": "赛富时",
+      "market_cap": 0,
+      "avg_volume": 57940830,
+      "price": 151.78,
+      "volatility": 0.5811367464940073,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LUV",
+      "name": "西南航空",
+      "market_cap": 0,
+      "avg_volume": 11291363,
+      "price": 47.97,
+      "volatility": 0.47888967821039563,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "EOG",
+      "name": "EOG能源",
+      "market_cap": 0,
+      "avg_volume": 12213411,
+      "price": 129.98,
+      "volatility": 0.2988816733957221,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XLK",
+      "name": "科技行业精选指数ETF",
+      "market_cap": 0,
+      "avg_volume": 12101594,
+      "price": 191.44,
+      "volatility": 0.4047368636944852,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "WMT",
+      "name": "沃尔玛",
+      "market_cap": 0,
+      "avg_volume": 36526766,
+      "price": 117.18,
+      "volatility": 0.22721796602613764,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "COF",
+      "name": "第一资本信贷",
+      "market_cap": 0,
+      "avg_volume": 8115466,
+      "price": 201.53,
+      "volatility": 0.340796077379459,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PANW",
+      "name": "派拓网络",
+      "market_cap": 0,
+      "avg_volume": 12194739,
+      "price": 287.78,
+      "volatility": 0.620504548441656,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AAPL",
+      "name": "苹果",
+      "market_cap": 0,
+      "avg_volume": 85962201,
+      "price": 298.01,
+      "volatility": 0.2615362060565104,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "RTX",
+      "name": "雷神技术",
+      "market_cap": 0,
+      "avg_volume": 8866358,
+      "price": 185.6,
+      "volatility": 0.31797102243152753,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BILI",
+      "name": "哔哩哔哩",
+      "market_cap": 0,
+      "avg_volume": 2312631,
+      "price": 17.2,
+      "volatility": 0.418611122548232,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "WDC",
+      "name": "西部数据",
+      "market_cap": 0,
+      "avg_volume": 16683882,
+      "price": 746.23,
+      "volatility": 0.9390927200963222,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "KO",
+      "name": "可口可乐",
+      "market_cap": 0,
+      "avg_volume": 46857949,
+      "price": 79.39,
+      "volatility": 0.23937358256779173,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "UBER",
+      "name": "优步",
+      "market_cap": 0,
+      "avg_volume": 27203330,
+      "price": 71.64,
+      "volatility": 0.3664613720033464,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NET",
+      "name": "科赋锐",
+      "market_cap": 0,
+      "avg_volume": 4440905,
+      "price": 224.06,
+      "volatility": 0.7431298831657109,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LULU",
+      "name": "露露乐蒙",
+      "market_cap": 0,
+      "avg_volume": 6175520,
+      "price": 111.77,
+      "volatility": 0.47477878784382366,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SPY",
+      "name": "标普500指数ETF-SPDR",
+      "market_cap": 0,
+      "avg_volume": 80875657,
+      "price": 746.74,
+      "volatility": 0.16319166796412185,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ISRG",
+      "name": "直觉外科公司",
+      "market_cap": 0,
+      "avg_volume": 4404200,
+      "price": 406.78,
+      "volatility": 0.33827585192618376,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "QCOM",
+      "name": "高通",
+      "market_cap": 0,
+      "avg_volume": 47081544,
+      "price": 226.11,
+      "volatility": 0.9000555216014579,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XPEV",
+      "name": "小鹏集团",
+      "market_cap": 0,
+      "avg_volume": 10074328,
+      "price": 13.21,
+      "volatility": 0.48589978467584527,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CB",
+      "name": "安达保险",
+      "market_cap": 0,
+      "avg_volume": 2960305,
+      "price": 323.4,
+      "volatility": 0.2006704021865957,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HCA",
+      "name": "HCA医疗",
+      "market_cap": 0,
+      "avg_volume": 2656836,
+      "price": 375.17,
+      "volatility": 0.3056763070423759,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "GILD",
+      "name": "吉利德科学",
+      "market_cap": 0,
+      "avg_volume": 14348342,
+      "price": 123.76,
+      "volatility": 0.2955513471930423,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "META",
+      "name": "Meta Platforms, Inc.",
+      "market_cap": 0,
+      "avg_volume": 28824630,
+      "price": 577.22,
+      "volatility": 0.48841680427201967,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CDNS",
+      "name": "铿腾电子",
+      "market_cap": 0,
+      "avg_volume": 7092233,
+      "price": 387.39,
+      "volatility": 0.5997463261060414,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "FDX",
+      "name": "联邦快递",
+      "market_cap": 0,
+      "avg_volume": 2531818,
+      "price": 326.2,
+      "volatility": 0.3442833311798808,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AMZN",
+      "name": "亚马逊",
+      "market_cap": 0,
+      "avg_volume": 75624415,
+      "price": 244.39,
+      "volatility": 0.35177369638839157,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "USB",
+      "name": "美国合众银行",
+      "market_cap": 0,
+      "avg_volume": 22023998,
+      "price": 58.14,
+      "volatility": 0.2769997690648498,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BP",
+      "name": "英国石油",
+      "market_cap": 0,
+      "avg_volume": 14304712,
+      "price": 39.1,
+      "volatility": 0.2766421637070421,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CME",
+      "name": "芝加哥商品交易所",
+      "market_cap": 0,
+      "avg_volume": 6953865,
+      "price": 246.38,
+      "volatility": 0.3711856579092293,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MSFT",
+      "name": "微软",
+      "market_cap": 0,
+      "avg_volume": 59714157,
+      "price": 379.4,
+      "volatility": 0.41708483827856835,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NTAP",
+      "name": "美国网存",
+      "market_cap": 0,
+      "avg_volume": 8151500,
+      "price": 159.71,
+      "volatility": 0.9795636968265862,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HPE",
+      "name": "慧与",
+      "market_cap": 0,
+      "avg_volume": 53337786,
+      "price": 47.41,
+      "volatility": 1.0222432873010225,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CHTR",
+      "name": "特许通讯",
+      "market_cap": 0,
+      "avg_volume": 17934238,
+      "price": 126.23,
+      "volatility": 0.5008475938296473,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AFL",
+      "name": "美国家庭寿险",
+      "market_cap": 0,
+      "avg_volume": 6380129,
+      "price": 115.47,
+      "volatility": 0.19189670884324564,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "WELL",
+      "name": "Welltower Inc.",
+      "market_cap": 0,
+      "avg_volume": 8060889,
+      "price": 206.65,
+      "volatility": 0.32800610014442094,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CAT",
+      "name": "卡特彼勒",
+      "market_cap": 0,
+      "avg_volume": 6175042,
+      "price": 985.82,
+      "volatility": 0.43354287079981196,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "IBM",
+      "name": "IBM",
+      "market_cap": 0,
+      "avg_volume": 16619749,
+      "price": 249.1,
+      "volatility": 0.810602370263267,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LMT",
+      "name": "洛克希德马丁",
+      "market_cap": 0,
+      "avg_volume": 3978809,
+      "price": 510.95,
+      "volatility": 0.2825710416361237,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PLTR",
+      "name": "Palantir Technologies Inc.",
+      "market_cap": 0,
+      "avg_volume": 55337987,
+      "price": 128.47,
+      "volatility": 0.699076048174107,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MRVL",
+      "name": "迈威尔科技",
+      "market_cap": 0,
+      "avg_volume": 250989360,
+      "price": 310.58,
+      "volatility": 1.724750149319193,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "FTNT",
+      "name": "飞塔信息",
+      "market_cap": 0,
+      "avg_volume": 18432871,
+      "price": 144.73,
+      "volatility": 0.5120387773700348,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BLK",
+      "name": "贝莱德",
+      "market_cap": 0,
+      "avg_volume": 1032316,
+      "price": 1050.09,
+      "volatility": 0.24168101751758725,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PFE",
+      "name": "辉瑞",
+      "market_cap": 0,
+      "avg_volume": 119614339,
+      "price": 25.21,
+      "volatility": 0.18711290711998257,
       "beta": 1.0,
       "sector": ""
     },
@@ -1692,17 +1163,487 @@
       "market_cap": 0,
       "avg_volume": 6934632,
       "price": 160.6,
-      "volatility": 0.16169524334929222,
+      "volatility": 0.15858479921010427,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "COUP",
-      "name": "COUP",
+      "ticker": "AIG",
+      "name": "美国国际集团",
       "market_cap": 0,
-      "avg_volume": 0,
-      "price": 7.93,
-      "volatility": 0.3,
+      "avg_volume": 5858354,
+      "price": 74.02,
+      "volatility": 0.20417586266412743,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PNC",
+      "name": "PNC金融",
+      "market_cap": 0,
+      "avg_volume": 4931983,
+      "price": 232.04,
+      "volatility": 0.2519837773642748,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "C",
+      "name": "花旗集团",
+      "market_cap": 0,
+      "avg_volume": 29331203,
+      "price": 143.06,
+      "volatility": 0.2650353842257759,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TMUS",
+      "name": "T-Mobile Us, Inc.",
+      "market_cap": 0,
+      "avg_volume": 12545508,
+      "price": 181.67,
+      "volatility": 0.27041709232190037,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "EMR",
+      "name": "艾默生电气",
+      "market_cap": 0,
+      "avg_volume": 4090266,
+      "price": 150.66,
+      "volatility": 0.29098722719540754,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TEAM",
+      "name": "Atlassian Corporation",
+      "market_cap": 0,
+      "avg_volume": 7557539,
+      "price": 82.72,
+      "volatility": 0.8960011792333153,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CMG",
+      "name": "奇波雷墨西哥烧烤",
+      "market_cap": 0,
+      "avg_volume": 31478893,
+      "price": 32.49,
+      "volatility": 0.36162339420629974,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CSCO",
+      "name": "思科",
+      "market_cap": 0,
+      "avg_volume": 52284353,
+      "price": 119.54,
+      "volatility": 0.4097258008183389,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "VZ",
+      "name": "威瑞森通信",
+      "market_cap": 0,
+      "avg_volume": 66305278,
+      "price": 45.37,
+      "volatility": 0.2412246064120125,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BABA",
+      "name": "阿里巴巴",
+      "market_cap": 0,
+      "avg_volume": 14602988,
+      "price": 107.1,
+      "volatility": 0.2761574069279147,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "INTU",
+      "name": "财捷",
+      "market_cap": 0,
+      "avg_volume": 10059120,
+      "price": 267.0,
+      "volatility": 0.6169747668237331,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "EQIX",
+      "name": "易昆尼克斯",
+      "market_cap": 0,
+      "avg_volume": 807852,
+      "price": 1092.19,
+      "volatility": 0.20611553677887193,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DAL",
+      "name": "达美航空",
+      "market_cap": 0,
+      "avg_volume": 14843814,
+      "price": 84.18,
+      "volatility": 0.520350702132097,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CVX",
+      "name": "雪佛龙",
+      "market_cap": 0,
+      "avg_volume": 19146123,
+      "price": 173.63,
+      "volatility": 0.2580053038907275,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TJX",
+      "name": "TJX公司",
+      "market_cap": 0,
+      "avg_volume": 9069831,
+      "price": 163.81,
+      "volatility": 0.2776413474381119,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ABBV",
+      "name": "艾伯维公司",
+      "market_cap": 0,
+      "avg_volume": 9646078,
+      "price": 216.49,
+      "volatility": 0.24106883856197162,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "JNJ",
+      "name": "强生",
+      "market_cap": 0,
+      "avg_volume": 18989761,
+      "price": 228.39,
+      "volatility": 0.2144920696622405,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SPG",
+      "name": "西蒙地产",
+      "market_cap": 0,
+      "avg_volume": 3655356,
+      "price": 211.33,
+      "volatility": 0.21660366060289785,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BIDU",
+      "name": "百度",
+      "market_cap": 0,
+      "avg_volume": 2135238,
+      "price": 111.76,
+      "volatility": 0.5011283014099718,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MRK",
+      "name": "默沙东",
+      "market_cap": 0,
+      "avg_volume": 29521620,
+      "price": 113.87,
+      "volatility": 0.34405663901616557,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MCD",
+      "name": "麦当劳",
+      "market_cap": 0,
+      "avg_volume": 8106427,
+      "price": 278.61,
+      "volatility": 0.177222673498971,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NKE",
+      "name": "耐克",
+      "market_cap": 0,
+      "avg_volume": 32320291,
+      "price": 45.2,
+      "volatility": 0.37170239797384624,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PLD",
+      "name": "安博",
+      "market_cap": 0,
+      "avg_volume": 6701237,
+      "price": 140.54,
+      "volatility": 0.25017266928724785,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CCI",
+      "name": "冠城国际",
+      "market_cap": 0,
+      "avg_volume": 7437280,
+      "price": 82.05,
+      "volatility": 0.3182414258128047,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "谷歌-A",
+      "market_cap": 0,
+      "avg_volume": 44470070,
+      "price": 368.03,
+      "volatility": 0.30517680937665637,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "VRTX",
+      "name": "福泰制药",
+      "market_cap": 0,
+      "avg_volume": 2993021,
+      "price": 451.63,
+      "volatility": 0.27308967014750013,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HON",
+      "name": "霍尼韦尔",
+      "market_cap": 0,
+      "avg_volume": 6654228,
+      "price": 229.01,
+      "volatility": 0.43222442753083107,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SHOP",
+      "name": "Shopify Inc.",
+      "market_cap": 0,
+      "avg_volume": 10064141,
+      "price": 108.85,
+      "volatility": 0.6011734394085132,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DOCU",
+      "name": "Docusign, Inc.",
+      "market_cap": 0,
+      "avg_volume": 9475165,
+      "price": 43.47,
+      "volatility": 0.6204535156898403,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ADSK",
+      "name": "欧特克",
+      "market_cap": 0,
+      "avg_volume": 9213532,
+      "price": 193.82,
+      "volatility": 0.52246321087317,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SNOW",
+      "name": "Snowflake Inc.",
+      "market_cap": 0,
+      "avg_volume": 7758798,
+      "price": 232.29,
+      "volatility": 1.406330140447041,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BSX",
+      "name": "波士顿科学",
+      "market_cap": 0,
+      "avg_volume": 30854998,
+      "price": 45.29,
+      "volatility": 0.47433118111366734,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DG",
+      "name": "美国达乐公司",
+      "market_cap": 0,
+      "avg_volume": 5886213,
+      "price": 113.45,
+      "volatility": 0.3925714844060655,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "JPM",
+      "name": "摩根大通",
+      "market_cap": 0,
+      "avg_volume": 20111030,
+      "price": 325.22,
+      "volatility": 0.2569070197260638,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ZTS",
+      "name": "硕腾",
+      "market_cap": 0,
+      "avg_volume": 17092116,
+      "price": 78.71,
+      "volatility": 0.26706448489918333,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MET",
+      "name": "大都会人寿",
+      "market_cap": 0,
+      "avg_volume": 8338284,
+      "price": 85.58,
+      "volatility": 0.22830270717959647,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XLI",
+      "name": "工业指数ETF",
+      "market_cap": 0,
+      "avg_volume": 8059187,
+      "price": 180.91,
+      "volatility": 0.20249230838046067,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "COP",
+      "name": "康菲石油",
+      "market_cap": 0,
+      "avg_volume": 22893388,
+      "price": 107.74,
+      "volatility": 0.30780024669472644,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HUM",
+      "name": "哈门那",
+      "market_cap": 0,
+      "avg_volume": 3571218,
+      "price": 360.65,
+      "volatility": 0.4251441009825809,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MS",
+      "name": "摩根士丹利",
+      "market_cap": 0,
+      "avg_volume": 11933213,
+      "price": 223.17,
+      "volatility": 0.2946792423265127,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PSX",
+      "name": "Phillips 66",
+      "market_cap": 0,
+      "avg_volume": 5626599,
+      "price": 166.14,
+      "volatility": 0.2780870648588803,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HPQ",
+      "name": "惠普",
+      "market_cap": 0,
+      "avg_volume": 31304236,
+      "price": 23.5,
+      "volatility": 0.814260253593828,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "UNP",
+      "name": "联合太平洋",
+      "market_cap": 0,
+      "avg_volume": 3443156,
+      "price": 256.88,
+      "volatility": 0.3055458916933506,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CL",
+      "name": "高露洁",
+      "market_cap": 0,
+      "avg_volume": 11201312,
+      "price": 89.48,
+      "volatility": 0.2821135137474649,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DIS",
+      "name": "迪士尼",
+      "market_cap": 0,
+      "avg_volume": 22943613,
+      "price": 103.89,
+      "volatility": 0.19958209919426875,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ETN",
+      "name": "伊顿",
+      "market_cap": 0,
+      "avg_volume": 3715592,
+      "price": 421.77,
+      "volatility": 0.44671979811300555,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "XOM",
+      "name": "埃克森美孚",
+      "market_cap": 0,
+      "avg_volume": 48063443,
+      "price": 137.81,
+      "volatility": 0.29132438528954235,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ROK",
+      "name": "罗克韦尔自动化",
+      "market_cap": 0,
+      "avg_volume": 1154564,
+      "price": 473.79,
+      "volatility": 0.32623499845420456,
       "beta": 1.0,
       "sector": ""
     },
@@ -1717,252 +1658,22 @@
       "sector": ""
     },
     {
-      "ticker": "STX",
-      "name": "希捷科技",
+      "ticker": "SONY",
+      "name": "索尼",
       "market_cap": 0,
-      "avg_volume": 8424509,
-      "price": 1070.23,
-      "volatility": 0.6794686546168605,
+      "avg_volume": 5524897,
+      "price": 20.33,
+      "volatility": 0.29495537633813385,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "JD",
-      "name": "京东",
+      "ticker": "IWM",
+      "name": "罗素2000指数ETF",
       "market_cap": 0,
-      "avg_volume": 7942563,
-      "price": 27.57,
-      "volatility": 0.2597344443796939,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "WDC",
-      "name": "西部数据",
-      "market_cap": 0,
-      "avg_volume": 16683882,
-      "price": 746.23,
-      "volatility": 0.9010582513869739,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "EW",
-      "name": "爱德华生命科学",
-      "market_cap": 0,
-      "avg_volume": 5550251,
-      "price": 87.36,
-      "volatility": 0.25807727132528596,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ABBV",
-      "name": "艾伯维公司",
-      "market_cap": 0,
-      "avg_volume": 9646078,
-      "price": 216.49,
-      "volatility": 0.23312338122471013,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MNST",
-      "name": "怪物饮料",
-      "market_cap": 0,
-      "avg_volume": 12605489,
-      "price": 91.34,
-      "volatility": 0.16686449389015023,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLV",
-      "name": "医疗保健精选行业指数ETF-SPDR",
-      "market_cap": 0,
-      "avg_volume": 10879276,
-      "price": 149.4,
-      "volatility": 0.17813817898544287,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "INTC",
-      "name": "英特尔",
-      "market_cap": 0,
-      "avg_volume": 233906555,
-      "price": 133.99,
-      "volatility": 0.8972399213122592,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "SBAC",
-      "name": "SBA通信公司",
-      "market_cap": 0,
-      "avg_volume": 1819291,
-      "price": 186.87,
-      "volatility": 0.37148551617823716,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "CMCSA",
-      "name": "康卡斯特",
-      "market_cap": 0,
-      "avg_volume": 74561805,
-      "price": 22.43,
-      "volatility": 0.2873573250777635,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "V",
-      "name": "Visa",
-      "market_cap": 0,
-      "avg_volume": 14716741,
-      "price": 327.24,
-      "volatility": 0.20665803449073164,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PLTR",
-      "name": "Palantir Technologies Inc.",
-      "market_cap": 0,
-      "avg_volume": 55337987,
-      "price": 128.47,
-      "volatility": 0.6420382864441777,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PFE",
-      "name": "辉瑞",
-      "market_cap": 0,
-      "avg_volume": 119614339,
-      "price": 25.21,
-      "volatility": 0.16428086144501844,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "MRVL",
-      "name": "迈威尔科技",
-      "market_cap": 0,
-      "avg_volume": 250989360,
-      "price": 310.58,
-      "volatility": 1.5831913678204799,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "WFC",
-      "name": "富国银行",
-      "market_cap": 0,
-      "avg_volume": 36738626,
-      "price": 82.2,
-      "volatility": 0.23382970161202798,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TEAM",
-      "name": "Atlassian Corporation",
-      "market_cap": 0,
-      "avg_volume": 7557539,
-      "price": 82.72,
-      "volatility": 0.8493897871334901,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "XLI",
-      "name": "工业指数ETF",
-      "market_cap": 0,
-      "avg_volume": 8059187,
-      "price": 180.91,
-      "volatility": 0.2072437321213998,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TME",
-      "name": "腾讯音乐",
-      "market_cap": 0,
-      "avg_volume": 18945303,
-      "price": 8.73,
-      "volatility": 0.3439461204692618,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "UPS",
-      "name": "联合包裹",
-      "market_cap": 0,
-      "avg_volume": 13306355,
-      "price": 104.86,
-      "volatility": 0.35921697835931576,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "WELL",
-      "name": "Welltower Inc.",
-      "market_cap": 0,
-      "avg_volume": 8060889,
-      "price": 206.65,
-      "volatility": 0.33636221613572204,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "ETN",
-      "name": "伊顿",
-      "market_cap": 0,
-      "avg_volume": 3715592,
-      "price": 421.77,
-      "volatility": 0.4500609940286944,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "PEP",
-      "name": "百事可乐",
-      "market_cap": 0,
-      "avg_volume": 19130318,
-      "price": 142.02,
-      "volatility": 0.22118607543893293,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "TGT",
-      "name": "塔吉特",
-      "market_cap": 0,
-      "avg_volume": 7529316,
-      "price": 130.74,
-      "volatility": 0.33826548044877136,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "EMR",
-      "name": "艾默生电气",
-      "market_cap": 0,
-      "avg_volume": 4090266,
-      "price": 150.66,
-      "volatility": 0.29814043353421227,
-      "beta": 1.0,
-      "sector": ""
-    },
-    {
-      "ticker": "UNP",
-      "name": "联合太平洋",
-      "market_cap": 0,
-      "avg_volume": 3443156,
-      "price": 256.88,
-      "volatility": 0.31336444988942813,
+      "avg_volume": 32463155,
+      "price": 295.59,
+      "volatility": 0.23575934439577523,
       "beta": 1.0,
       "sector": ""
     },
@@ -1972,27 +1683,207 @@
       "market_cap": 0,
       "avg_volume": 3010064,
       "price": 332.75,
-      "volatility": 1.0299196557879824,
+      "volatility": 1.0776409076912437,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "SNOW",
-      "name": "Snowflake Inc.",
+      "ticker": "ORCL",
+      "name": "甲骨文",
       "market_cap": 0,
-      "avg_volume": 7758798,
-      "price": 232.29,
-      "volatility": 1.4391319869252566,
+      "avg_volume": 31386081,
+      "price": 184.29,
+      "volatility": 0.8178103273123182,
       "beta": 1.0,
       "sector": ""
     },
     {
-      "ticker": "BSX",
-      "name": "波士顿科学",
+      "ticker": "UPS",
+      "name": "联合包裹",
       "market_cap": 0,
-      "avg_volume": 30854998,
-      "price": 45.29,
-      "volatility": 0.4820770395934334,
+      "avg_volume": 13306355,
+      "price": 104.86,
+      "volatility": 0.3509440228730842,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TWLO",
+      "name": "Twilio Inc.",
+      "market_cap": 0,
+      "avg_volume": 4716680,
+      "price": 186.17,
+      "volatility": 0.8357650026304748,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "MCK",
+      "name": "麦克森",
+      "market_cap": 0,
+      "avg_volume": 2477060,
+      "price": 750.63,
+      "volatility": 0.23809545844369806,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NIO",
+      "name": "蔚来",
+      "market_cap": 0,
+      "avg_volume": 33400067,
+      "price": 5.02,
+      "volatility": 0.5975874881861586,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "AMD",
+      "name": "超威半导体",
+      "market_cap": 0,
+      "avg_volume": 43805645,
+      "price": 537.37,
+      "volatility": 0.8328949465061032,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "EL",
+      "name": "雅诗兰黛",
+      "market_cap": 0,
+      "avg_volume": 5699950,
+      "price": 84.81,
+      "volatility": 0.5882235130994943,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SCHW",
+      "name": "嘉信理财",
+      "market_cap": 0,
+      "avg_volume": 27430151,
+      "price": 91.7,
+      "volatility": 0.2860644982982512,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "TXN",
+      "name": "德州仪器",
+      "market_cap": 0,
+      "avg_volume": 21929631,
+      "price": 322.86,
+      "volatility": 0.5700579668956391,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ZS",
+      "name": "Zscaler, Inc.",
+      "market_cap": 0,
+      "avg_volume": 16570856,
+      "price": 124.85,
+      "volatility": 1.3034321941029752,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "KMB",
+      "name": "金佰利",
+      "market_cap": 0,
+      "avg_volume": 8851294,
+      "price": 102.56,
+      "volatility": 0.31338884277741913,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "CVS",
+      "name": "西维斯健康",
+      "market_cap": 0,
+      "avg_volume": 21578828,
+      "price": 98.32,
+      "volatility": 0.25660596064728153,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "BDX",
+      "name": "碧迪医疗",
+      "market_cap": 0,
+      "avg_volume": 6231987,
+      "price": 143.98,
+      "volatility": 0.21323713159154709,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "HD",
+      "name": "家得宝",
+      "market_cap": 0,
+      "avg_volume": 10604443,
+      "price": 334.28,
+      "volatility": 0.2601754821419059,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "NSC",
+      "name": "诺福克南方",
+      "market_cap": 0,
+      "avg_volume": 1885206,
+      "price": 300.08,
+      "volatility": 0.28212140364521776,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "UNH",
+      "name": "联合健康",
+      "market_cap": 0,
+      "avg_volume": 11896852,
+      "price": 400.96,
+      "volatility": 0.2729650542080466,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "EW",
+      "name": "爱德华生命科学",
+      "market_cap": 0,
+      "avg_volume": 5550251,
+      "price": 87.36,
+      "volatility": 0.2521474362183422,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SLB",
+      "name": "斯伦贝谢",
+      "market_cap": 0,
+      "avg_volume": 41856505,
+      "price": 48.09,
+      "volatility": 0.40412438056731104,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "STX",
+      "name": "希捷科技",
+      "market_cap": 0,
+      "avg_volume": 8424509,
+      "price": 1070.23,
+      "volatility": 0.6645348727478013,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "PEP",
+      "name": "百事可乐",
+      "market_cap": 0,
+      "avg_volume": 19130318,
+      "price": 142.02,
+      "volatility": 0.21640327001283158,
       "beta": 1.0,
       "sector": ""
     },
@@ -2002,7 +1893,117 @@
       "market_cap": 0,
       "avg_volume": 6468424,
       "price": 124.91,
-      "volatility": 0.4842073946553003,
+      "volatility": 0.4762876280297086,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "DELL",
+      "name": "戴尔科技",
+      "market_cap": 0,
+      "avg_volume": 15360635,
+      "price": 409.5,
+      "volatility": 1.3899787687808334,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SAP",
+      "name": "思爱普",
+      "market_cap": 0,
+      "avg_volume": 3037137,
+      "price": 155.22,
+      "volatility": 0.48616070670251865,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "COUP",
+      "name": "COUP",
+      "market_cap": 0,
+      "avg_volume": 0,
+      "price": 7.93,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SQ",
+      "name": "Block Inc",
+      "market_cap": 0,
+      "avg_volume": 0,
+      "price": 86.96,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ICE",
+      "name": "洲际交易所",
+      "market_cap": 0,
+      "avg_volume": 6109547,
+      "price": 133.88,
+      "volatility": 0.25777748430876724,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ADBE",
+      "name": "Adobe Inc.",
+      "market_cap": 0,
+      "avg_volume": 15852478,
+      "price": 195.16,
+      "volatility": 0.5512945845103813,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "RNG",
+      "name": "铃盛",
+      "market_cap": 0,
+      "avg_volume": 2081360,
+      "price": 35.02,
+      "volatility": 0.684488255633932,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "QQQ",
+      "name": "纳指100ETF",
+      "market_cap": 0,
+      "avg_volume": 50154595,
+      "price": 740.62,
+      "volatility": 0.2960952077370832,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "SBAC",
+      "name": "SBA通信公司",
+      "market_cap": 0,
+      "avg_volume": 1819291,
+      "price": 186.87,
+      "volatility": 0.3693869325526779,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "LI",
+      "name": "理想汽车",
+      "market_cap": 0,
+      "avg_volume": 3303384,
+      "price": 13.21,
+      "volatility": 0.4061243430269383,
+      "beta": 1.0,
+      "sector": ""
+    },
+    {
+      "ticker": "ANTM",
+      "name": "Anthem Inc",
+      "market_cap": 0,
+      "avg_volume": 0,
+      "price": 482.58,
+      "volatility": 0.3,
       "beta": 1.0,
       "sector": ""
     },
@@ -4547,68 +4548,8 @@
       "sector": "SG"
     },
     {
-      "ticker": "WBC.AX",
-      "name": "WBC.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "QBE.AX",
-      "name": "QBE.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "TCL.AX",
-      "name": "TCL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "ORG.AX",
-      "name": "ORG.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "RIO.AX",
-      "name": "RIO.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "SEK.AX",
-      "name": "SEK.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "REA.AX",
-      "name": "REA.AX",
+      "ticker": "TLS.AX",
+      "name": "TLS.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4627,78 +4568,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "CPU.AX",
-      "name": "CPU.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "WDS.AX",
-      "name": "WDS.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "COL.AX",
-      "name": "COL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "NCM.AX",
-      "name": "NCM.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "CBA.AX",
-      "name": "CBA.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "MQG.AX",
-      "name": "MQG.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "NAB.AX",
-      "name": "NAB.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "RHC.AX",
-      "name": "RHC.AX",
+      "ticker": "WBC.AX",
+      "name": "WBC.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4717,8 +4588,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "CAR.AX",
-      "name": "CAR.AX",
+      "ticker": "RIO.AX",
+      "name": "RIO.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4727,8 +4598,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "WOW.AX",
-      "name": "WOW.AX",
+      "ticker": "CBA.AX",
+      "name": "CBA.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4737,28 +4608,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "SHL.AX",
-      "name": "SHL.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "BHP.AX",
-      "name": "BHP.AX",
-      "market_cap": 10000000000.0,
-      "avg_volume": 1000000.0,
-      "price": 50,
-      "volatility": 0.3,
-      "beta": 1.0,
-      "sector": "AU"
-    },
-    {
-      "ticker": "SUN.AX",
-      "name": "SUN.AX",
+      "ticker": "FMG.AX",
+      "name": "FMG.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4777,8 +4628,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "WES.AX",
-      "name": "WES.AX",
+      "ticker": "SHL.AX",
+      "name": "SHL.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4787,8 +4638,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "CSL.AX",
-      "name": "CSL.AX",
+      "ticker": "WOW.AX",
+      "name": "WOW.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4797,8 +4648,48 @@
       "sector": "AU"
     },
     {
-      "ticker": "FMG.AX",
-      "name": "FMG.AX",
+      "ticker": "ORG.AX",
+      "name": "ORG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "QBE.AX",
+      "name": "QBE.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "GMG.AX",
+      "name": "GMG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NCM.AX",
+      "name": "NCM.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WDS.AX",
+      "name": "WDS.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4827,8 +4718,8 @@
       "sector": "AU"
     },
     {
-      "ticker": "TLS.AX",
-      "name": "TLS.AX",
+      "ticker": "BHP.AX",
+      "name": "BHP.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -4837,8 +4728,118 @@
       "sector": "AU"
     },
     {
-      "ticker": "GMG.AX",
-      "name": "GMG.AX",
+      "ticker": "CPU.AX",
+      "name": "CPU.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SUN.AX",
+      "name": "SUN.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "MQG.AX",
+      "name": "MQG.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "SEK.AX",
+      "name": "SEK.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CAR.AX",
+      "name": "CAR.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "CSL.AX",
+      "name": "CSL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "RHC.AX",
+      "name": "RHC.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "WES.AX",
+      "name": "WES.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "COL.AX",
+      "name": "COL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "REA.AX",
+      "name": "REA.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "TCL.AX",
+      "name": "TCL.AX",
+      "market_cap": 10000000000.0,
+      "avg_volume": 1000000.0,
+      "price": 50,
+      "volatility": 0.3,
+      "beta": 1.0,
+      "sector": "AU"
+    },
+    {
+      "ticker": "NAB.AX",
+      "name": "NAB.AX",
       "market_cap": 10000000000.0,
       "avg_volume": 1000000.0,
       "price": 50,
@@ -5145,6 +5146,406 @@
       "volatility": 0.3,
       "beta": 1.0,
       "sector": "NZ"
+    },
+    {
+      "ticker": "600519.SH",
+      "name": "600519.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601318.SH",
+      "name": "601318.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600036.SH",
+      "name": "600036.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601398.SH",
+      "name": "601398.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600900.SH",
+      "name": "600900.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601166.SH",
+      "name": "601166.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600276.SH",
+      "name": "600276.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601012.SH",
+      "name": "601012.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600030.SH",
+      "name": "600030.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601888.SH",
+      "name": "601888.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600887.SH",
+      "name": "600887.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600809.SH",
+      "name": "600809.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600585.SH",
+      "name": "600585.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600690.SH",
+      "name": "600690.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601899.SH",
+      "name": "601899.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600048.SH",
+      "name": "600048.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601088.SH",
+      "name": "601088.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600104.SH",
+      "name": "600104.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "601668.SH",
+      "name": "601668.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "600028.SH",
+      "name": "600028.SH",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000858.SZ",
+      "name": "000858.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000333.SZ",
+      "name": "000333.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002594.SZ",
+      "name": "002594.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "300750.SZ",
+      "name": "300750.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000651.SZ",
+      "name": "000651.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002415.SZ",
+      "name": "002415.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000568.SZ",
+      "name": "000568.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "300059.SZ",
+      "name": "300059.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002475.SZ",
+      "name": "002475.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000001.SZ",
+      "name": "000001.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000002.SZ",
+      "name": "000002.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002230.SZ",
+      "name": "002230.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000725.SZ",
+      "name": "000725.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002142.SZ",
+      "name": "002142.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "300124.SZ",
+      "name": "300124.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000063.SZ",
+      "name": "000063.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002714.SZ",
+      "name": "002714.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "000776.SZ",
+      "name": "000776.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "300015.SZ",
+      "name": "300015.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
+    },
+    {
+      "ticker": "002352.SZ",
+      "name": "002352.SZ",
+      "market_cap": 50000000000.0,
+      "avg_volume": 10000000.0,
+      "price": 30,
+      "volatility": 0.35,
+      "beta": 1.0,
+      "sector": "CN"
     }
   ]
 }

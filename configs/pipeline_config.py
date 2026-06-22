@@ -23,7 +23,7 @@ class PipelineConfig:
 
     # ── 全市场轮询 ────────────────────────────────────────
     MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
-    MARKET_ROTATION: list = field(default_factory=lambda: ["US", "HK", "SG"])   # 市场轮询顺序
+    MARKET_ROTATION: list = field(default_factory=lambda: ["US", "HK", "CN", "SG", "AU", "NZ"])   # 市场轮询顺序
     MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
 
     # ── 风控参数 ──────────────────────────────────────────────

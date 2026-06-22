@@ -551,9 +551,15 @@ class TradingPipeline:
             if target_market == "HK":
                 tickers = [t for t in tickers if ".HK" in t]
             elif target_market == "US":
-                tickers = [t for t in tickers if ".HK" not in t and ".SI" not in t and ".AX" not in t]
+                tickers = [t for t in tickers if ".HK" not in t and ".SI" not in t and ".AX" not in t and ".NZ" not in t and ".SH" not in t and ".SZ" not in t]
             elif target_market == "SG":
                 tickers = [t for t in tickers if ".SI" in t]
+            elif target_market == "AU":
+                tickers = [t for t in tickers if ".AX" in t]
+            elif target_market == "NZ":
+                tickers = [t for t in tickers if ".NZ" in t]
+            elif target_market == "CN":
+                tickers = [t for t in tickers if ".SH" in t or ".SZ" in t]
             tickers = tickers[: self.config.MAX_STOCKS_PER_MARKET]
             logger.info(f"  🎯 市场轮询: {target_market}, {len(tickers)} 只")
             self._market_round_index += 1
