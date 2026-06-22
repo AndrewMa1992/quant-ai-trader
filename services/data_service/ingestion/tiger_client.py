@@ -95,6 +95,20 @@ class TigerClient:
             await asyncio.sleep(self._rate_limit - elapsed)
         self._last_request = time_now()
 
+    @staticmethod
+    def _is_empty_result(obj) -> bool:
+        """Check if a Tiger SDK result is empty — handles DataFrame, list, None.
+
+        Tiger SDK returns a DataFrame for single-ticker queries, which triggers
+        ``ValueError: The truth value of a DataFrame is ambiguous`` if tested
+        with ``if not obj:``.
+        """
+        if obj is None:
+            return True
+        if hasattr(obj, "empty"):
+            return bool(obj.empty)
+        return len(obj) == 0
+
     async def get_quote(self, ticker: str) -> dict[str, Any]:
         """Get real-time quote snapshot for a ticker.
 
@@ -113,7 +127,7 @@ class TigerClient:
             result = await asyncio.to_thread(
                 self._quote_client.get_stock_briefs, [ticker]
             )
-            if result and len(result) > 0:
+            if not self._is_empty_result(result):
                 quote = result[0]
                 return {
                     "ticker": getattr(quote, "symbol", ticker),

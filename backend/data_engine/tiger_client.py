@@ -137,6 +137,20 @@ class TigerClient:
     # 行情数据
     # ================================================================
 
+    @staticmethod
+    def _is_empty_result(obj) -> bool:
+        """Check if a Tiger SDK result is empty — handles DataFrame, list, None.
+
+        Tiger SDK returns a DataFrame for single-ticker queries, which triggers
+        ``ValueError: The truth value of a DataFrame is ambiguous`` if tested
+        with ``if not obj:``.
+        """
+        if obj is None:
+            return True
+        if hasattr(obj, "empty"):
+            return bool(obj.empty)
+        return len(obj) == 0
+
     def get_quote(self, ticker: str) -> Optional[Dict]:
         """
         获取实时报价
@@ -152,7 +166,7 @@ class TigerClient:
 
         try:
             briefs = self._quote_client.get_stock_briefs([ticker])
-            if not briefs:
+            if self._is_empty_result(briefs):
                 return None
 
             brief = briefs[0]

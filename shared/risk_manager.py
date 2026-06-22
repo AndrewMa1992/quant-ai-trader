@@ -106,6 +106,9 @@ class RiskManager:
         # ── Trade history (lightweight) ───────────────────────
         self.trade_history: List[Dict[str, Any]] = []
 
+        # ── Tiger sync flag (P0 fix: prevent false circuit breaker) ─
+        self._tiger_synced: bool = False
+
         logger.info(
             f"RiskManager initialised | mode={breaker_mode} | "
             f"capital=${initial_capital:,.0f} | "
@@ -168,6 +171,18 @@ class RiskManager:
         # ── Daily loss check ───────────────────────────────────
         daily_pnl: float = self.portfolio_value - self.daily_start_value
         daily_loss_pct: float = -daily_pnl / max(self.daily_start_value, 1.0)
+
+        # ── Guard: auto-calibrate on extreme gap from first Tiger sync ─
+        if abs(daily_pnl_pct) > 0.10 and not self._tiger_synced:
+            logger.warning(
+                f"⚠️ 检测到异常日损益 {daily_pnl_pct:.1%} (pv=${self.portfolio_value:,.0f} "
+                f"vs daily_start=${self.daily_start_value:,.0f}) — "
+                f"推测尚未完成 Tiger 同步，自动校准并跳过本轮"
+            )
+            self.daily_start_value = self.portfolio_value
+            self.peak_value = self.portfolio_value
+            self._tiger_synced = True
+            return report  # skip check this cycle, recalibrated
 
         if daily_loss_pct >= self.DAILY_LOSS_LIMIT:
             report.circuit_breaker = True
@@ -465,16 +480,37 @@ class RiskManager:
         self,
         total_value: float,
         cash: Optional[float] = None,
+        is_tiger_sync: bool = False,
     ) -> None:
         """Sync portfolio value from PortfolioManager / Tiger.
 
         On first call (daily_start_value == 0), initialises the
         daily-start and peak anchors from ``total_value``.
 
+        When ``is_tiger_sync=True`` and this is the first Tiger sync
+        (``_tiger_synced`` is False), the daily-start value is
+        recalibrated from the real portfolio value to prevent a false
+        circuit-breaker trigger caused by a stale initial-capital anchor.
+
         Args:
             total_value: Current portfolio total value (USD).
             cash: Current available cash (USD), optional.
+            is_tiger_sync: True if called from Tiger account sync.
         """
+        # ── First Tiger sync: recalibrate daily start ─────────
+        if is_tiger_sync and not self._tiger_synced:
+            self._tiger_synced = True
+            self.portfolio_value = total_value
+            self.daily_start_value = total_value
+            self.peak_value = total_value
+            if cash is not None:
+                self.cash = cash
+            logger.info(
+                f"🔰 老虎首次同步校准: 资产 ${total_value:,.2f} → "
+                f"daily_start / peak 已重置"
+            )
+            return
+
         if self.daily_start_value <= 0.0:
             logger.info(
                 f"🔄 风控首次同步: 资产 ${self.portfolio_value:,.0f} → ${total_value:,.2f}"
