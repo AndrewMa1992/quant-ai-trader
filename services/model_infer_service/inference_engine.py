@@ -368,11 +368,21 @@ class InferenceEngine:
                 strength = float(signal.get("signal", 0) or 0)
                 confidence = float(signal.get("confidence", 0) or 0)
                 if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    # Get latest price from ParquetStore for risk check
+                    price = 0.0
+                    try:
+                        df_t = self._store.read_daily(str(ticker))
+                        if df_t is not None and len(df_t) > 0:
+                            price = float(df_t["close"].iloc[-1])
+                    except Exception:
+                        pass
                     all_signals.append({
                         "ticker": str(ticker),
                         "signal": round(strength, 4),
                         "confidence": round(confidence, 4),
                         "direction": signal.get("direction", "HOLD"),
+                        "price": price,
+                        "close": price,
                         "components": signal.get("components", {}),
                     })
             except Exception as e:
@@ -397,11 +407,20 @@ class InferenceEngine:
                 strength = float(signal.get("signal", 0) or 0)
                 confidence = float(signal.get("confidence", 0) or 0)
                 if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    price = 0.0
+                    try:
+                        df_t = self._store.read_daily(str(ticker))
+                        if df_t is not None and len(df_t) > 0:
+                            price = float(df_t["close"].iloc[-1])
+                    except Exception:
+                        pass
                     all_signals.append({
                         "ticker": str(ticker),
                         "signal": round(strength, 4),
                         "confidence": round(confidence, 4),
                         "direction": signal.get("direction", "HOLD"),
+                        "price": price,
+                        "close": price,
                         "components": signal.get("components", {}),
                     })
             except Exception as e:
