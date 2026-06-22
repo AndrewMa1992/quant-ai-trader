@@ -96,7 +96,8 @@ class TradingPipeline:
         logger.info("初始化本地引擎...")
         if FactorEngine is not None:
             self.factor_engine: FactorEngine = FactorEngine()
-            logger.info("  ✅ FactorEngine 已就绪")
+            self.factor_engine.register_all()
+            logger.info(f"  ✅ FactorEngine 已就绪 ({len(self.factor_engine.factors)} factors)")
         else:
             self.factor_engine = None  # type: ignore[assignment]
             logger.warning("  ⚠️ FactorEngine 不可用 — stub 模式")
@@ -736,6 +737,26 @@ class TradingPipeline:
             return []
 
         try:
+            # Filter to tickers with available data in ParquetStore
+            try:
+                from services.data_service.storage.parquet_store import ParquetStore
+                store = ParquetStore()
+                available_tickers = store.list_tickers() or []
+                if available_tickers:
+                    tickers_with_data = [t for t in tickers if t in available_tickers]
+                    if len(tickers_with_data) < len(tickers):
+                        logger.info(
+                            f"  Step 3: {len(tickers_with_data)}/{len(tickers)} tickers have data "
+                            f"(filtered {len(tickers) - len(tickers_with_data)} without)"
+                        )
+                    tickers = tickers_with_data
+            except Exception:
+                pass  # If store unavailable, try all tickers
+
+            if not tickers:
+                logger.warning("  Step 3: 无有数据的 ticker，跳过推理")
+                return []
+
             # Ensure factor_df has a 'ticker' column for batch inference
             if "ticker" not in factor_df.columns and len(factor_df) <= len(tickers):
                 factor_df = factor_df.copy()
