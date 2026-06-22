@@ -2,10 +2,8 @@
 TigerBridge — Tiger API thin wrapper
 ====================================
 Architecture constraint: NO direct ``import backend.`` at module level.
-Uses lazy import from services/execution_service/ with legacy fallback.
-
-Provides a unified interface to Tiger trade for the shared/ layer,
-delegating to ``services.execution_service.live.tiger_broker`` at runtime.
+Routes through v2 ``services/execution_service/live/tiger_broker`` (primary)
+or ``services/data_service/ingestion/tiger_client`` (fallback / quotes).
 """
 
 from __future__ import annotations
@@ -24,9 +22,9 @@ def _lazy_import() -> Optional[Any]:
     """Lazily import and cache the Tiger trade singleton.
 
     The import only happens on the first call, satisfying the
-    constraint that ``shared/`` must not pull in ``backend/`` at
+    constraint that ``shared/`` must not pull in ``services/`` at
     import time.  Tries the v2 execution_service path first,
-    then falls back to the legacy backend path.
+    then falls back to the v2 ingestion tiger_client path.
 
     Returns:
         A TigerBroker-compatible client, or None if the import fails.
@@ -55,18 +53,18 @@ def _lazy_import() -> Optional[Any]:
     except Exception as exc:
         logger.debug(f"TigerBridge: TigerBroker init failed ({exc})")
 
-    # ── Fallback: legacy backend tiger_client ─────────────
+    # ── Fallback: v2 ingestion tiger_client ───────────────
     try:
-        import importlib
-        legacy_mod = importlib.import_module("backend.data_engine.tiger_client")
-        legacy = legacy_mod.tiger_client
-        _tiger_client = legacy
-        logger.info("TigerBridge: legacy backend tiger_client loaded (fallback)")
+        from services.data_service.ingestion.tiger_client import TigerClient
+
+        _tiger_client = TigerClient()
+        _tiger_client._ensure_initialized()
+        logger.info("TigerBridge: v2 TigerClient loaded from services/ (fallback)")
         return _tiger_client
     except ImportError as exc:
-        logger.warning(f"TigerBridge: backend.data_engine.tiger_client not available ({exc})")
+        logger.warning(f"TigerBridge: services ingestion tiger_client not available ({exc})")
     except Exception as exc:
-        logger.error(f"TigerBridge: unexpected error during lazy import: {exc}")
+        logger.error(f"TigerBridge: unexpected error during TigerClient init: {exc}")
 
     return _tiger_client
 
@@ -224,6 +222,9 @@ def place_order(
 def get_quote(ticker: str) -> Optional[Dict[str, Any]]:
     """Get a real-time quote for a ticker.
 
+    Uses v2 ``TigerClient`` from ``services/data_service/ingestion/``
+    because the primary v2 ``TigerBroker`` does not implement get_quote.
+
     Args:
         ticker: Ticker symbol.
 
@@ -232,13 +233,18 @@ def get_quote(ticker: str) -> Optional[Dict[str, Any]]:
     """
     try:
         client = _lazy_import()
-        if client is None:
-            return None
-        if hasattr(client, "get_quote"):
-            return client.get_quote(ticker)
-        # v2 TigerBroker does not implement get_quote directly
-        logger.debug(f"TigerBridge: get_quote not available in v2 broker")
-        return None
+        if client is not None and hasattr(client, "get_quote"):
+            result = client.get_quote(ticker)
+            if asyncio.iscoroutine(result):
+                return asyncio.run(result)
+            return result
+
+        # v2 TigerBroker lacks get_quote — use v2 TigerClient directly
+        from services.data_service.ingestion.tiger_client import TigerClient
+
+        tc = TigerClient()
+        tc._ensure_initialized()
+        return asyncio.run(tc.get_quote(ticker))
     except Exception as exc:
         logger.error(f"TigerBridge: get_quote({ticker}) failed — {exc}")
         return None

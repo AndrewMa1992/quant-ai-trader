@@ -1,4 +1,9 @@
 """
+[DEPRECATED] backend/data_engine/tiger_client.py — legacy v1 Tiger client.
+This module has been superseded by services/data_service/ingestion/tiger_client.py.
+All new code must use the v2 path.  This file is kept only for historical
+reference and will be removed after Q3 2026 migration.
+
 老虎证券 OpenAPI 客户端
 实盘交易
 """
