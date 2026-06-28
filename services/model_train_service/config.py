@@ -55,6 +55,8 @@ class TrainServiceConfig(BaseSettings):
     TRANSFORMER_N_LAYERS: int = Field(default=8)  # 4→8
     TRANSFORMER_DROPOUT: float = Field(default=0.1)
     GRADIENT_CLIP_VAL: float = Field(default=0.5)  # 1.0→0.5
+    USE_FP16: bool = Field(default=True, description="Enable NVIDIA AMP mixed precision (FP16)")
+    GRAD_SCALER_INIT_SCALE: int = Field(default=65536, description="GradScaler init_scale for FP16")
 
     # GBDT
     GBDT_DEFAULT: str = Field(default="lightgbm", description="Default GBDT: xgboost/lightgbm/catboost")
