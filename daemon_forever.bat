@@ -11,7 +11,7 @@ set "PROJ=%~dp0"
 :: strip trailing backslash for safety
 if "%PROJ:~-1%"=="\" set "PROJ=%PROJ:~0,-1%"
 
-set "PY=C:\Users\hshor\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
+set "PY=F:\workbuddyspace\environment\pytorch-cuda\Scripts\python.exe"
 set "NODE=C:\Users\hshor\.workbuddy\binaries\node\versions\22.22.2"
 set "NPM=%NODE%\npm.cmd"
 set "NPM_PREFIX=C:\Users\hshor\.workbuddy\binaries\node\workspace"
