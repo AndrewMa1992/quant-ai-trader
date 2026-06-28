@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 from loguru import logger
 from sklearn.preprocessing import StandardScaler
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, TensorDataset
 
 from services.model_train_service.config import train_config
@@ -135,6 +136,8 @@ class TCNTrainer(TrainerBase):
         self.dropout = dropout
         self.seq_len = seq_len
         self._lr = lr if lr is not None else 5e-5  # Lower default LR for TCN stability
+        self._scaler: GradScaler | None = None
+        self._use_fp16 = False
 
     def fit(
         self,
@@ -210,16 +213,29 @@ class TCNTrainer(TrainerBase):
         best_state = None
         train_losses: list[float] = []
 
+        # AMP GradScaler for FP16 mixed precision (CUDA only)
+        self._use_fp16 = train_config.USE_FP16 and self.device == "cuda"
+        self._scaler = GradScaler(init_scale=train_config.GRAD_SCALER_INIT_SCALE) if self._use_fp16 else None
+
         for epoch in range(epochs):
             self.model.train()
             epoch_loss = 0.0
             for batch_X, batch_y in train_loader:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 optimizer.zero_grad()
-                loss = criterion(self.model(batch_X), batch_y)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
+                if self._use_fp16:
+                    with autocast():
+                        loss = criterion(self.model(batch_X), batch_y)
+                    self._scaler.scale(loss).backward()
+                    self._scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    self._scaler.step(optimizer)
+                    self._scaler.update()
+                else:
+                    loss = criterion(self.model(batch_X), batch_y)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    optimizer.step()
                 epoch_loss += loss.item()
 
             avg_loss = epoch_loss / len(train_loader)
@@ -270,7 +286,11 @@ class TCNTrainer(TrainerBase):
         self.model.eval()
         with torch.no_grad():
             X_t = torch.tensor(X_seqs, dtype=torch.float32).to(self.device)
-            pred = self.model(X_t).cpu().numpy().ravel()
+            if self._use_fp16:
+                with autocast():
+                    pred = self.model(X_t).cpu().numpy().ravel()
+            else:
+                pred = self.model(X_t).cpu().numpy().ravel()
         padded = np.zeros(len(X_arr))
         padded[:len(pred)] = pred
         return padded
@@ -278,17 +298,20 @@ class TCNTrainer(TrainerBase):
     def save(self, path: str) -> None:
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        torch.save({
+        checkpoint = {
             "model_state": self.model.state_dict(),
             "config": {"n_features": len(self._feature_names), "num_channels": self.num_channels,
                        "kernel_size": self.kernel_size, "dropout": self.dropout, "seq_len": self.seq_len},
             "feature_names": self._feature_names,
             "scaler": self._feature_scaler if hasattr(self, '_feature_scaler') else None,
-        }, path)
+        }
+        if self._scaler is not None:
+            checkpoint["amp_scaler"] = self._scaler.state_dict()
+        torch.save(checkpoint, path)
         logger.info(f"TCN model saved to {path}")
 
     def load(self, path: str) -> None:
-        data = torch.load(path, map_location=self.device)
+        data = torch.load(path, map_location=self.device, weights_only=False)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
         self._feature_scaler = data.get("scaler", None)
@@ -297,5 +320,7 @@ class TCNTrainer(TrainerBase):
             kernel_size=config["kernel_size"], dropout=config["dropout"],
         ).to(self.device)
         self.model.load_state_dict(data["model_state"])
+        if "amp_scaler" in data and self._scaler is not None:
+            self._scaler.load_state_dict(data["amp_scaler"])
         self.model.eval()
         logger.info(f"TCN model loaded from {path}")

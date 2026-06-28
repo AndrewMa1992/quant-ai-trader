@@ -14,6 +14,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from loguru import logger
+from torch.cuda.amp import GradScaler, autocast
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -137,6 +138,8 @@ class TransformerTrainer(TrainerBase):
         self.forecast_horizon = forecast_horizon
         self._grad_clip = train_config.GRADIENT_CLIP_VAL
         self._lr = lr if lr is not None else 1e-4  # Lower default for Transformer stability
+        self._scaler: GradScaler | None = None
+        self._use_fp16 = False
 
     def fit(
         self,
@@ -219,6 +222,10 @@ class TransformerTrainer(TrainerBase):
         train_losses: list[float] = []
         val_losses: list[float] = []
 
+        # AMP GradScaler for FP16 mixed precision (CUDA only)
+        self._use_fp16 = train_config.USE_FP16 and self.device == "cuda"
+        self._scaler = GradScaler(init_scale=train_config.GRAD_SCALER_INIT_SCALE) if self._use_fp16 else None
+
         for epoch in range(epochs):
             self.model.train()
             epoch_loss = 0.0
@@ -226,11 +233,21 @@ class TransformerTrainer(TrainerBase):
             for batch_X, batch_y in train_loader:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 optimizer.zero_grad()
-                pred = self.model(batch_X)
-                loss = criterion(pred, batch_y)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self._grad_clip)
-                optimizer.step()
+                if self._use_fp16:
+                    with autocast():
+                        pred = self.model(batch_X)
+                        loss = criterion(pred, batch_y)
+                    self._scaler.scale(loss).backward()
+                    self._scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self._grad_clip)
+                    self._scaler.step(optimizer)
+                    self._scaler.update()
+                else:
+                    pred = self.model(batch_X)
+                    loss = criterion(pred, batch_y)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self._grad_clip)
+                    optimizer.step()
                 epoch_loss += loss.item()
 
             avg_train_loss = epoch_loss / len(train_loader)
@@ -324,7 +341,11 @@ class TransformerTrainer(TrainerBase):
         self.model.eval()
         with torch.no_grad():
             X_t = torch.tensor(X_seqs, dtype=torch.float32).to(self.device)
-            pred = self.model(X_t).cpu().numpy().ravel()
+            if self._use_fp16:
+                with autocast():
+                    pred = self.model(X_t).cpu().numpy().ravel()
+            else:
+                pred = self.model(X_t).cpu().numpy().ravel()
 
         # Pad to original length
         padded = np.zeros(len(X_arr))
@@ -335,7 +356,7 @@ class TransformerTrainer(TrainerBase):
         """Save model state."""
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        torch.save({
+        checkpoint = {
             "model_state": self.model.state_dict(),
             "config": {
                 "n_features": len(self._feature_names),
@@ -347,12 +368,15 @@ class TransformerTrainer(TrainerBase):
             },
             "feature_names": self._feature_names,
             "scaler": self._feature_scaler if hasattr(self, '_feature_scaler') else None,
-        }, path)
+        }
+        if self._scaler is not None:
+            checkpoint["amp_scaler"] = self._scaler.state_dict()
+        torch.save(checkpoint, path)
         logger.info(f"Transformer model saved to {path}")
 
     def load(self, path: str) -> None:
         """Load model state."""
-        data = torch.load(path, map_location=self.device)
+        data = torch.load(path, map_location=self.device, weights_only=False)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
         self._feature_scaler = data.get("scaler", None)
@@ -366,5 +390,7 @@ class TransformerTrainer(TrainerBase):
             seq_len=config["seq_len"],
         ).to(self.device)
         self.model.load_state_dict(data["model_state"])
+        if "amp_scaler" in data and self._scaler is not None:
+            self._scaler.load_state_dict(data["amp_scaler"])
         self.model.eval()
         logger.info(f"Transformer model loaded from {path}")

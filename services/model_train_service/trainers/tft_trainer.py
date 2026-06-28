@@ -13,6 +13,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from loguru import logger
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, TensorDataset
 
 from services.model_train_service.config import train_config
@@ -139,6 +140,8 @@ class TFTTrainer(TrainerBase):
         self.lstm_layers = lstm_layers
         self.dropout = dropout
         self.seq_len = seq_len
+        self._scaler: GradScaler | None = None
+        self._use_fp16 = False
 
     def fit(
         self,
@@ -201,18 +204,33 @@ class TFTTrainer(TrainerBase):
         best_state = None
         train_losses: list[float] = []
 
+        # AMP GradScaler for FP16 mixed precision (CUDA only)
+        self._use_fp16 = train_config.USE_FP16 and self.device == "cuda"
+        self._scaler = GradScaler(init_scale=train_config.GRAD_SCALER_INIT_SCALE) if self._use_fp16 else None
+
         for epoch in range(epochs):
             self.model.train()
             epoch_loss = 0.0
             for batch_X, batch_y in train_loader:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 optimizer.zero_grad()
-                pred = self.model(batch_X)
-                # Use median quantile (index 1) for loss
-                loss = criterion(pred[:, 1:2], batch_y)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
+                if self._use_fp16:
+                    with autocast():
+                        pred = self.model(batch_X)
+                        # Use median quantile (index 1) for loss
+                        loss = criterion(pred[:, 1:2], batch_y)
+                    self._scaler.scale(loss).backward()
+                    self._scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    self._scaler.step(optimizer)
+                    self._scaler.update()
+                else:
+                    pred = self.model(batch_X)
+                    # Use median quantile (index 1) for loss
+                    loss = criterion(pred[:, 1:2], batch_y)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    optimizer.step()
                 epoch_loss += loss.item()
 
             avg_loss = epoch_loss / len(train_loader)
@@ -259,7 +277,11 @@ class TFTTrainer(TrainerBase):
         self.model.eval()
         with torch.no_grad():
             X_t = torch.tensor(X_seqs, dtype=torch.float32).to(self.device)
-            pred = self.model(X_t).cpu().numpy()
+            if self._use_fp16:
+                with autocast():
+                    pred = self.model(X_t).cpu().numpy()
+            else:
+                pred = self.model(X_t).cpu().numpy()
         # Return median (index 1)
         pred_median = pred[:, 1]
         padded = np.zeros(len(X_arr))
@@ -279,7 +301,11 @@ class TFTTrainer(TrainerBase):
         self.model.eval()
         with torch.no_grad():
             X_t = torch.tensor(X_seqs, dtype=torch.float32).to(self.device)
-            pred = self.model(X_t).cpu().numpy()
+            if self._use_fp16:
+                with autocast():
+                    pred = self.model(X_t).cpu().numpy()
+            else:
+                pred = self.model(X_t).cpu().numpy()
         return {
             "q10": self._pad(pred[:, 0], len(X_arr)),
             "q50": self._pad(pred[:, 1], len(X_arr)),
@@ -294,20 +320,25 @@ class TFTTrainer(TrainerBase):
     def save(self, path: str) -> None:
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        torch.save({"model_state": self.model.state_dict(),
+        checkpoint = {"model_state": self.model.state_dict(),
                      "config": {"n_features": len(self._feature_names), "hidden_dim": self.hidden_dim,
                                 "n_heads": self.n_heads, "lstm_layers": self.lstm_layers,
                                 "dropout": self.dropout, "seq_len": self.seq_len},
-                     "feature_names": self._feature_names}, path)
+                     "feature_names": self._feature_names}
+        if self._scaler is not None:
+            checkpoint["amp_scaler"] = self._scaler.state_dict()
+        torch.save(checkpoint, path)
         logger.info(f"TFT model saved to {path}")
 
     def load(self, path: str) -> None:
-        data = torch.load(path, map_location=self.device)
+        data = torch.load(path, map_location=self.device, weights_only=False)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
         self.model = TFTModel(n_features=config["n_features"], hidden_dim=config["hidden_dim"],
                               n_heads=config["n_heads"], lstm_layers=config["lstm_layers"],
                               dropout=config["dropout"], seq_len=config["seq_len"]).to(self.device)
         self.model.load_state_dict(data["model_state"])
+        if "amp_scaler" in data and self._scaler is not None:
+            self._scaler.load_state_dict(data["amp_scaler"])
         self.model.eval()
         logger.info(f"TFT model loaded from {path}")
