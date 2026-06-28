@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 from loguru import logger
@@ -80,14 +80,64 @@ class ParquetStore:
         # Standardize column names
         df.columns = [c.lower().replace(" ", "_") for c in df.columns]
 
-        # Ensure date index
-        if not isinstance(df.index, pd.DatetimeIndex):
-            if "date" in df.columns:
-                df["date"] = pd.to_datetime(df["date"])
-                df = df.set_index("date")
+        # ── Ensure date index ────────────────────────────────────────
+        date_col: Optional[str] = None
+
+        if isinstance(df.index, pd.DatetimeIndex):
+            pass  # Already good
+        else:
+            # Search for a date column (case-insensitive, common variants)
+            date_candidates = [
+                "date", "datetime", "timestamp", "time", "index",
+                "trade_date", "bar_date",
+            ]
+            # Also check capitalized variants from raw data
+            for col in df.columns:
+                if col.lower() in date_candidates:
+                    date_col = col
+                    break
+            # Fallback: try uppercase first-letter variants
+            if date_col is None:
+                for candidate in ["Date", "DateTime", "Timestamp"]:
+                    if candidate in df.columns:
+                        date_col = candidate
+                        break
+
+            if date_col is not None:
+                try:
+                    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                    df = df.dropna(subset=[date_col])
+                    df = df.set_index(date_col)
+                except Exception as e:
+                    logger.error(f"Failed to parse date column '{date_col}' for {ticker}: {e}")
+                    return
+            elif isinstance(df.index, pd.Index) and df.index.dtype.kind in ("i", "f"):
+                # Integer/float index — use as-is but warn
+                logger.warning(
+                    f"No date column/index for {ticker} — using integer index as row key. "
+                    f"Columns: {list(df.columns)[:6]}"
+                )
             else:
-                logger.error(f"No date index for {ticker}")
-                return
+                # Last resort: try to reset and find ANY date-like column
+                found = False
+                for col in df.columns:
+                    try:
+                        converted = pd.to_datetime(df[col], errors="coerce")
+                        if converted.notna().sum() > len(df) * 0.7:
+                            df[col] = converted
+                            df = df.dropna(subset=[col])
+                            df = df.set_index(col)
+                            found = True
+                            logger.debug(f"Auto-detected date column '{col}' for {ticker}")
+                            break
+                    except Exception:
+                        continue
+                if not found:
+                    logger.error(
+                        f"No date index for {ticker} — cannot write to Parquet. "
+                        f"Columns: {list(df.columns)[:8]}"
+                    )
+                    return
 
         path = self._ticker_path(ticker)
 
@@ -127,23 +177,42 @@ class ParquetStore:
         if df.empty:
             return None
 
-        # Ensure DatetimeIndex
+        # Ensure DatetimeIndex for date-based filtering
         if not isinstance(df.index, pd.DatetimeIndex):
-            if "date" in df.columns:
-                df["date"] = pd.to_datetime(df["date"])
-                df = df.set_index("date")
-            else:
-                return df
+            # Try to convert from common date column names
+            date_candidates = ["date", "datetime", "timestamp", "trade_date"]
+            date_col = None
+            for col in date_candidates:
+                if col in df.columns:
+                    date_col = col
+                    break
+            # Also try auto-detection
+            if date_col is None:
+                for col in df.columns:
+                    try:
+                        converted = pd.to_datetime(df[col], errors="coerce")
+                        if converted.notna().sum() > len(df) * 0.7:
+                            date_col = col
+                            break
+                    except Exception:
+                        continue
+
+            if date_col is not None:
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                df = df.dropna(subset=[date_col])
+                df = df.set_index(date_col)
+            # If still not a DatetimeIndex, return as-is (caller handles)
 
         # Strip timezone from index for consistent naive-timestamp comparisons
-        if df.index.tz is not None:
+        if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
             df.index = df.index.tz_localize(None)
 
-        # Filter by date range
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
+        # Filter by date range (only if we have a DatetimeIndex)
+        if isinstance(df.index, pd.DatetimeIndex):
+            if start:
+                df = df[df.index >= pd.Timestamp(start)]
+            if end:
+                df = df[df.index <= pd.Timestamp(end)]
 
         return df.sort_index()
 

@@ -49,7 +49,7 @@ class RiskManager:
         self.peak_value = settings.TRADING_INITIAL_CAPITAL
 
         # P0-2: 熔断相关状态
-        self.daily_start_value: float = settings.TRADING_INITIAL_CAPITAL
+        self.daily_start_value: float = 0.0     # 0 = 未初始化，首次调用自动校准
         self.circuit_breaker_triggered: bool = False
         self.circuit_breaker_time: Optional[datetime] = None
 
@@ -96,6 +96,18 @@ class RiskManager:
                 logger.info("🟢 熔断冷却期结束，恢复交易")
                 self.circuit_breaker_triggered = False
                 self.circuit_breaker_time = None
+
+        # ★ P0 fix: Lazy-initialise daily_start_value on first call.
+        # Sentinel 0.0 prevents the $100,000 false-alarm when the real
+        # portfolio value (e.g. $2,462) is much smaller than initial capital.
+        if self.daily_start_value <= 0.0:
+            self.daily_start_value = self.portfolio_value
+            self.peak_value = max(self.peak_value, self.portfolio_value)
+            logger.info(
+                f"🔰 RiskManager(v1): daily start 自动校准至 ${self.daily_start_value:,.2f}"
+            )
+            report.details["daily_start_value"] = self.daily_start_value
+            return report  # first cycle always passes
 
         # 检查当日亏损
         daily_pnl = self.get_daily_pnl()

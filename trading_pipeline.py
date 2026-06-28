@@ -322,6 +322,7 @@ class TradingPipeline:
                     self.risk_manager.sync_portfolio_value(
                         self.portfolio.total_value,
                         self.portfolio.cash,
+                        is_tiger_sync=True,   # ★ P0 fix: calibrate daily_start from real Tiger value
                     )
                     logger.info(
                         f"🔄 Tiger 同步: {sync_result.get('positions')} 只持仓, "
@@ -604,8 +605,22 @@ class TradingPipeline:
                     if isinstance(d, dict) and "features" in d:
                         features = d["features"]
                         if isinstance(features, np.ndarray) and features.ndim == 2:
-                            df = pd.DataFrame(features)
-                            df["close"] = d.get("close", 0.0)
+                            # ★ P0 fix: Include OHLCV columns in ParquetStore
+                            ohlcv = d.get("ohlcv", {})
+                            n_cols = features.shape[1]
+                            if ohlcv:
+                                ohlcv_matrix = np.column_stack(
+                                    [ohlcv[c] for c in ohlcv]
+                                )
+                                combined = np.column_stack([ohlcv_matrix, features])
+                                cols = (
+                                    list(ohlcv.keys())
+                                    + [f"f{i}" for i in range(n_cols)]
+                                )
+                                df = pd.DataFrame(combined, columns=cols)
+                            else:
+                                df = pd.DataFrame(features)
+                                df["close"] = d.get("close", 0.0)
                             try:
                                 store.write_daily(ticker, df)
                             except Exception:
@@ -637,13 +652,31 @@ class TradingPipeline:
                                 if c in processed.columns
                             ]
                             if len(fcols) >= 30:
+                                # ★ P0 fix: Also extract OHLCV columns so FactorEngine
+                                # can use close/high/low/volume directly.
+                                ohlcv: dict = {}
+                                for col in ["open", "high", "low", "close", "volume"]:
+                                    if col in processed.columns:
+                                        ohlcv[col] = processed[col].values
+                                    elif col.title() in df.columns:
+                                        ohlcv[col] = df[col.title()].values
+
+                                # Best-effort adj_close for momentum factors
+                                if "adj_close" in processed.columns:
+                                    ohlcv["adj_close"] = processed["adj_close"].values
+                                elif "close" in ohlcv:
+                                    ohlcv["adj_close"] = ohlcv["close"]
+
                                 data_dict[ticker] = {
                                     "features": processed[fcols].values,
                                     "close": (
-                                        float(df["Close"].iloc[-1])
+                                        float(processed["close"].iloc[-1])
+                                        if "close" in processed.columns
+                                        else float(df["Close"].iloc[-1])
                                         if "Close" in df.columns
                                         else float(processed.iloc[-1, 0])
                                     ),
+                                    "ohlcv": ohlcv,
                                 }
                     else:
                         errors += 1
@@ -675,17 +708,29 @@ class TradingPipeline:
             return pd.DataFrame({"ticker": list(data.keys())})
 
         try:
-            # Convert v1 fallback format → DataFrame dict for FactorEngine
+            # Convert v1 fallback format → DataFrame dict for FactorEngine.
+            # ★ P0 fix: Include OHLCV columns (close, high, low, volume, adj_close)
+            # alongside v1 feature columns so FactorEngine can compute factors.
             dfs: dict = {}
             for ticker, d in data.items():
                 if isinstance(d, dict) and "features" in d:
                     features = d["features"]
+                    ohlcv = d.get("ohlcv", {})
                     if isinstance(features, np.ndarray) and features.ndim == 2:
                         n_cols = features.shape[1]
-                        cols = [f"f{i}" for i in range(n_cols)]
-                        dfs[ticker] = pd.DataFrame(features, columns=cols)
+                        feature_cols = [f"f{i}" for i in range(n_cols)]
+                        if ohlcv:
+                            ohlcv_names = list(ohlcv.keys())
+                            ohlcv_matrix = np.column_stack(
+                                [ohlcv[c] for c in ohlcv_names]
+                            )
+                            combined = np.column_stack([ohlcv_matrix, features])
+                            all_cols = ohlcv_names + feature_cols
+                            dfs[ticker] = pd.DataFrame(combined, columns=all_cols)
+                        else:
+                            dfs[ticker] = pd.DataFrame(features, columns=feature_cols)
                     elif isinstance(features, np.ndarray):
-                        dfs[ticker] = pd.DataFrame({"f0": features})
+                        dfs[ticker] = pd.DataFrame({"close": features})
                     else:
                         dfs[ticker] = pd.DataFrame({"close": [d.get("close", 0)]})
                 elif isinstance(d, pd.DataFrame):
@@ -698,7 +743,9 @@ class TradingPipeline:
             for ticker, fdf in factor_results.items():
                 if fdf is not None and not fdf.empty:
                     row = {"ticker": str(ticker)}
-                    for col in fdf.columns[:68]:
+                    # Include ALL factor columns so inference engine gets
+                    # the full 77-feature set (OHLCV + returns + factors).
+                    for col in fdf.columns:
                         try:
                             row[col] = float(fdf[col].iloc[-1])
                         except (IndexError, ValueError):
@@ -737,31 +784,10 @@ class TradingPipeline:
             return []
 
         try:
-            # Filter to tickers with available data in ParquetStore
-            try:
-                from services.data_service.storage.parquet_store import ParquetStore
-                store = ParquetStore()
-                available_tickers = store.list_tickers() or []
-                if available_tickers:
-                    tickers_with_data = [t for t in tickers if t in available_tickers]
-                    if len(tickers_with_data) < len(tickers):
-                        logger.info(
-                            f"  Step 3: {len(tickers_with_data)}/{len(tickers)} tickers have data "
-                            f"(filtered {len(tickers) - len(tickers_with_data)} without)"
-                        )
-                    tickers = tickers_with_data
-            except Exception:
-                pass  # If store unavailable, try all tickers
-
-            if not tickers:
-                logger.warning("  Step 3: 无有数据的 ticker，跳过推理")
-                return []
-
-            # Ensure factor_df has a 'ticker' column for batch inference
-            if "ticker" not in factor_df.columns and len(factor_df) <= len(tickers):
-                factor_df = factor_df.copy()
-                factor_df["ticker"] = tickers[:len(factor_df)]
-
+            # ── v2.3: InferenceEngine now handles ticker data paths internally.
+            # Tickers with ParquetStore data use full history; tickers without
+            # (e.g. non-US markets) use pre-computed factor rows from factor_df.
+            # No pre-filtering needed — the engine handles both paths.
             signals: List[Dict] = self.inference_engine.generate_signals_batch(
                 factor_df,
                 top_n=self.config.TOP_N_SIGNALS,

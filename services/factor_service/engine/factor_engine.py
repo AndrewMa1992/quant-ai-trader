@@ -166,7 +166,8 @@ class FactorEngine:
             try:
                 results[ticker] = self.compute_all(df, factor_ids)
             except Exception as e:
-                logger.error(f"Factor computation failed for {ticker}: {e}")
+                # P0 fix: Downgrade to WARNING — ticker-level failure is non-fatal.
+                logger.warning(f"Factor computation failed for {ticker}: {e}")
                 results[ticker] = df
         return results
 

@@ -72,7 +72,13 @@ class GBDTInference:
         X_arr = X.values.astype(np.float32)
 
         if hasattr(self.model, "predict"):
-            raw = self.model.predict(X_arr, predict_disable_shape_check=True)
+            # LightGBM Booster.predict supports predict_disable_shape_check to
+            # bypass feature-count mismatch errors when columns are padded with 0.
+            try:
+                raw = self.model.predict(X_arr, predict_disable_shape_check=True)
+            except TypeError:
+                # Older LightGBM or sklearn wrapper — try without the kwarg
+                raw = self.model.predict(X_arr)
         else:
             raw = np.zeros(len(X_arr))
 

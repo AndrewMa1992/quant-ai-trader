@@ -6,6 +6,11 @@ Signal format per ticker:
 - signal: float ∈ [-1, 1] (positive=buy, negative=sell, 0=hold)
 - confidence: float ∈ [0, 1]
 - direction: 'BUY' / 'SELL' / 'HOLD'
+
+v2.3: predict_single / generate_signal now accept an optional ``features_row``
+(Series) so callers can pass pre-computed factor data directly.  When the
+ParquetStore has no data for a ticker (e.g. non-US markets), the pipeline
+feeds factor data from Step 2 instead — avoiding the "0 signals" dead-end.
 """
 
 from __future__ import annotations
@@ -161,63 +166,134 @@ class InferenceEngine:
         """
         for p in [1, 5, 21, 63]:
             col = "adj_close" if "adj_close" in df.columns else "close"
-            df[f"ret_{p}d"] = df[col].pct_change(p)
+            if col in df.columns:
+                df[f"ret_{p}d"] = df[col].pct_change(p)
 
-    def predict_single(self, ticker: str) -> dict[str, Any]:
-        """Run all loaded models on a single ticker.
+    def _build_features_from_parquet(self, ticker: str) -> Optional[pd.DataFrame]:
+        """Build aligned 77-feature matrix from ParquetStore data.
 
-        Uses ``FactorEngine`` to compute the same 77-feature set that was
-        used during training. If FactorEngine is unavailable, falls back to
-        basic return features (which will likely cause shape-mismatch errors
-        in trained models, but at least avoids hard crashes).
+        Reads OHLCV data, computes factors and returns, then aligns to the
+        exact 77-column training feature order.
 
         Args:
             ticker: Stock ticker symbol.
 
         Returns:
-            Dict with per-model predictions.
+            (N, 77) feature DataFrame, or None if data is insufficient.
         """
-        # Load data
         df = self._store.read_daily(ticker)
-        if df is None or len(df) < 100:
-            logger.warning(f"Insufficient data for {ticker}")
-            return {
-                "ticker": ticker,
-                "predictions": {},
-                "error": "Insufficient data",
-            }
+        if df is None or len(df) < 60:
+            logger.debug(
+                f"Insufficient ParquetStore data for {ticker} "
+                f"({len(df) if df is not None else 0} rows)"
+            )
+            return None
 
-        df = df.tail(504).copy()  # 2 years of daily data for sufficient context
+        df = df.tail(504).copy()
 
-        # Compute full feature set using FactorEngine (same as training).
+        # Compute factors
         if self._factor_engine is not None:
             try:
                 df = self._factor_engine.compute_all(df)
             except Exception as e:
-                logger.warning(
-                    f"FactorEngine failed for {ticker}, using basic features: {e}"
-                )
+                logger.warning(f"FactorEngine failed for {ticker}, using basic features: {e}")
                 self._compute_basic_returns(df)
         else:
-            # Fallback: basic returns if FactorEngine not available
             self._compute_basic_returns(df)
 
-        # Compute basic return columns (training included these alongside factors)
         self._compute_basic_returns(df)
 
-        # Align columns to match exact training order (77 features).
-        # Training order: close, high, low, open, volume, ret_1d..ret_63d, F001..F311
+        # Align to training column order
+        return self._align_features(df, ticker)
+
+    def _build_features_from_row(self, features_row: pd.Series) -> pd.DataFrame:
+        """Build aligned 77-feature matrix from a single row of pre-computed factors.
+
+        The row is broadcast to a 1-row DataFrame so models that need a
+        sequence still work (they receive a length-1 sequence).
+
+        Args:
+            features_row: Series with factor values (ideally 77 columns matching
+                          ``_feature_names``).
+
+        Returns:
+            (1, 77) feature DataFrame aligned to training column order.
+        """
+        # Build a DataFrame from the row
+        row_df = pd.DataFrame([features_row])
+        # Align to training column order
+        return self._align_features(row_df, "row")
+
+    def _align_features(self, df: pd.DataFrame, label: str) -> pd.DataFrame:
+        """Align a DataFrame to the 77-feature training column order.
+
+        Creates a DataFrame with exactly ``len(_feature_names)`` columns,
+        copying values where column names match and filling 0.0 for missing
+        columns.  Finally, reindexes to guarantee the output always has the
+        exact column set.
+
+        Args:
+            df: Input DataFrame with factor/OHLCV columns.
+            label: Ticker or identifier for debug logging.
+
+        Returns:
+            DataFrame with exactly ``_feature_names`` columns, NaN-filled and
+            tail-truncated to the last 252 rows.
+        """
         train_cols = self._feature_names
+
         aligned = pd.DataFrame(0.0, index=df.index, columns=train_cols)
         for col in train_cols:
             if col in df.columns:
                 aligned[col] = df[col].values
-            # If col not in df.columns, it stays 0.0 (missing feature)
+
+        # Reindex to guarantee the exact column set (defense against edge cases)
+        aligned = aligned.reindex(columns=train_cols, fill_value=0.0)
+
         missing = [c for c in train_cols if c not in df.columns]
         if missing:
-            logger.debug(f"Missing features for {ticker} (padded=0): {missing[:5]}...")
+            logger.debug(f"Missing features for {label} (padded=0): {missing[:5]}...")
 
-        X = aligned.fillna(0.0).tail(252)
+        return aligned.fillna(0.0).tail(252)
+
+    def predict_single(
+        self,
+        ticker: str,
+        features_row: Optional[pd.Series] = None,
+    ) -> dict[str, Any]:
+        """Run all loaded models on a single ticker.
+
+        Two data paths:
+        1. **ParquetStore path** (default): reads OHLCV from ParquetStore,
+           computes factors, aligns to 77 features.
+        2. **Direct factor path**: when ``features_row`` is provided (from
+           the pipeline's Step 2), uses pre-computed factors directly —
+           skipping the ParquetStore read entirely.  This is essential for
+           non-US tickers that have no ParquetStore data.
+
+        Args:
+            ticker: Stock ticker symbol.
+            features_row: Optional Series of pre-computed factor values
+                          (77 columns matching ``_feature_names``).
+
+        Returns:
+            Dict with per-model predictions.
+        """
+        # ── Choose data path ──────────────────────────────────────────
+        if features_row is not None:
+            X = self._build_features_from_row(features_row)
+        else:
+            X = self._build_features_from_parquet(ticker)
+            if X is None:
+                logger.warning(
+                    f"Insufficient data for {ticker} "
+                    f"(no ParquetStore data and no features_row provided)"
+                )
+                return {
+                    "ticker": ticker,
+                    "predictions": {},
+                    "error": "Insufficient data",
+                }
 
         predictions: dict[str, Any] = {}
 
@@ -253,18 +329,24 @@ class InferenceEngine:
             "available_models": len(predictions),
         }
 
-    def generate_signal(self, ticker: str) -> dict[str, Any]:
+    def generate_signal(
+        self,
+        ticker: str,
+        features_row: Optional[pd.Series] = None,
+    ) -> dict[str, Any]:
         """Generate a trading signal for a ticker.
 
         Orchestrates the full pipeline: load → predict → blend → signal.
 
         Args:
             ticker: Stock ticker.
+            features_row: Optional pre-computed factor row (from pipeline
+                          Step 2).  Bypasses ParquetStore when provided.
 
         Returns:
             Signal dict with signal, confidence, direction, components.
         """
-        result = self.predict_single(ticker)
+        result = self.predict_single(ticker, features_row=features_row)
         predictions = result.get("predictions", {})
 
         if not predictions:
@@ -293,6 +375,28 @@ class InferenceEngine:
         # Blend
         blended = self.blender.blend(subset_predictions, weights)
 
+        # When RL model is not loaded, other models' signals can be
+        # overly conservative.  Apply a modest boost to the blended
+        # signal to compensate for the missing RL contribution and
+        # prevent all-zero signal cycles.
+        rl_model_available = "rl" in predictions
+        if not rl_model_available and len(subset_predictions) >= 2:
+            boost_factor = 1.25
+            blended["signal"] = round(
+                float(np.clip(blended["signal"] * boost_factor,
+                              -infer_config.SIGNAL_CLIP,
+                              infer_config.SIGNAL_CLIP)),
+                6,
+            )
+            # Re-derive direction with slightly looser thresholds
+            sig = blended["signal"]
+            if sig > 0.03:
+                blended["direction"] = "BUY"
+            elif sig < -0.03:
+                blended["direction"] = "SELL"
+            else:
+                blended["direction"] = "HOLD"
+
         return {
             "ticker": ticker,
             "signal": blended["signal"],
@@ -305,7 +409,7 @@ class InferenceEngine:
         self,
         input_data: pd.DataFrame | list[str],
         top_n: int = 5,
-        min_threshold: float = 0.05,
+        min_threshold: float = 0.03,
         min_confidence: float = 0.3,
     ) -> list[dict[str, Any]]:
         """Generate signals for multiple tickers, returning top-N by |signal|.
@@ -335,16 +439,49 @@ class InferenceEngine:
             input_data, min_threshold, min_confidence, top_n,
         )
 
+    def _get_factor_row_for_ticker(
+        self,
+        factor_df: pd.DataFrame,
+        ticker: str,
+    ) -> Optional[pd.Series]:
+        """Extract a single factor row for a ticker from the factor DataFrame.
+
+        Returns the last (most recent) row for the ticker, or None if not found.
+
+        Args:
+            factor_df: DataFrame from FactorEngine with 'ticker' column.
+            ticker: Ticker to look up.
+
+        Returns:
+            Series of factor values, or None.
+        """
+        if "ticker" not in factor_df.columns:
+            return None
+        mask = factor_df["ticker"] == ticker
+        rows = factor_df[mask]
+        if rows.empty:
+            return None
+        # Take the last row (most recent data point)
+        last_row = rows.iloc[-1]
+        # Drop the 'ticker' column from features (it's not a model input)
+        features = last_row.drop("ticker", errors="ignore")
+        return features
+
     def _generate_signals_from_factor_df(
         self,
         factor_df: pd.DataFrame,
-        min_threshold: float = 0.05,
+        min_threshold: float = 0.03,
         min_confidence: float = 0.3,
         top_n: int = 5,
     ) -> list[dict[str, Any]]:
         """Generate signals from FactorEngine-computed factor DataFrame.
 
         Full inference on all tickers, then Top-N selection by |signal| desc.
+        For tickers with ParquetStore data, the engine loads full OHLCV history
+        and recomputes factors for richer context.  For tickers WITHOUT
+        ParquetStore data (e.g. non-US markets), the pre-computed factor row
+        from ``factor_df`` is used directly — avoiding the "0 signals" dead-end
+        for HK/SG/AU/NZ/CN markets.
 
         Args:
             factor_df: DataFrame from FactorEngine, must have 'ticker' column.
@@ -362,22 +499,40 @@ class InferenceEngine:
             else []
         )
 
+        # Quick lookup: which tickers have ParquetStore data?
+        try:
+            available_tickers = set(self._store.list_tickers() or [])
+        except Exception:
+            available_tickers = set()
+
         for ticker in tickers:
+            ticker_str = str(ticker)
             try:
-                signal = self.generate_signal(str(ticker))
+                # ── Choose data path per ticker ───────────────────────
+                if ticker_str in available_tickers:
+                    # ParquetStore has data → use full history path
+                    signal = self.generate_signal(ticker_str)
+                else:
+                    # No ParquetStore data → use pre-computed factor row
+                    features_row = self._get_factor_row_for_ticker(factor_df, ticker_str)
+                    if features_row is None:
+                        logger.debug(f"No factor row found for {ticker_str}, skipping")
+                        continue
+                    signal = self.generate_signal(ticker_str, features_row=features_row)
+
                 strength = float(signal.get("signal", 0) or 0)
                 confidence = float(signal.get("confidence", 0) or 0)
                 if abs(strength) >= min_threshold and confidence >= min_confidence:
                     # Get latest price from ParquetStore for risk check
                     price = 0.0
                     try:
-                        df_t = self._store.read_daily(str(ticker))
+                        df_t = self._store.read_daily(ticker_str)
                         if df_t is not None and len(df_t) > 0:
                             price = float(df_t["close"].iloc[-1])
                     except Exception:
                         pass
                     all_signals.append({
-                        "ticker": str(ticker),
+                        "ticker": ticker_str,
                         "signal": round(strength, 4),
                         "confidence": round(confidence, 4),
                         "direction": signal.get("direction", "HOLD"),
@@ -386,7 +541,7 @@ class InferenceEngine:
                         "components": signal.get("components", {}),
                     })
             except Exception as e:
-                logger.warning(f"Inference failed for {ticker}: {e}")
+                logger.warning(f"Inference failed for {ticker_str}: {e}")
 
         # Top-N selection by |signal| descending
         all_signals.sort(key=lambda s: abs(s["signal"]), reverse=True)
@@ -395,7 +550,7 @@ class InferenceEngine:
     def _generate_signals_from_tickers(
         self,
         tickers: list[str],
-        min_threshold: float = 0.05,
+        min_threshold: float = 0.03,
         min_confidence: float = 0.3,
         top_n: int = 5,
     ) -> list[dict[str, Any]]:
