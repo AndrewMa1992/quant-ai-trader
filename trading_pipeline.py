@@ -63,7 +63,7 @@ from shared.risk_manager import RiskManager
 from shared.tiger_executor import TigerExecutor
 from shared.daily_state import DailyState
 from shared.ws_pusher import WsPusher
-from shared.market_session import get_market_status, is_any_market_open
+from shared.market_session import get_market_status, is_any_market_tradable
 from shared.git_sync import git_sync
 
 
@@ -302,7 +302,7 @@ class TradingPipeline:
         # ── 2. P0-3: 市场时段检查 ────────────────────────────
         if self.config.TRADING_HOURS_ONLY:
             try:
-                if not is_any_market_open():
+                if not is_any_market_tradable():
                     logger.info("📴 所有市场休市，跳过交易 — 仅更新估值")
                     prices = await self._get_live_prices()
                     self.portfolio.update_value(prices)
