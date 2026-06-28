@@ -13,11 +13,18 @@ class PipelineConfig:
     # ── 调度参数 ──────────────────────────────────────────────
     CYCLE_INTERVAL_SECONDS: int = 300          # 每轮间隔（秒），默认5分钟
     TRADING_HOURS_ONLY: bool = True            # 仅交易时段运行
-    MAX_TICKERS_PER_CYCLE: int = 50            # 每轮最多分析标的数
+    MAX_TICKERS_PER_CYCLE: int = 9999            # 移除限制，交由市场轮询控制
 
-    # ── 信号阈值 ──────────────────────────────────────────────
-    SIGNAL_THRESHOLD: float = 0.3              # 信号强度下限 |signal| >= 阈值才生成 view
-    MIN_CONFIDENCE: float = 0.5                # 置信度下限
+    # ── 信号阈值（Top-N 替代固定阈值） ─────────────────────
+    SIGNAL_THRESHOLD: float = 0.05               # 基础 floor 阈值
+    SIGNAL_THRESHOLD_MIN: float = 0.05           # 最低信号强度
+    MIN_CONFIDENCE: float = 0.3                  # 置信度下限
+    TOP_N_SIGNALS: int = 5                       # 每轮最多选 N 个最强信号
+
+    # ── 全市场轮询 ────────────────────────────────────────
+    MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
+    MARKET_ROTATION: list = field(default_factory=lambda: ["US", "HK", "CN", "SG", "AU", "NZ"])   # 市场轮询顺序
+    MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
 
     # ── 风控参数 ──────────────────────────────────────────────
     VAR_CONFIDENCE: float = 0.95               # VaR 置信水平
@@ -26,22 +33,48 @@ class PipelineConfig:
     BARRA_EXPOSURE_MAX_Z: float = 3.0          # Barra 因子暴露 Z-score 上限
     ENABLE_RISK_CHECKS: bool = True            # 是否启用四道风控
     ENABLE_PORTFOLIO_OPT: bool = True          # 是否启用组合优化
+
+    # ── P0-P1 新增参数 ──────────────────────────────────────────
+    EXECUTION_MODE: str = "live"               # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
+    MAX_DAILY_TRADES: int = 5                  # 每日交易上限，5笔/天安全起步
+    DAILY_LOSS_LIMIT: float = 0.05             # 日亏损熔断阈值（组合价值%），默认 5%
+    LEVERAGE_LIMIT: float = 1.001              # 杠杆上限，≥ 此值阻止买入
+    V1_FALLBACK_RETRIES: int = 3               # v2 服务 HTTP 调用重试次数
+    ENABLE_WS_PUSH: bool = True                # 是否启用前端 WebSocket 推送
+    GIT_AUTO_SYNC: bool = False                # 是否启用 Git 自动同步（默认关闭）
+    FORCE_SELL_TICKERS: list = field(default_factory=list)  # 启动时强制清仓列表
+
     ENABLE_ALERTS: bool = True                 # 是否启用告警
 
     # ── 交易参数 ──────────────────────────────────────────────
     MIN_TRADE_VALUE: float = 1000.0            # 最小交易金额（USD）
 
     # ── v2 微服务地址 ─────────────────────────────────────────
-    SERVICE_BASE_URLS: dict = field(default_factory=lambda: {
-        "data": "http://localhost:8011",
-        "factor": "http://localhost:8012",
-        "risk": "http://localhost:8015",
-        "execution": "http://localhost:8016",
-    })
+    SERVICE_BASE_URLS: dict = field(default_factory=lambda: _build_service_urls())
 
     # ── HTTP 客户端超时 ───────────────────────────────────────
     HTTP_TIMEOUT: float = 30.0                 # httpx 请求超时（秒）
     HTTP_RETRIES: int = 3                      # 重试次数
+
+    def __post_init__(self) -> None:
+        """从环境变量覆盖关键配置"""
+        import os
+
+        self.EXECUTION_MODE = os.getenv("QAT_EXECUTION_MODE", self.EXECUTION_MODE)
+
+
+def _build_service_urls() -> dict:
+    """Dynamically read service ports from central settings."""
+    from configs.settings import settings
+
+    return {
+        "data": f"http://localhost:{settings.DATA_PORT}",
+        "factor": f"http://localhost:{settings.FACTOR_PORT}",
+        "model_train": f"http://localhost:{settings.MODEL_TRAIN_PORT}",
+        "model_infer": f"http://localhost:{settings.MODEL_INFER_PORT}",
+        "risk": f"http://localhost:{settings.RISK_PORT}",
+        "execution": f"http://localhost:{settings.EXEC_PORT}",
+    }
 
 
 # 全局单例（方便直接 import）

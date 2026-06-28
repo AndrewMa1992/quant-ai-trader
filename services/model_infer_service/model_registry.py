@@ -5,8 +5,10 @@ Queries MLflow for latest production versions and caches model metadata.
 
 from __future__ import annotations
 
+import socket
 import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -28,9 +30,61 @@ class ModelRegistry:
         self._cache: dict[str, dict[str, Any]] = {}
         self._last_refresh: float = 0.0
         self._cache_ttl = infer_config.MODEL_CACHE_TTL_SECONDS
+        self._mlflow_checked = False
+        self._mlflow_reachable = False
+
+    def _check_mlflow_available(self) -> bool:
+        """Quick TCP-connect probe to see if the MLflow server is up.
+
+        Caches the result so we only probe once per process lifetime.
+
+        Returns:
+            True if the MLflow tracking URI host accepts a connection.
+        """
+        if self._mlflow_checked:
+            return self._mlflow_reachable
+
+        self._mlflow_checked = True
+
+        if not self._mlflow._mlflow_available:
+            self._mlflow_reachable = False
+            return False
+
+        uri = self._mlflow.tracking_uri or ""
+        if not uri:
+            self._mlflow_reachable = False
+            return False
+
+        # MLflow local file store (no server to ping) — treat as reachable
+        if uri.startswith("file:") or not uri.startswith(("http://", "https://")):
+            self._mlflow_reachable = True
+            return True
+
+        try:
+            parsed = urlparse(uri)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            self._mlflow_reachable = result == 0
+            if not self._mlflow_reachable:
+                logger.warning(
+                    f"MLflow server not reachable at {host}:{port} — "
+                    f"using local checkpoints only"
+                )
+            return self._mlflow_reachable
+        except Exception as e:
+            logger.debug(f"MLflow reachability check failed: {e}")
+            self._mlflow_reachable = False
+            return False
 
     def refresh(self) -> dict[str, dict[str, Any]]:
         """Refresh model metadata from MLflow.
+
+        If MLflow server is not reachable, skips MLflow queries entirely and
+        returns empty metadata (callers fall back to local checkpoints).
 
         Returns:
             Dict of model_type → metadata.
@@ -38,20 +92,28 @@ class ModelRegistry:
         if time.time() - self._last_refresh < self._cache_ttl and self._cache:
             return self._cache
 
+        # Quick MLflow availability check — skip slow queries if unreachable
+        mlflow_available = self._check_mlflow_available()
+
         result: dict[str, dict[str, Any]] = {}
 
         for model_type in self.MODEL_TYPES:
-            model_uri = self._mlflow.get_latest_production_model(model_type)
+            model_uri: Optional[str] = None
+
+            if mlflow_available:
+                model_uri = self._mlflow.get_latest_production_model(model_type)
+
             if model_uri:
                 result[model_type] = {
                     "model_uri": model_uri,
                     "status": "production",
                     "model_type": model_type,
                 }
-            else:
-                # Check staging
-                import mlflow
+            elif mlflow_available:
+                # Check staging (mlflow may not have production yet)
                 try:
+                    import mlflow
+
                     client = mlflow.tracking.MlflowClient()
                     versions = client.get_latest_versions(
                         f"quant-{model_type}", stages=["staging"]
@@ -74,6 +136,13 @@ class ModelRegistry:
                         "status": "not_found",
                         "model_type": model_type,
                     }
+            else:
+                # MLflow not reachable — mark all as not_found, rely on local
+                result[model_type] = {
+                    "model_uri": None,
+                    "status": "not_found",
+                    "model_type": model_type,
+                }
 
         self._cache = result
         self._last_refresh = time.time()
@@ -107,26 +176,63 @@ class ModelRegistry:
     def get_model_path(self, model_type: str) -> Optional[str]:
         """Get local filesystem path for a model checkpoint.
 
+        Scans both the configured model save directory and data/models/
+        for checkpoint files. Supports versioned file naming (v1, v2, ...)
+        and returns the highest version found.
+
         Args:
             model_type: Model type.
 
         Returns:
             File path to model checkpoint or None.
         """
+        import glob
         import os
+        import re
         from services.model_train_service.config import train_config
 
-        # Check local checkpoint first
         checkpoint_dir = train_config.MODEL_SAVE_DIR
-        checkpoint_path = os.path.join(checkpoint_dir, f"{model_type}_latest.pkl")
+        search_dirs: list[str] = [
+            os.path.abspath(checkpoint_dir),
+            os.path.abspath(os.path.join("data", "models")),
+        ]
+        extensions: tuple[str, ...] = (".pkl", ".pt", ".ckpt", ".joblib", ".zip")
 
-        if os.path.exists(checkpoint_path):
-            return checkpoint_path
+        candidates: list[tuple[int, str]] = []  # (version, path)
 
-        # Check alternatives
-        for ext in [".pkl", ".pt", ".ckpt"]:
-            alt_path = os.path.join(checkpoint_dir, f"{model_type}{ext}")
-            if os.path.exists(alt_path):
-                return alt_path
+        for search_dir in search_dirs:
+            if not os.path.isdir(search_dir):
+                continue
 
-        return None
+            # 1) Check {model_type}_latest.pkl
+            latest_path = os.path.join(search_dir, f"{model_type}_latest.pkl")
+            if os.path.exists(latest_path):
+                candidates.append((999999, latest_path))  # "latest" trumps all
+
+            # 2) Check exact {model_type}{ext}
+            for ext in extensions:
+                exact_path = os.path.join(search_dir, f"{model_type}{ext}")
+                if os.path.exists(exact_path):
+                    candidates.append((0, exact_path))
+
+            # 3) Scan for {model_type}_v* patterns
+            for ext in extensions:
+                pattern = os.path.join(search_dir, f"{model_type}_v*{ext}")
+                for match in glob.glob(pattern):
+                    basename = os.path.basename(match)
+                    # Extract version number from e.g. "gbdt_v2.joblib"
+                    m = re.search(r"_v(\d+)", basename)
+                    if m:
+                        version = int(m.group(1))
+                        candidates.append((version, match))
+
+        if not candidates:
+            return None
+
+        # Sort by version descending, pick highest
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        best_version, best_path = candidates[0]
+        logger.debug(
+            f"get_model_path({model_type}): selected v{best_version} at {best_path}"
+        )
+        return best_path

@@ -87,5 +87,8 @@ class TransformerInference:
             pred = self.model(X_t).cpu().numpy().ravel()
 
         padded = np.zeros(len(X_arr))
-        padded[:len(pred)] = pred
+        # Predictions correspond to the step after each window.
+        # Window [i..i+seq_len] predicts timestep i+seq_len.
+        # Place at end so recent_pred = padded[-1] gives latest forecast.
+        padded[-len(pred):] = pred
         return padded

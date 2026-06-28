@@ -142,7 +142,7 @@ async def get_risk_status():
 # ============================================================
 @router.get("/dashboard")
 async def get_dashboard_metrics():
-    """获取实时仪表盘指标"""
+    """获取实时仪表盘指标（含DB真实数据）"""
     if portfolio is None:
         return {"error": "组合管理器未初始化"}
 
@@ -155,11 +155,14 @@ async def get_dashboard_metrics():
     # 计算最大回撤
     max_dd, max_dd_pct = _compute_max_drawdown(value_history)
 
-    # 计算胜率
+    # 计算胜率（从 trades 表真实数据）
     win_rate, profit_factor = _compute_wr_pf()
 
     # 计算 Calmar Ratio
     calmar = _compute_calmar(value_history, max_dd_pct)
+
+    # ★ 从 portfolio_snapshots 表读取真实快照计数
+    snapshot_count = _get_snapshot_count()
 
     return {
         **metrics,
@@ -169,7 +172,7 @@ async def get_dashboard_metrics():
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 4),
         "calmar_ratio": round(calmar, 4),
-        "snapshot_count": len(value_history),
+        "snapshot_count": snapshot_count,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -243,6 +246,22 @@ def _compute_calmar(value_history, max_dd_pct):
     return float(annual_return / abs(max_dd_pct + 1e-8))
 
 
+def _get_snapshot_count() -> int:
+    """从 portfolio_snapshots 表读取真实快照计数"""
+    try:
+        import sqlite3
+        from pathlib import Path
+        db_path = Path(__file__).parent.parent / "data" / "quant_trader.db"
+        if store is not None and hasattr(store, "db_path"):
+            db_path = store.db_path
+        conn = sqlite3.connect(str(db_path))
+        count = conn.execute("SELECT COUNT(*) FROM portfolio_snapshots").fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
 # ============================================================
 # 老虎实盘账户
 # ============================================================
@@ -293,7 +312,7 @@ async def get_tiger_account():
 async def refresh_from_tiger():
     """★ 实时刷新：强制从老虎拉取真实资产数据"""
     from backend.data_engine.tiger_client import tiger_client
-    from backend.config import trading_config
+    from configs.settings import settings
     
     if not tiger_client.is_connected():
         tiger_client.connect()
@@ -304,7 +323,7 @@ async def refresh_from_tiger():
     tiger_client.connect()
     try:
         # 使用正确的实盘账户 (20874631) 而非模拟盘
-        real_account = trading_config.TIGER_ACCOUNT  # 20874631
+        real_account = settings.TIGER_ACCOUNT  # 20874631
         assets = tiger_client._trade_client.get_assets(account=real_account)
         
         if assets and isinstance(assets, list) and len(assets) > 0:

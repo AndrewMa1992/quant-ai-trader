@@ -65,6 +65,8 @@ class TCNInference:
         with torch.no_grad():
             X_t = torch.tensor(X_seqs, dtype=torch.float32).to(self.device)
             pred = self.model(X_t).cpu().numpy().ravel()
+        # TCN outputs can be unbounded; clamp to reasonable signal range.
+        pred = np.clip(pred, -1.0, 1.0)
         padded = np.zeros(len(X_arr))
-        padded[:len(pred)] = pred
+        padded[-len(pred):] = pred
         return padded

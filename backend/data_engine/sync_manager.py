@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional
 from loguru import logger
 
-from backend.config import DB_PATH
+from configs.settings import settings
 
 
 class SyncManager:

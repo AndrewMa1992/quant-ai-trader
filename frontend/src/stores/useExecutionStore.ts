@@ -60,8 +60,19 @@ export const useExecutionStore = defineStore('execution', () => {
     cbStatus.value = status
   }
 
+  async function rollback(): Promise<{ success: boolean; message: string; timestamp: string } | null> {
+    try {
+      const result = await executionApi.rollback()
+      cbStatus.value = { halted: false, halt_reason: '', consecutive_losses: 0, cooling_active: false }
+      return result
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Rollback failed'
+      return null
+    }
+  }
+
   return {
     orders, alerts, marketStatus, cbStatus, loading, error,
-    fetchAlerts, fetchMarketStatus, placeOrder, setCBStatus,
+    fetchAlerts, fetchMarketStatus, placeOrder, setCBStatus, rollback,
   }
 })

@@ -85,16 +85,20 @@ class AutoTrader:
                 if not local_state:
                     logger.info("使用默认初始资金 $1,000,000")
 
-        # ★ 修复：Tiger 同步后，将 trading_config.INITIAL_CAPITAL 校准为实际账户值
+        # ★ 修复：Tiger 同步后，校准风控系统的组合价值
         # 避免 $1M 默认值导致风控系统误判 99% 回撤
         if self.tiger_ready:
             trading_config.INITIAL_CAPITAL = self.portfolio.initial_capital
             logger.info(f"📐 INITIAL_CAPITAL 已校准: ${trading_config.INITIAL_CAPITAL:,.2f}")
-
-        # 更新风控状态（基于最新 PortfolioManager 状态）
-        self.risk.portfolio_value = self.portfolio.total_value
-        self.risk.cash = self.portfolio.cash
-        self.risk.positions = dict(self.portfolio.positions)
+            # 同步风控：校准 daily_start_value / peak_value / portfolio_value
+            self.risk.sync_portfolio_value(
+                self.portfolio.total_value, self.portfolio.cash
+            )
+        else:
+            # 无 Tiger 连接时也做一次校准（用本地 portfolio 值代替默认 $1M）
+            self.risk.sync_portfolio_value(
+                self.portfolio.total_value, self.portfolio.cash
+            )
         self.risk.peak_value = self.portfolio.total_value
 
         # P0-2: 初始化当日起始净值为当前资产
@@ -142,24 +146,26 @@ class AutoTrader:
 
     @staticmethod
     def _is_market_open() -> dict:
-        """检查各市场是否在交易时段（含盘前/盘后/夜盘）"""
+        """检查各市场是否在交易时段（含盘前/盘后/夜盘 — 24h覆盖）"""
         import pytz
         now = datetime.now()
-        result = {"US": False, "HK": False, "US_regular": False, "US_extended": False}
+        result = {"US": False, "HK": False, "US_regular": False, "US_extended": False, "US_overnight": False}
 
         try:
-            # US: 支持盘前(4:00-9:30) + 正常(9:30-16:00) + 盘后(16:00-20:00) ET
-            # Tiger API outside_rth=True 覆盖全部扩展时段
+            # US: 24小时全天覆盖
+            #   夜盘: 20:00-4:00  → overnight (Tiger API 另需 session=OVERNIGHT)
+            #   盘前: 4:00-9:30   → extended
+            #   盘中: 9:30-16:00  → regular  
+            #   盘后: 16:00-20:00 → extended
             us_tz = pytz.timezone('US/Eastern')
             us_now = now.astimezone(us_tz)
             if us_now.weekday() < 5:
                 us_hour = us_now.hour + us_now.minute / 60
-                # 正常时段: 9:30-16:00
                 result["US_regular"] = 9.5 <= us_hour < 16.0
-                # 扩展时段: 盘前 4:00-9:30 + 盘后 16:00-20:00
                 result["US_extended"] = (4.0 <= us_hour < 9.5) or (16.0 <= us_hour < 20.0)
-                # 总交易时段（含夜盘支持）
-                result["US"] = 4.0 <= us_hour < 20.0
+                result["US_overnight"] = us_hour >= 20.0 or us_hour < 4.0
+                # 总交易时段: 全天24h
+                result["US"] = True
         except Exception:
             pass
 
@@ -243,8 +249,8 @@ class AutoTrader:
             if isinstance(t, str) and t:
                 candidates.add(t)
 
-        # 确保美股/港股/新加坡股都有代表
-        for market_suffix, count in [("", 5), (".HK", 5), (".SI", 3)]:
+        # 确保美股/港股/新加坡股/澳股/新西兰股都有代表
+        for market_suffix, count in [("", 5), (".HK", 5), (".SI", 3), (".AX", 2), (".NZ", 2)]:
             market_stocks = [s.get("ticker","") for s in stock_universe._all_stocks
                            if isinstance(s, dict) and s.get("ticker","").endswith(market_suffix) if market_suffix
                            or (isinstance(s, dict) and not any(x in s.get("ticker","") for x in [".HK",".SI",".AX",".NZ"]))]
@@ -644,7 +650,10 @@ class AutoTrader:
     def start(self, interval_seconds=300):
         """开始自动循环"""
         mk_status = self._is_market_open()
-        us_status = "🟢盘前" if mk_status["US_extended"] and not mk_status["US_regular"] else ("🟢盘中" if mk_status["US_regular"] else ("🟢盘后" if mk_status["US_extended"] else "🔴休市"))
+        us_status = ("🌙夜盘" if mk_status.get("US_overnight") 
+                     else ("🟢盘前" if mk_status["US_extended"] and not mk_status["US_regular"] 
+                     else ("🟢盘中" if mk_status["US_regular"] 
+                     else ("🟢盘后" if mk_status["US_extended"] else "🔴休市"))))
         logger.info(f"\n🚀 全市场自动交易引擎 v2.1 启动")
         logger.info(f"   全市场: {len(self.universe_tickers)} 只")
         logger.info(f"   每轮分析: ~{self.batch_size} 只")

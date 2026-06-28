@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from loguru import logger
 
-from backend.config import data_config, DB_PATH
+from configs.settings import settings
 from backend.data_engine.rate_limiter import rate_limiter
 from backend.data_engine.sync_manager import SyncManager
 from backend.data_engine.historical_store import HistoricalStore
@@ -148,7 +148,7 @@ class DataSyncService:
 
             # 合并配置的关注列表
             watch_tickers = list(set(
-                tickers + data_config.ALL_TICKERS[:20]
+                tickers + settings.DATA_ALL_TICKERS[:20]
             ))[:50]  # 最多50只
 
             prices = {}
@@ -238,7 +238,7 @@ class DataSyncService:
             positions = self._tiger.get_positions()
             tickers = [p["ticker"] for p in positions] if positions else []
             # 补充配置中的关注列表
-            active_tickers = tickers[:15] + list(data_config.ALL_TICKERS[:10])
+            active_tickers = tickers[:15] + list(settings.DATA_ALL_TICKERS[:10])
             active_tickers = list(dict.fromkeys(active_tickers))[:20]  # 去重，最多20只
 
             # 1. 资金流向（分3批，每批~7只）
@@ -354,7 +354,7 @@ class DataSyncService:
         results = {}
 
         try:
-            all_tickers = data_config.ALL_TICKERS
+            all_tickers = settings.DATA_ALL_TICKERS
 
             # 1. 基本面数据（批量获取，分批）
             if rate_limiter.can_call():
@@ -502,7 +502,7 @@ class DataSyncService:
 
             # 5. 全部基本面
             logger.info("📥 All-Time Phase 5/5: 拉取全部基本面...")
-            all_tickers = data_config.ALL_TICKERS
+            all_tickers = settings.DATA_ALL_TICKERS
             all_fundamentals = []
             for batch_idx in range(0, len(all_tickers), 20):
                 batch = all_tickers[batch_idx:batch_idx + 20]

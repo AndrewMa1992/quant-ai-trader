@@ -28,15 +28,45 @@ class RLInference:
     def load(self, path: str) -> bool:
         """Load RL model.
 
+        Tries multiple deserialization strategies to handle protocol-version
+        mismatches (e.g. ``persistent IDs in protocol 0 must be ASCII strings``).
+
         Args:
-            path: Checkpoint path.
+            path: Checkpoint path (supports .zip for SB3 native, .joblib/.pkl for mock).
 
         Returns:
             True if loaded.
         """
+        import os
         try:
-            import joblib
-            data = joblib.load(path)
+            # .zip files are SB3 native format — load directly
+            if path.lower().endswith(".zip"):
+                try:
+                    from stable_baselines3 import PPO, SAC
+                    if "sac" in path.lower():
+                        self.model = SAC.load(path, device=self.device)
+                        self._algo = "SAC"
+                    else:
+                        self.model = PPO.load(path, device=self.device)
+                        self._algo = "PPO"
+                    self.loaded = True
+                    logger.info(f"RL model ({self._algo}) loaded from {path}")
+                    return True
+                except ImportError:
+                    logger.warning("stable-baselines3 not installed")
+                    self.loaded = False
+                    return False
+
+            # Non-zip: try multiple deserialization strategies
+            data = self._safe_deserialize(path)
+
+            if data is None:
+                logger.warning(
+                    f"RL model deserialization failed for {path}; "
+                    f"using fallback non-zero mock signals"
+                )
+                self.loaded = False
+                return False
 
             if isinstance(data, dict) and data.get("mock"):
                 self.model = data
@@ -64,7 +94,52 @@ class RLInference:
 
         except Exception as e:
             logger.error(f"Failed to load RL model: {e}")
+            self.loaded = False
             return False
+
+    @staticmethod
+    def _safe_deserialize(path: str) -> Any:
+        """Try multiple deserialization strategies for joblib/pickle files.
+
+        Handles the ``persistent IDs in protocol 0 must be ASCII strings``
+        error by falling back through several load methods.
+
+        Args:
+            path: Path to the serialized model file.
+
+        Returns:
+            Deserialized object, or None if all strategies fail.
+        """
+        # Strategy 1: joblib (default — most common)
+        try:
+            import joblib
+            return joblib.load(path)
+        except Exception as e:
+            logger.debug(f"joblib.load failed for {path}: {e}")
+
+        # Strategy 2: pickle with binary mode
+        try:
+            import pickle
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        except Exception as e:
+            logger.debug(f"pickle.load (binary) failed for {path}: {e}")
+
+        # Strategy 3: joblib with explicit mmap_mode (forces re-read)
+        try:
+            import joblib
+            return joblib.load(path, mmap_mode="r")
+        except Exception as e:
+            logger.debug(f"joblib.load (mmap) failed for {path}: {e}")
+
+        # Strategy 4: torch.load (if it's actually a torch checkpoint)
+        try:
+            import torch
+            return torch.load(path, map_location="cpu", weights_only=False)
+        except Exception as e:
+            logger.debug(f"torch.load failed for {path}: {e}")
+
+        return None
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Predict actions.

@@ -10,33 +10,98 @@ import XmGauge from '@/components/ui/XmGauge.vue'
 import CircuitBreakerStatus from '@/components/risk/CircuitBreakerStatus.vue'
 import { useRiskStore } from '@/stores/useRiskStore'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { riskApi } from '@/api/riskApi'
+import { tradeApi, type DashboardData, type TradePortfolio } from '@/api/tradeApi'
 
 use([LineChart, GaugeChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const riskStore = useRiskStore()
 const execStore = useExecutionStore()
 
-const drawdownHistory = ref<number[]>([0, 0.02, 0.05, 0.03, 0.08, 0.06, 0.04, 0.07, 0.05, 0.03])
+// ── Policy constants (risk limits, not live data) ────────────
+const DAILY_LOSS_LIMIT = 0.05   // 5% daily loss limit
+const MAX_DRAWDOWN_LIMIT = 0.25 // 25% max drawdown limit
 
+// ── Reactive data fetched from APIs ──────────────────────────
+const drawdownHistory = ref<number[]>([0])
+const dashboardData = ref<DashboardData>({})
+const portfolioData = ref<TradePortfolio | null>(null)
+
+// ── Circuit breaker pass-through from riskStore (live after fetchBreakerStatus) ──
 const cbTriggered = computed(() => execStore.cbStatus.halted)
-const dailyPnlPct = ref(-0.012) // -1.2%
-const dailyLossLimit = 0.05
-const currentDrawdown = ref(0.03)
-const maxDrawdown = 0.25
-const var95 = ref(28500)
-const portfolioValue = 1000000
+const dailyPnlPct = computed(() => riskStore.dailyPnlPct)
+const currentDrawdown = computed(() => riskStore.currentDrawdown)
 
-// P0-3: Breaker control loading states
+// ── Derived metrics ──────────────────────────────────────────
+
+/** Portfolio total value from /api/trade/portfolio, fallback to dashboard, then $1M */
+const portfolioValue = computed<number>(() => {
+  const fromPortfolio = portfolioData.value?.metrics?.total_value
+  if (fromPortfolio != null && (fromPortfolio as number) > 0) return fromPortfolio as number
+  const fromDashboard = dashboardData.value.total_value
+  if (fromDashboard != null && fromDashboard > 0) return fromDashboard
+  return 1_000_000
+})
+
+/** VaR 95% — absolute dollar amount from riskStore.varData × portfolio value */
+const var95 = computed<number>(() => {
+  const vd = riskStore.varData as Record<string, number> | null
+  if (!vd) return 0
+  // var_normal (parametric), var_student_t, or var (historical/montecarlo)
+  const varReturn = vd.var_normal ?? vd.var_student_t ?? vd.var ?? 0
+  return Math.abs(varReturn) * portfolioValue.value
+})
+
+/** Historical maximum drawdown from dashboard API (e.g. 0.08 = 8%), fallback to limit */
+const historicalMaxDrawdown = computed<number>(() => {
+  const dd = dashboardData.value.max_drawdown_pct
+  return dd != null ? Math.abs(dd) : MAX_DRAWDOWN_LIMIT
+})
+
+// ── P0-3: Breaker control loading states ────────────────────
 const resetLoading = ref(false)
 const toggleLoading = ref(false)
 
-onMounted(async () => {
-  riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
-  await riskStore.fetchBreakerStatus()
+// ── Data fetching ────────────────────────────────────────────
+
+async function fetchAllData(): Promise<void> {
+  // Fetch breaker status + dashboard + portfolio + drawdown history in parallel
+  await Promise.allSettled([
+    riskStore.fetchBreakerStatus(),
+    tradeApi.getDashboard().then((d) => { dashboardData.value = d }).catch(() => { /* keep last */ }),
+    tradeApi.getPortfolio().then((p) => { portfolioData.value = p }).catch(() => { /* keep last */ }),
+    riskApi.getDrawdownHistory().then((d) => {
+      const history = d.drawdown_history ?? []
+      if (history.length > 0) {
+        // API returns negative drawdowns; use abs for display
+        drawdownHistory.value = history.map((h) => Math.abs(h.drawdown))
+      }
+    }).catch(() => { /* keep last */ }),
+  ])
+
+  // Fetch VaR using real portfolio tickers (or fallback)
+  try {
+    const positions = portfolioData.value?.positions ?? []
+    if (positions.length > 0) {
+      const tickers = positions.map((p) => p.ticker)
+      const totalAlloc = positions.reduce((s, p) => s + (p.allocation || 0), 0) || 1
+      const weights = positions.map((p) => (p.allocation || 0) / totalAlloc)
+      riskStore.fetchVaR(tickers, weights)
+    } else {
+      riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
+    }
+  } catch {
+    riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
+  }
+}
+
+onMounted(() => {
+  fetchAllData()
 })
 
-// P0-3: Reset circuit breaker
-async function handleResetBreaker() {
+// ── P0-3: Breaker actions ────────────────────────────────────
+
+async function handleResetBreaker(): Promise<void> {
   resetLoading.value = true
   try {
     await riskStore.resetCircuitBreaker()
@@ -45,8 +110,7 @@ async function handleResetBreaker() {
   }
 }
 
-// P0-3: Toggle breaker mode
-async function handleToggleBreaker() {
+async function handleToggleBreaker(): Promise<void> {
   toggleLoading.value = true
   try {
     const newMode = riskStore.breakerMode === 'hard' ? 'warn' : 'hard'
@@ -56,46 +120,92 @@ async function handleToggleBreaker() {
   }
 }
 
-const drawdownChartOption = computed(() => ({
-  grid: { top: 8, right: 16, bottom: 4, left: 50 },
-  tooltip: {
-    trigger: 'axis' as const,
-    backgroundColor: '#fff',
-    borderColor: '#EEEEEE',
-    textStyle: { color: '#1A1A1A', fontSize: 12 },
-    valueFormatter: (v: number) => `${(v * 100).toFixed(2)}%`,
-  },
-  xAxis: {
-    type: 'category' as const,
-    show: false,
-    data: drawdownHistory.value.map((_, i) => i),
-  },
-  yAxis: {
-    type: 'value' as const,
-    show: true,
-    splitLine: { lineStyle: { color: '#F5F5F5' } },
-    axisLabel: { fontSize: 10, color: '#999999', formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
-  },
-  series: [{
-    type: 'line',
-    data: drawdownHistory.value,
-    smooth: true,
-    symbol: 'none',
-    lineStyle: { color: '#EF4444', width: 2 },
-    areaStyle: {
-      color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [
-        { offset: 0, color: '#EF444430' }, { offset: 1, color: '#EF444405' }
-      ]},
-    },
-  }],
-}))
+// ── Charts ───────────────────────────────────────────────────
 
-const riskMetrics = computed(() => [
-  { label: 'VaR (95%)', value: `$${(var95.value).toLocaleString()}`, sub: `${((var95.value / portfolioValue) * 100).toFixed(2)}% of NAV` },
-  { label: 'Expected Shortfall', value: `$${(var95.value * 1.4).toLocaleString()}`, sub: 'Conditional VaR' },
-  { label: 'Max Drawdown', value: `${(currentDrawdown.value * 100).toFixed(2)}%`, sub: `Limit: ${(maxDrawdown * 100).toFixed(0)}%` },
-  { label: 'Volatility (30d)', value: '12.5%', sub: 'Annualized' },
-])
+const drawdownChartOption = computed(() => {
+  const data = drawdownHistory.value.length > 0 ? drawdownHistory.value : [0]
+  return {
+    grid: { top: 8, right: 16, bottom: 4, left: 50 },
+    tooltip: {
+      trigger: 'axis' as const,
+      backgroundColor: '#fff',
+      borderColor: '#EEEEEE',
+      textStyle: { color: '#1A1A1A', fontSize: 12 },
+      valueFormatter: (v: number) => `${(v * 100).toFixed(2)}%`,
+    },
+    xAxis: {
+      type: 'category' as const,
+      show: false,
+      data: data.map((_, i) => i),
+    },
+    yAxis: {
+      type: 'value' as const,
+      show: true,
+      splitLine: { lineStyle: { color: '#F5F5F5' } },
+      axisLabel: {
+        fontSize: 10,
+        color: '#999999',
+        formatter: (v: number) => `${(v * 100).toFixed(0)}%`,
+      },
+    },
+    series: [{
+      type: 'line',
+      data,
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { color: '#EF4444', width: 2 },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: '#EF444430' },
+            { offset: 1, color: '#EF444405' },
+          ],
+        },
+      },
+    }],
+  }
+})
+
+// ── Risk metrics cards ───────────────────────────────────────
+
+const riskMetrics = computed(() => {
+  const ddPct = Math.abs(currentDrawdown.value) * 100
+  const peakDdPct = historicalMaxDrawdown.value * 100
+  const varAbs = var95.value
+  const esAbs = varAbs * 1.4
+  const pv = Math.max(portfolioValue.value, 1)
+  const sharpe = dashboardData.value.sharpe_ratio
+  const winRate = dashboardData.value.win_rate
+
+  return [
+    {
+      label: 'VaR (95%)',
+      value: `$${Math.round(varAbs).toLocaleString()}`,
+      sub: `${((varAbs / pv) * 100).toFixed(2)}% of NAV`,
+    },
+    {
+      label: 'Expected Shortfall',
+      value: `$${Math.round(esAbs).toLocaleString()}`,
+      sub: 'Conditional VaR',
+    },
+    {
+      label: 'Max Drawdown',
+      value: `${ddPct.toFixed(2)}%`,
+      sub: `Peak: ${peakDdPct.toFixed(2)}% | Limit: ${(MAX_DRAWDOWN_LIMIT * 100).toFixed(0)}%`,
+    },
+    {
+      label: 'Sharpe Ratio',
+      value: sharpe != null ? sharpe.toFixed(2) : '--',
+      sub: winRate != null
+        ? `Win Rate: ${(winRate * 100).toFixed(1)}%`
+        : 'Annualized',
+    },
+  ]
+})
+
+/** Cooldown remaining from riskStore (in seconds) */
+const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
 </script>
 
 <template>
@@ -105,27 +215,29 @@ const riskMetrics = computed(() => [
       <CircuitBreakerStatus
         :triggered="cbTriggered"
         :daily-pnl-pct="dailyPnlPct"
-        :daily-loss-limit="dailyLossLimit"
-        :drawdown="currentDrawdown"
-        :max-drawdown="maxDrawdown"
-        :cooldown-remaining="0"
+        :daily-loss-limit="DAILY_LOSS_LIMIT"
+        :drawdown="Math.abs(currentDrawdown)"
+        :max-drawdown="MAX_DRAWDOWN_LIMIT"
+        :cooldown-remaining="cooldownRemaining"
       />
 
       <!-- Drawdown Gauge -->
       <XmCard title="Drawdown Gauge" class="!p-5 flex flex-col items-center justify-center">
         <XmGauge
-          :value="currentDrawdown * 100"
-          :max="maxDrawdown * 100"
+          :value="Math.abs(currentDrawdown) * 100"
+          :max="MAX_DRAWDOWN_LIMIT * 100"
           label="Drawdown %"
           :size="160"
         />
-        <p class="text-xs text-xm-text-tertiary mt-1">Limit: {{ (maxDrawdown * 100).toFixed(0) }}%</p>
+        <p class="text-xs text-xm-text-tertiary mt-1">
+          Limit: {{ (MAX_DRAWDOWN_LIMIT * 100).toFixed(0) }}%
+        </p>
       </XmCard>
 
       <!-- VaR Gauge -->
       <XmCard title="Value at Risk" class="!p-5 flex flex-col items-center justify-center">
         <XmGauge
-          :value="(var95 / portfolioValue) * 100"
+          :value="Math.max(portfolioValue, 1) > 0 ? (var95 / Math.max(portfolioValue, 1)) * 100 : 0"
           :max="10"
           label="VaR %"
           :size="160"
@@ -139,9 +251,17 @@ const riskMetrics = computed(() => [
     <XmCard title="⚡ Circuit Breaker Controls" class="!p-5">
       <div class="flex flex-wrap items-center gap-4">
         <!-- Breaker Mode Display -->
-        <div class="flex items-center gap-2 px-4 py-2 rounded-lg" :class="riskStore.breakerMode === 'hard' ? 'bg-risk-red/10 border border-risk-red/30' : 'bg-risk-yellow/10 border border-risk-yellow/30'">
+        <div
+          class="flex items-center gap-2 px-4 py-2 rounded-lg"
+          :class="riskStore.breakerMode === 'hard'
+            ? 'bg-risk-red/10 border border-risk-red/30'
+            : 'bg-risk-yellow/10 border border-risk-yellow/30'"
+        >
           <span class="text-sm font-semibold">当前模式:</span>
-          <span class="text-sm font-mono font-bold" :class="riskStore.breakerMode === 'hard' ? 'text-risk-red' : 'text-risk-yellow'">
+          <span
+            class="text-sm font-mono font-bold"
+            :class="riskStore.breakerMode === 'hard' ? 'text-risk-red' : 'text-risk-yellow'"
+          >
             {{ riskStore.breakerMode === 'hard' ? '🔴 硬熔断' : '🟡 仅告警' }}
           </span>
         </div>
@@ -149,11 +269,15 @@ const riskMetrics = computed(() => [
         <!-- Toggle Mode Button -->
         <button
           class="xm-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50"
-          :class="riskStore.breakerMode === 'hard' ? 'bg-risk-yellow text-white' : 'bg-risk-red text-white'"
+          :class="riskStore.breakerMode === 'hard'
+            ? 'bg-risk-yellow text-white'
+            : 'bg-risk-red text-white'"
           :disabled="toggleLoading"
           @click="handleToggleBreaker"
         >
-          {{ toggleLoading ? '⏳ 切换中...' : (riskStore.breakerMode === 'hard' ? '🔧 切换至仅告警' : '🔧 切换至硬熔断') }}
+          {{ toggleLoading
+            ? '⏳ 切换中...'
+            : (riskStore.breakerMode === 'hard' ? '🔧 切换至仅告警' : '🔧 切换至硬熔断') }}
         </button>
 
         <!-- Reset Breaker Button -->

@@ -12,6 +12,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from loguru import logger
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from services.model_train_service.config import train_config
@@ -123,15 +124,17 @@ class TCNTrainer(TrainerBase):
         self,
         num_channels: list[int] | None = None,
         kernel_size: int = 3,
-        dropout: float = 0.1,
+        dropout: float = 0.2,
         seq_len: int = 64,
         device: str | None = None,
+        lr: float | None = None,
     ) -> None:
         super().__init__(device=device or train_config.DEVICE)
-        self.num_channels = num_channels or [64, 64, 64, 32]
+        self.num_channels = num_channels or [32, 32, 32, 16]  # Reduced for stability
         self.kernel_size = kernel_size
         self.dropout = dropout
         self.seq_len = seq_len
+        self._lr = lr if lr is not None else 5e-5  # Lower default LR for TCN stability
 
     def fit(
         self,
@@ -156,13 +159,25 @@ class TCNTrainer(TrainerBase):
         self._validate_data(X, y)
         self._feature_names = list(X.columns)
 
+        # ---- Feature normalization ----
+        self._feature_scaler = StandardScaler()
+        X_scaled = self._feature_scaler.fit_transform(X.values.astype(np.float64))
+
+        # ── NaN safeguard ──
+        X_arr = np.nan_to_num(X_scaled.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
+        y_arr = np.nan_to_num(y.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
+
         epochs = kwargs.get("epochs", train_config.EPOCHS)
         batch_size = kwargs.get("batch_size", train_config.BATCH_SIZE)
-        lr = kwargs.get("lr", train_config.LEARNING_RATE)
+        lr = kwargs.get("lr", self._lr)
 
-        X_seqs, y_seqs = self._build_sequences(X.values, y.values)
+        X_seqs, y_seqs = self._build_sequences(X_arr, y_arr)
         if X_valid is not None and y_valid is not None:
-            X_vs, y_vs = self._build_sequences(X_valid.values, y_valid.values)
+            X_v_scaled = self._feature_scaler.transform(X_valid.values.astype(np.float64))
+            X_vs, y_vs = self._build_sequences(
+                np.nan_to_num(X_v_scaled.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
+                np.nan_to_num(y_valid.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
+            )
         else:
             split = int(len(X_seqs) * 0.8)
             X_vs, y_vs = X_seqs[split:], y_seqs[split:]
@@ -246,7 +261,11 @@ class TCNTrainer(TrainerBase):
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         if self.model is None:
             raise RuntimeError("Model not trained")
-        X_arr = X.values.astype(np.float32)
+        if hasattr(self, '_feature_scaler') and self._feature_scaler is not None:
+            X_arr = self._feature_scaler.transform(X.values.astype(np.float64))
+            X_arr = np.nan_to_num(X_arr, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
+        else:
+            X_arr = X.values.astype(np.float32)
         X_seqs, _ = self._build_sequences(X_arr, np.zeros(len(X_arr)))
         self.model.eval()
         with torch.no_grad():
@@ -264,6 +283,7 @@ class TCNTrainer(TrainerBase):
             "config": {"n_features": len(self._feature_names), "num_channels": self.num_channels,
                        "kernel_size": self.kernel_size, "dropout": self.dropout, "seq_len": self.seq_len},
             "feature_names": self._feature_names,
+            "scaler": self._feature_scaler if hasattr(self, '_feature_scaler') else None,
         }, path)
         logger.info(f"TCN model saved to {path}")
 
@@ -271,6 +291,7 @@ class TCNTrainer(TrainerBase):
         data = torch.load(path, map_location=self.device)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
+        self._feature_scaler = data.get("scaler", None)
         self.model = TCNModel(
             n_features=config["n_features"], num_channels=config["num_channels"],
             kernel_size=config["kernel_size"], dropout=config["dropout"],

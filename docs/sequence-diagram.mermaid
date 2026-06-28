@@ -1,114 +1,51 @@
 sequenceDiagram
-    participant AT as AutoTrader
-    participant MD as MarketDataEngine
-    participant DP as DataPipeline
-    participant ST as TradingStrategy
-    participant TP as TransformerPredictor
-    participant RL as TradingRLAgent
-    participant SE as SentimentAnalyzer
-    participant EN as SignalEnsemble
-    participant RM as RiskManager
-    participant EX as PaperExecutor
-    participant PF as PortfolioManager
+    participant TP as TradingPipeline
+    participant PC as PipelineConfig
+    participant SU as StockUniverse
+    participant IE as InferenceEngine
+    participant TB as TigerBridge
+    participant BR as TigerBroker (v2)
+    participant SDK as Tiger TradeClient
 
-    Note over AT: 🚀 run_cycle() — 每10分钟执行一次
-
-    alt 📅 新交易日
-        AT->>RM: reset_daily_state()
-        RM->>RM: daily_start_value = portfolio_value
-        RM->>RM: circuit_breaker_triggered = false
-        RM->>RM: trades_today = 0
-        RM-->>AT: ✅ 新交易日已重置
+    %% Market Round-Robin Universe Selection
+    rect rgb(240, 248, 255)
+        Note over TP,SU: Step 0 — Market Round-Robin
+        TP->>PC: get_next_market()
+        PC-->>TP: "US" (cycle 1)
+        TP->>SU: stock_universe.us_tickers
+        SU-->>TP: [200 tickers]
+        TP->>TP: tickers (no MAX_TICKERS_PER_CYCLE cap)
+        Note over TP: 200 tickers → Step 1 market data
     end
 
-    AT->>RM: check_circuit_breaker()
-    alt 🚨 熔断已触发 (当日亏损 ≥ 5%)
-        RM-->>AT: RiskReport(circuit_breaker=true)
-        AT->>AT: 跳过交易，仅更新估值
-    else ✅ 熔断未触发
-        RM-->>AT: RiskReport(passed=true)
-
-        AT->>AT: _get_candidate_tickers()
-        Note over AT: 候选池 = 持仓 + 高波动Top35 + 市值Top25
-
-        AT->>MD: get_multi_ticker_data(candidates)
-        loop 每个 ticker
-            MD->>MD: normalize_ticker() ★ P0-1 修复
-            MD->>MD: get_yfinance_symbol()
-            Note over MD: 00700 → 0700.HK
-            MD->>MD: yf.Ticker(symbol).history()
-        end
-        MD-->>AT: data_dict: Dict[str, DataFrame]
-
-        loop 每个 ticker
-            AT->>DP: process(df)
-            DP->>DP: 63 FEATURE_COLUMNS 提取
-            DP-->>AT: features: ndarray (N, 63)
-        end
-
-        AT->>ST: analyze_and_trade(tickers, data_dict, prices)
-
-        par AI 模型并行推理
-            ST->>TP: predict(features)
-            TP->>TP: PatchTST forward pass
-            TP-->>ST: price_forecast (5-day)
-        and
-            loop 每个 ticker
-                ST->>RL: predict_signal(features, ticker, price, position_pct)
-                Note over RL: ★ P1-2 重构：均值投影替代随机噪声
-                RL->>RL: _detect_device() ★ P1-1 GPU自动检测
-                RL->>RL: model.predict(state)
-                RL-->>ST: {signal, strength, confidence}
-            end
-        and
-            ST->>SE: analyze(headlines)
-            SE->>SE: FinBERT inference
-            SE-->>ST: sentiment_score: float
-        end
-
-        ST->>EN: combine(transformer_signal, rl_signal, sentiment, technical)
-        EN->>EN: _adjust_weights()
-        EN-->>ST: ensemble_signal: Dict
-
-        loop 每个交易决策
-            ST->>RM: check_order(ticker, side, quantity, price)
-            RM->>RM: _check_sufficient_cash()
-            RM->>RM: _check_position_concentration()
-            RM->>RM: _check_max_drawdown()
-            RM->>RM: _check_var()
-            RM->>RM: _check_liquidity()
-            RM->>RM: _check_stop_loss()
-            alt ❌ 风控拒绝
-                RM-->>ST: RiskReport(passed=false, violations=[...])
-            else ✅ 风控通过
-                RM-->>ST: RiskReport(passed=true)
-                ST->>EX: execute_signal(ticker, decision, strength, price, confidence)
-                EX->>PF: update_position(ticker, side, quantity, price)
-                PF->>PF: recalculate total_value
-                PF-->>EX: ok
-                EX-->>ST: {trade_id, status: "filled"}
-            end
-        end
-
-        ST-->>AT: {signals, trades, portfolio_snapshot}
+    %% Top-N Signal Selection
+    rect rgb(255, 248, 240)
+        Note over TP,IE: Step 3 — Top-N Signal Selection
+        TP->>IE: generate_signals_batch(factor_df)
+        Note over IE: 全量推理 (移除 [:50])
+        IE-->>TP: 200 raw signals
+        TP->>PC: TOP_N_SIGNALS=5, SIGNAL_THRESHOLD_MIN=0.05
+        TP->>TP: filter: confidence>=MIN_CONFIDENCE AND abs(signal)>=0.05
+        TP->>TP: sort by abs(signal) descending
+        TP->>TP: take top 5
+        TP-->>TP: 5 valid signals → Step 4 Risk Checks
     end
 
-    AT->>RM: update_portfolio_state(pv, cash, positions, prices)
-    RM->>RM: update position_values
-    RM->>RM: update price_history (max 252 days)
-    RM->>RM: update peak_value
+    %% Tiger Position Query (Fixed)
+    rect rgb(240, 255, 240)
+        Note over TB,SDK: Tiger Position Query (Fixed)
+        TB->>BR: get_positions()
+        BR->>BR: _ensure_client()
+        BR->>SDK: TradeClient.connect()
+        SDK-->>BR: connected
+        BR->>SDK: TradeClient.get_positions()
+        SDK-->>BR: [Position objects]
+        Note over BR: p.contract.symbol (NOT p.symbol)
+        BR-->>TB: [{ticker, quantity, avg_cost, market_value}]
 
-    AT->>RM: check_circuit_breaker()
-    alt 🚨 当日亏损 ≥ 5%
-        RM->>RM: circuit_breaker_triggered = true
-        RM->>EX: liquidate_all(prices) ★ P0-2 核心
-        EX->>PF: close_position(ticker, price) × N
-        PF->>PF: positions = {}
-        PF->>PF: save_state()
-        EX-->>RM: liquidation_complete
-        Note over RM: 🔴 熔断触发！全部平仓完成
-        Note over RM: 系统暂停交易 15 分钟 (冷却期)
+        TB->>BR: get_account_summary()
+        BR->>SDK: TradeClient.get_accounts()
+        SDK-->>BR: [Account objects]
+        Note over BR: acc.summary.net_liquidation (NOT acc.net_liquidation)
+        BR-->>TB: {account, nav, cash, buying_power}
     end
-
-    AT->>PF: save_state()
-    AT->>AT: _push_to_backend(WebSocket)

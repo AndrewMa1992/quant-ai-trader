@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from backend.config import DATA_DIR, trading_config
+from configs.settings import settings
 from configs.market_universe import StockEntry
 from backend.data_engine.stock_universe import stock_universe
 
@@ -207,7 +207,7 @@ class MarketScanner:
             price = entry["price"]
             lot = entry["lot_size"]
             currency = entry["currency"]
-            fx_rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+            fx_rate = settings.trading_currency_rates_dict.get(currency, 1.0)
 
             if price > 0:
                 # 买入1手所需本地货币
@@ -226,7 +226,7 @@ class MarketScanner:
             available_cash = {}
 
         total_usd = sum(
-            amount * trading_config.CURRENCY_RATES.get(ccy, 1.0)
+            amount * settings.trading_currency_rates_dict.get(ccy, 1.0)
             for ccy, amount in available_cash.items()
         )
 

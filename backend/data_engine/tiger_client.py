@@ -1,4 +1,9 @@
 """
+[DEPRECATED] backend/data_engine/tiger_client.py — legacy v1 Tiger client.
+This module has been superseded by services/data_service/ingestion/tiger_client.py.
+All new code must use the v2 path.  This file is kept only for historical
+reference and will be removed after Q3 2026 migration.
+
 老虎证券 OpenAPI 客户端
 实盘交易
 """
@@ -9,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 from loguru import logger
 
-from backend.config import trading_config
+from configs.settings import settings
 
 
 class TigerClient:
@@ -44,7 +49,7 @@ class TigerClient:
     @property
     def _active_account(self) -> str:
         """根据 SIMULATION_MODE 返回正确账户"""
-        if trading_config.SIMULATION_MODE:
+        if settings.TRADING_SIMULATION_MODE:
             return self._simulation_account or ""
         return self._real_account or ""
 
@@ -73,8 +78,8 @@ class TigerClient:
                 logger.info(f"📄 从配置文件加载: {self._config_path}")
 
             # 方式2：代码直接配置（当 config.py 中有值时）
-            elif trading_config.TIGER_ID and trading_config.TIGER_PRIVATE_KEY:
-                from backend.config import trading_config as tc
+            elif settings.TIGER_ID and settings.TIGER_PRIVATE_KEY:
+                from configs.settings import settings as tc
 
                 self._config = TigerOpenClientConfig()
                 self._config.tiger_id = tc.TIGER_ID
@@ -98,7 +103,7 @@ class TigerClient:
             # 获取账号信息
             self._load_accounts()
 
-            logger.info(f"✅ 老虎 API 连接成功！(tiger_id: {trading_config.TIGER_ID})")
+            logger.info(f"✅ 老虎 API 连接成功！(tiger_id: {settings.TIGER_ID})")
             if self._real_account:
                 logger.info(f"   📝 实盘账号: {self._real_account}")
             return True
@@ -137,6 +142,20 @@ class TigerClient:
     # 行情数据
     # ================================================================
 
+    @staticmethod
+    def _is_empty_result(obj) -> bool:
+        """Check if a Tiger SDK result is empty — handles DataFrame, list, None.
+
+        Tiger SDK returns a DataFrame for single-ticker queries, which triggers
+        ``ValueError: The truth value of a DataFrame is ambiguous`` if tested
+        with ``if not obj:``.
+        """
+        if obj is None:
+            return True
+        if hasattr(obj, "empty"):
+            return bool(obj.empty)
+        return len(obj) == 0
+
     def get_quote(self, ticker: str) -> Optional[Dict]:
         """
         获取实时报价
@@ -152,7 +171,7 @@ class TigerClient:
 
         try:
             briefs = self._quote_client.get_stock_briefs([ticker])
-            if not briefs:
+            if self._is_empty_result(briefs):
                 return None
 
             brief = briefs[0]
@@ -260,7 +279,7 @@ class TigerClient:
             from tigeropen.common.consts import SecurityType, Currency
 
             # 确定账号（根据 SIMULATION_MODE 选择）
-            target_account = self._active_account or trading_config.TIGER_ACCOUNT
+            target_account = self._active_account or settings.TIGER_ACCOUNT
 
             # 确定市场和币种
             is_hk = ticker.endswith('.HK')
@@ -321,7 +340,7 @@ class TigerClient:
             # 构造 Order 对象 — ★ 支持盘前/盘后交易
             kwargs = {}
             if market == 'US':
-                kwargs['outside_rth'] = True  # 盘前(4:00-9:30) + 盘后(16:00-20:00) ET
+                kwargs['outside_rth'] = True  # 24h: 盘前+盘中+盘后+夜盘 (4:00-次日4:00 ET)
             order = Order(
                 account=target_account,
                 contract=contract,
@@ -331,12 +350,11 @@ class TigerClient:
                 **kwargs,
             )
             if limit_price:
-                # HK 价格 tick size 对齐
-                if is_hk:
-                    limit_price = self._align_hk_tick(limit_price)
+                # ★ 通用 tick size 对齐（所有市场）
+                limit_price = self._align_tick_size(limit_price, ticker, is_hk)
                 order.limit_price = limit_price
 
-            extended_label = " [盘前/盘后]" if kwargs.get('outside_rth') else ""
+            extended_label = " [24h扩展]" if kwargs.get('outside_rth') else ""
             logger.info(f"📤 下单: {ticker} {action} {int(quantity)}股 @ {order_type}{extended_label} (账号: {target_account})")
 
             result_id = self._trade_client.place_order(order)
@@ -402,7 +420,7 @@ class TigerClient:
 
                 # ★ 货币转换：HK 持仓以 HKD 计价，需转为 USD
                 is_hk = ticker.isdigit() and len(ticker) <= 5  # HK ticker: 5-digit number
-                fx_rate = trading_config.CURRENCY_RATES.get("HKD", 0.128) if is_hk else 1.0
+                fx_rate = settings.trading_currency_rates_dict.get("HKD", 0.128) if is_hk else 1.0
 
                 result.append({
                     "ticker": ticker,
@@ -436,11 +454,11 @@ class TigerClient:
             return None
 
         try:
-            assets = self._trade_client.get_assets(account=self._active_account or trading_config.TIGER_ACCOUNT)
+            assets = self._trade_client.get_assets(account=self._active_account or settings.TIGER_ACCOUNT)
             if not assets:
                 logger.warning("⚠️ Tiger get_assets 返回空，尝试重连...")
                 self.connect()
-                assets = self._trade_client.get_assets(account=self._active_account or trading_config.TIGER_ACCOUNT)
+                assets = self._trade_client.get_assets(account=self._active_account or settings.TIGER_ACCOUNT)
             
             if assets and isinstance(assets, list) and len(assets) > 0:
                 a = assets[0]
@@ -587,6 +605,87 @@ class TigerClient:
             if price < upper:
                 return round(price / tick) * tick
         return price
+
+    @staticmethod
+    def _get_tick_size(ticker: str, price: float) -> float:
+        """根据市场和价格区间返回 tick size.
+
+        Args:
+            ticker: 股票代码（如 'NTAP', 'PCT.NZ', 'BHP.AX'）
+            price: 当前价格
+
+        Returns:
+            该市场/价格区间的最小变动价位
+        """
+        ticker_upper = ticker.upper()
+
+        # 新西兰 (NZX)
+        if '.NZ' in ticker_upper:
+            if price >= 1.0:
+                return 0.01
+            elif price >= 0.10:
+                return 0.005
+            else:
+                return 0.001
+
+        # 澳洲 (ASX)
+        if '.AX' in ticker_upper:
+            if price >= 2.0:
+                return 0.01
+            elif price >= 0.10:
+                return 0.005
+            else:
+                return 0.001
+
+        # 新加坡 (SGX)
+        if '.SI' in ticker_upper:
+            if price >= 10.0:
+                return 0.01
+            elif price >= 1.0:
+                return 0.005
+            else:
+                return 0.001
+
+        # 美股 (NYSE/NASDAQ) — 默认
+        if price >= 1.0:
+            return 0.01
+        else:
+            return 0.0001
+
+    @staticmethod
+    def _align_tick_size(price: float, ticker: str, is_hk: bool = False) -> float:
+        """将价格对齐到交易所 tick size.
+
+        Args:
+            price: 原始价格
+            ticker: 股票代码
+            is_hk: 是否港股（港股使用独立 tick rules）
+
+        Returns:
+            对齐后的价格
+        """
+        if price <= 0:
+            return price
+
+        # 港股：使用现有细粒度 tick rules
+        if is_hk:
+            return TigerClient._align_hk_tick(price)
+
+        # 其他市场：通用 tick 对齐
+        tick_size = TigerClient._get_tick_size(ticker, price)
+        aligned = round(price / tick_size) * tick_size
+        # 确保精度（避免浮点误差）
+        tick_str = str(tick_size)
+        if '.' in tick_str:
+            decimals = len(tick_str.split('.')[-1])
+        else:
+            decimals = 0
+        aligned = round(aligned, decimals)
+
+        if abs(aligned - price) > tick_size * 0.5:
+            logger.debug(f"🔧 tick对齐: {ticker} ${price} → ${aligned} (tick={tick_size})")
+
+        return aligned
 
     @staticmethod
     def _align_sg_tick(price: float) -> float:

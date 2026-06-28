@@ -54,7 +54,7 @@ def setup_logger(
         logger.add(
             directory / "qat_{time:YYYY-MM-DD}.jsonl",
             level=level,
-            rotation="10 MB",
+            rotation="1 day",
             retention="7 days",
             compression="gz",
             serialize=True,
@@ -68,7 +68,7 @@ def setup_logger(
         logger.add(
             directory / "qat_{time:YYYY-MM-DD}.log",
             level=level,
-            rotation="10 MB",
+            rotation="1 day",
             retention="7 days",
             compression="gz",
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",

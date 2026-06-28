@@ -10,7 +10,7 @@ from datetime import datetime
 import numpy as np
 from loguru import logger
 
-from backend.config import trading_config
+from configs.settings import settings
 
 
 class PortfolioManager:
@@ -21,7 +21,7 @@ class PortfolioManager:
     """
 
     def __init__(self, initial_capital: float = None):
-        self.initial_capital = initial_capital or trading_config.INITIAL_CAPITAL
+        self.initial_capital = initial_capital or settings.TRADING_INITIAL_CAPITAL
         self.cash = self.initial_capital
         self.positions: Dict[str, float] = {}  # ticker -> shares
         self.avg_costs: Dict[str, float] = {}  # ticker -> avg cost per share (USD)
@@ -60,12 +60,12 @@ class PortfolioManager:
 
     def _to_usd(self, amount: float, currency: str) -> float:
         """将任意币种金额转换为 USD"""
-        rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+        rate = settings.trading_currency_rates_dict.get(currency, 1.0)
         return amount * rate
 
     def _from_usd(self, amount_usd: float, currency: str) -> float:
         """将 USD 转换为目标币种"""
-        rate = trading_config.CURRENCY_RATES.get(currency, 1.0)
+        rate = settings.trading_currency_rates_dict.get(currency, 1.0)
         return amount_usd / rate if rate > 0 else amount_usd
 
     # ================================================================
@@ -102,27 +102,27 @@ class PortfolioManager:
         currency = self._get_currency(ticker)
 
         # 仓位比例 = 信号强度
-        target_ratio = min(signal_strength, trading_config.MAX_POSITION_SIZE)
+        target_ratio = min(signal_strength, settings.TRADING_MAX_POSITION_SIZE)
         order_value_usd = self.cash * target_ratio
 
         # 最小交易额
-        if order_value_usd < trading_config.MIN_TRADE_VALUE:
+        if order_value_usd < settings.TRADING_MIN_TRADE_VALUE:
             return None
 
         # 本地币种金额
         order_value_local = self._from_usd(order_value_usd, currency)
         quantity = order_value_local / price if price > 0 else 0
 
-        if quantity < trading_config.MIN_SHARES:
+        if quantity < settings.TRADING_MIN_SHARES:
             return None
 
-        total_cost_usd = order_value_usd * (1 + trading_config.COMMISSION_RATE)
+        total_cost_usd = order_value_usd * (1 + settings.TRADING_COMMISSION_RATE)
 
-        if total_cost_usd > self.cash * trading_config.MAX_CASH_USAGE:
+        if total_cost_usd > self.cash * settings.TRADING_MAX_CASH_USAGE:
             logger.warning(
                 f"🚫 无杠杆原则拒绝: {ticker} buy | "
-                f"成本 ${total_cost_usd:,.2f} > 可用 ${self.cash * trading_config.MAX_CASH_USAGE:,.2f} "
-                f"(自有资金 ${self.cash:,.2f} × {trading_config.MAX_CASH_USAGE:.0%}) — 坚决不使用杠杆"
+                f"成本 ${total_cost_usd:,.2f} > 可用 ${self.cash * settings.TRADING_MAX_CASH_USAGE:,.2f} "
+                f"(自有资金 ${self.cash:,.2f} × {settings.TRADING_MAX_CASH_USAGE:.0%}) — 坚决不使用杠杆"
             )
             return None
 
@@ -162,7 +162,7 @@ class PortfolioManager:
     ) -> Optional[Dict]:
         """执行卖出（price 为本地币种，收入自动兑换为 USD）"""
         shares = self.positions.get(ticker, 0.0)
-        if shares < trading_config.MIN_SHARES:
+        if shares < settings.TRADING_MIN_SHARES:
             return None
 
         currency = self._get_currency(ticker)
@@ -171,12 +171,12 @@ class PortfolioManager:
         sell_ratio = min(abs(signal_strength), 1.0)
         quantity = shares * sell_ratio
 
-        if quantity < trading_config.MIN_SHARES:
+        if quantity < settings.TRADING_MIN_SHARES:
             quantity = shares  # 少于最小量则全卖
 
         value_local = quantity * price
         value_usd = self._to_usd(value_local, currency)
-        commission = value_usd * trading_config.COMMISSION_RATE
+        commission = value_usd * settings.TRADING_COMMISSION_RATE
         net_value = value_usd - commission
 
         self.cash += net_value
@@ -314,7 +314,7 @@ class PortfolioManager:
     def save_state(self):
         """保存组合状态到数据库"""
         import sqlite3
-        from backend.config import DB_PATH
+        from configs.settings import settings
 
         conn = sqlite3.connect(str(DB_PATH))
         # 创建 positions 表（如果不存在）
@@ -380,7 +380,7 @@ class PortfolioManager:
     def load_state(self) -> bool:
         """从数据库加载组合状态"""
         import sqlite3
-        from backend.config import DB_PATH
+        from configs.settings import settings
 
         conn = sqlite3.connect(str(DB_PATH))
         try:

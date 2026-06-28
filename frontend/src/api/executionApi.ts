@@ -44,6 +44,31 @@ export interface BacktestResult {
   annual_return: number
 }
 
+// ── Analysis types ──
+
+export interface PortfolioHistoryPoint {
+  date: string
+  nav: number
+  benchmark: number
+}
+
+export interface YearlyReturn {
+  year: string
+  return: number
+}
+
+export const analysisApi = {
+  async getPortfolioHistory(): Promise<PortfolioHistoryPoint[]> {
+    const { data } = await apiClient.get('/v2/analysis/portfolio-history')
+    return data.data ?? []
+  },
+
+  async getYearlyReturns(): Promise<YearlyReturn[]> {
+    const { data } = await apiClient.get('/v2/analysis/yearly-returns')
+    return data.data ?? []
+  },
+}
+
 export const executionApi = {
   // Optimizers
   async optimizeMarkowitz(tickers: string[], objective = 'max_sharpe', constraints: Record<string, unknown> = {}) {
@@ -93,5 +118,11 @@ export const executionApi = {
   async getTradeLogs(date?: string) {
     const { data } = await apiClient.get(`${BASE}/trades`, { params: { date } })
     return data.data
+  },
+
+  // Rollback
+  async rollback(): Promise<{ success: boolean; message: string; timestamp: string }> {
+    const { data } = await apiClient.post(`${BASE}/rollback`)
+    return data
   },
 }

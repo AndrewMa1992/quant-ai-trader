@@ -1,4 +1,4 @@
-name: CI - Code Quality
+name: CI - Code Quality (v2)
 
 on:
   push:
@@ -17,14 +17,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install backend deps
-        run: pip install -r backend/requirements.txt
+      - name: Install deps
+        run: pip install -r requirements.txt
 
       - name: Lint with ruff
-        run: pip install ruff && ruff check backend/
+        run: pip install ruff && ruff check .
 
       - name: Quick import test
-        run: python -c "import sys; sys.path.insert(0,'.'); from backend.config import *"
+        run: python -c "import sys; sys.path.insert(0,'.'); from configs.settings import settings; print(f'Device: {settings.TRAIN_DEVICE}')"
 
       - name: Setup Node
         uses: actions/setup-node@v4

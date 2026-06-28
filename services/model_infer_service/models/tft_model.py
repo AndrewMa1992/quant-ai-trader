@@ -89,7 +89,7 @@ class TFTInference:
         result = {}
         for i, key in enumerate(["q10", "q50", "q90"]):
             padded = np.zeros(len(X_arr))
-            padded[:len(pred)] = pred[:, i]
+            padded[-len(pred):] = pred[:, i]
             result[key] = padded
 
         return result

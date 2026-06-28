@@ -8,6 +8,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import { usePortfolioStore } from '@/stores/usePortfolioStore'
+import { tradeApi, type TradePortfolioDetail } from '@/api/tradeApi'
 
 use([ScatterChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -24,23 +25,68 @@ interface HoldingRow {
   dailyChangePct: number
 }
 
-const holdings = ref<HoldingRow[]>([
-  { ticker: 'AAPL', name: 'Apple Inc.', shares: 150, price: 195.20, value: 29280, weight: 0.15, dailyChange: 2.30, dailyChangePct: 1.19 },
-  { ticker: 'MSFT', name: 'Microsoft Corp.', shares: 80, price: 420.45, value: 33636, weight: 0.17, dailyChange: -1.20, dailyChangePct: -0.28 },
-  { ticker: 'NVDA', name: 'NVIDIA Corp.', shares: 30, price: 875.30, value: 26259, weight: 0.13, dailyChange: 12.40, dailyChangePct: 1.44 },
-  { ticker: 'GOOGL', name: 'Alphabet Inc.', shares: 100, price: 175.80, value: 17580, weight: 0.09, dailyChange: -0.50, dailyChangePct: -0.28 },
-  { ticker: 'TSLA', name: 'Tesla Inc.', shares: 60, price: 245.10, value: 14706, weight: 0.07, dailyChange: -3.20, dailyChangePct: -1.29 },
-  { ticker: '0700.HK', name: 'Tencent', shares: 500, price: 38.50, value: 19250, weight: 0.10, dailyChange: 0.80, dailyChangePct: 2.12 },
-])
+const holdings = ref<HoldingRow[]>([])
+const portfolioMetrics = ref({
+  totalValue: 0,
+  totalPnl: 0,
+  cash: 0,
+})
 
-const totalValue = computed(() => holdings.value.reduce((s, h) => s + h.value, 0))
-const totalDailyPnL = computed(() => holdings.value.reduce((s, h) => s + h.dailyChange * h.shares, 0))
+const loading = ref(true)
 
-// Efficient Frontier
+onMounted(async () => {
+  await Promise.all([
+    fetchPositionsAndPortfolio(),
+  ])
+})
+
+/** Fetch positions and portfolio from /api/trade/portfolio endpoint */
+async function fetchPositionsAndPortfolio(): Promise<void> {
+  loading.value = true
+  try {
+    const portfolio = await tradeApi.getPortfolio()
+    const positions: TradePortfolioDetail[] = portfolio.positions ?? []
+    const metrics = portfolio.metrics ?? ({} as Record<string, unknown>)
+
+    const totalValue = (metrics.total_value as number) ?? positions.reduce((s, p) => s + (p.market_value ?? 0), 0)
+
+    portfolioMetrics.value = {
+      totalValue,
+      totalPnl: (metrics.total_pnl as number) ?? 0,
+      cash: (metrics.cash as number) ?? 0,
+    }
+
+    if (positions.length > 0) {
+      holdings.value = positions.map((p) => {
+        const weight = totalValue > 0 ? (p.market_value ?? 0) / totalValue : 0
+        return {
+          ticker: p.ticker,
+          name: p.ticker, // name not provided by trade API; use ticker as display name
+          shares: p.shares,
+          price: p.current_price ?? p.avg_cost ?? 0,
+          value: p.market_value ?? 0,
+          weight,
+          dailyChange: p.unrealized_pnl ?? 0,
+          dailyChangePct: p.unrealized_pnl_pct ?? 0,
+        }
+      })
+    }
+  } catch {
+    // Silent degradation — leave holdings empty
+  } finally {
+    loading.value = false
+  }
+}
+
+const totalValue = computed(() => portfolioMetrics.value.totalValue)
+const totalDailyPnL = computed(() => holdings.value.reduce((s, h) => s + h.dailyChange, 0))
+
+// ── Efficient Frontier (placeholder — needs optimizer API support) ──
 const frontierPoints = ref<Array<[number, number]>>([])
 const currentPoint = ref<[number, number]>([0.15, 0.12])
 
-function generateFrontier() {
+/** Generate placeholder frontier points. Replace with real optimizer API when available. */
+function generateFrontier(): void {
   const pts: Array<[number, number]> = []
   for (let i = 0; i < 50; i++) {
     const risk = 0.08 + (i / 50) * 0.18
@@ -98,8 +144,8 @@ const frontierOption = computed(() => ({
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Summary Row -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <!-- Summary Row — real portfolio metrics from API -->
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
       <XmCard class="!p-4">
         <div class="xm-metric-label">Total Value</div>
         <div class="xm-metric-value text-lg">${{ totalValue.toLocaleString() }}</div>
@@ -109,43 +155,53 @@ const frontierOption = computed(() => ({
         <div class="xm-metric-value text-lg">{{ holdings.length }}</div>
       </XmCard>
       <XmCard class="!p-4">
-        <div class="xm-metric-label">Daily P&L</div>
-        <div class="xm-metric-value text-lg" :class="totalDailyPnL >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
-          {{ totalDailyPnL >= 0 ? '+' : '' }}${{ totalDailyPnL.toLocaleString() }}
+        <div class="xm-metric-label">Cash</div>
+        <div class="xm-metric-value text-lg">${{ portfolioMetrics.cash.toLocaleString() }}</div>
+      </XmCard>
+      <XmCard class="!p-4">
+        <div class="xm-metric-label">Total P&L</div>
+        <div class="xm-metric-value text-lg" :class="portfolioMetrics.totalPnl >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+          {{ portfolioMetrics.totalPnl >= 0 ? '+' : '' }}${{ portfolioMetrics.totalPnl.toLocaleString() }}
         </div>
       </XmCard>
     </div>
 
+    <!-- Loading state -->
+    <div v-if="loading" class="text-center py-6 text-xm-text-tertiary text-sm">
+      Loading portfolio data...
+    </div>
+
     <!-- Efficient Frontier -->
-    <XmCard title="Efficient Frontier" subtitle="Risk vs Return optimization">
+    <XmCard v-else title="Efficient Frontier">
+      <template #subtitle>
+        <span class="text-xs text-xm-text-tertiary">⚠ Placeholder — requires optimizer API support for real computation</span>
+      </template>
       <VChart :option="frontierOption" style="height: 380px" autoresize />
     </XmCard>
 
-    <!-- Holdings Table -->
-    <XmCard title="Holdings" subtitle="Color-coded: green = gain, red = loss">
-      <table class="xm-table">
+    <!-- Holdings Table — real positions from API -->
+    <XmCard v-if="!loading" title="Holdings" subtitle="Color-coded: green = gain, red = loss">
+      <table class="xm-table" v-if="holdings.length > 0">
         <thead>
           <tr>
             <th>Ticker</th>
-            <th>Name</th>
             <th class="text-right">Shares</th>
             <th class="text-right">Price</th>
             <th class="text-right">Value</th>
             <th class="text-right">Weight</th>
-            <th class="text-right">Daily Δ</th>
-            <th class="text-right">Δ %</th>
+            <th class="text-right">P&L</th>
+            <th class="text-right">P&L %</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="h in holdings" :key="h.ticker">
             <td class="font-mono font-semibold">{{ h.ticker }}</td>
-            <td class="text-xm-text-secondary text-xs">{{ h.name }}</td>
             <td class="text-right font-mono">{{ h.shares.toFixed(0) }}</td>
             <td class="text-right font-mono">${{ h.price.toFixed(2) }}</td>
             <td class="text-right font-mono font-semibold">${{ h.value.toLocaleString() }}</td>
             <td class="text-right font-mono">{{ (h.weight * 100).toFixed(1) }}%</td>
             <td class="text-right font-mono" :class="h.dailyChange >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
-              {{ h.dailyChange >= 0 ? '+' : '' }}${{ h.dailyChange.toFixed(2) }}
+              {{ h.dailyChange >= 0 ? '+' : '' }}${{ Math.abs(h.dailyChange).toFixed(2) }}
             </td>
             <td class="text-right font-mono">
               <span class="xm-badge" :class="h.dailyChangePct >= 0 ? 'xm-badge-success' : 'xm-badge-danger'">
@@ -155,6 +211,9 @@ const frontierOption = computed(() => ({
           </tr>
         </tbody>
       </table>
+      <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
+        No holdings data available. Ensure positions exist in your portfolio.
+      </div>
     </XmCard>
   </div>
 </template>

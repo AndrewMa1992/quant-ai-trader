@@ -6,12 +6,12 @@ Multi-Model Signal Ensemble (Advanced)
 """
 from typing import Dict, List
 import numpy as np
-from backend.config import model_config
+from configs.settings import settings
 
 
 class SignalEnsemble:
     def __init__(self):
-        self.weights = model_config.ENSEMBLE_WEIGHTS.copy()
+        self.weights = settings.model_ensemble_weights_dict.copy()
         self._performance: Dict[str, List[float]] = {
             "transformer": [], "rl_agent": [], "sentiment": [],
             "technical": [], "cross_stock": [], "macro": [],
@@ -163,7 +163,7 @@ class SignalEnsemble:
         # Kelly fraction: f = (p*b - q) / b where b=1.0 (symmetric payoff)
         kelly = max(0.0, (win_prob * 1.0 - (1.0 - win_prob)) / 1.0)
         # Half-Kelly for safety, capped at max position
-        return min(kelly * 0.5, model_config.RL_MAX_TRADE_PERCENT)
+        return min(kelly * 0.5, settings.MODEL_RL_MAX_TRADE_PERCENT)
 
     def get_status(self):
         return {

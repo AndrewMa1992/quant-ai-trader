@@ -11,6 +11,7 @@ import XmBadge from '@/components/ui/XmBadge.vue'
 import { usePortfolioStore } from '@/stores/usePortfolioStore'
 import { useRiskStore } from '@/stores/useRiskStore'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { tradeApi } from '@/api/tradeApi'
 
 use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -18,16 +19,60 @@ const portfolioStore = usePortfolioStore()
 const riskStore = useRiskStore()
 const execStore = useExecutionStore()
 
-const navHistory = ref<number[]>([100, 101, 103, 102, 105, 107, 106, 108, 110, 109])
+/** NAV history from real API data — populated on mount */
+const navHistory = ref<number[]>([])
 const signalHistory = ref<Array<{ time: string; buy: number; sell: number }>>([])
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+/** Rollback state */
+const rollbackLoading = ref(false)
+const toastMessage = ref('')
+const toastVisible = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+
+function showToast(message: string, duration = 3000) {
+  toastMessage.value = message
+  toastVisible.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastVisible.value = false
+  }, duration)
+}
+
+/** Whether rollback is available (non-trading hours) */
+const canRollback = computed(() => {
+  const us = execStore.marketStatus?.US
+  const hk = execStore.marketStatus?.HK
+  // Available when both markets are known and closed (or unknown = assume closed)
+  const usOpen = us?.is_open ?? false
+  const hkOpen = hk?.is_open ?? false
+  return !usOpen && !hkOpen
+})
+
+async function handleRollback() {
+  if (!confirm('确定要回滚到上一个稳定版本吗？')) return
+  rollbackLoading.value = true
+  try {
+    const result = await execStore.rollback()
+    if (result?.success) {
+      showToast('回滚成功！熔断器已重置。')
+    } else {
+      showToast('回滚失败，请查看日志。')
+    }
+  } catch {
+    showToast('回滚请求失败，请稍后重试。')
+  } finally {
+    rollbackLoading.value = false
+  }
+}
 
 onMounted(async () => {
   await Promise.all([
     portfolioStore.fetchPositions(),
     execStore.fetchAlerts(),
     execStore.fetchMarketStatus(),
+    fetchNavHistory(),
   ])
   refreshTimer = setInterval(() => {
     portfolioStore.fetchPositions()
@@ -37,6 +82,32 @@ onMounted(async () => {
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
+
+/** Fetch NAV history: primary source = /api/v2/analysis/portfolio-history, fallback = /api/trade/portfolio value_history */
+async function fetchNavHistory(): Promise<void> {
+  try {
+    const result = await tradeApi.getPortfolioHistory(90)
+    if (result.history && result.history.length > 0) {
+      navHistory.value = result.history.map((p) => p.nav)
+      return
+    }
+  } catch {
+    // Silent fallback — try the trade portfolio endpoint
+  }
+
+  // Fallback: use value_history from /api/trade/portfolio
+  try {
+    const portfolio = await tradeApi.getPortfolio()
+    if (portfolio.value_history && portfolio.value_history.length > 0) {
+      navHistory.value = portfolio.value_history.map((v) => v.value)
+      return
+    }
+  } catch {
+    // Ultimate fallback: empty chart
+  }
+
+  navHistory.value = []
+}
 
 // NAV chart option
 const navChartOption = computed(() => ({
@@ -89,15 +160,46 @@ const alertCount = computed(() => execStore.alerts.length)
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- KPI Cards Row -->
-    <AccountSummary
-      :nav="nav"
-      :daily-pnl="dailyPnl"
-      :daily-pnl-pct="dailyPnlPct"
-      :drawdown="drawdown"
-      :sharpe-ratio="sharpe"
-      :nav-history="navHistory"
-    />
+    <!-- Toast Notification -->
+    <Transition name="toast-slide">
+      <div
+        v-if="toastVisible"
+        class="fixed top-5 right-5 z-50 px-5 py-3 rounded-lg shadow-lg text-white text-sm font-medium"
+        style="background-color: #FF6700;"
+      >
+        {{ toastMessage }}
+      </div>
+    </Transition>
+
+    <!-- KPI Cards Row with Rollback -->
+    <div class="flex items-start gap-4">
+      <div class="flex-1">
+        <AccountSummary
+          :nav="nav"
+          :daily-pnl="dailyPnl"
+          :daily-pnl-pct="dailyPnlPct"
+          :drawdown="drawdown"
+          :sharpe-ratio="sharpe"
+          :nav-history="navHistory"
+        />
+      </div>
+      <button
+        :disabled="!canRollback || rollbackLoading"
+        :title="!canRollback ? '仅非交易时段可用' : '回滚到上一个稳定版本'"
+        class="flex-shrink-0 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-md active:scale-95"
+        :style="{ backgroundColor: canRollback ? '#FF6700' : '#CCCCCC' }"
+        @click="handleRollback"
+      >
+        <span v-if="rollbackLoading" class="inline-flex items-center gap-1.5">
+          <svg class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          回滚中...
+        </span>
+        <span v-else>一键回滚</span>
+      </button>
+    </div>
 
     <!-- Charts Row -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -172,3 +274,15 @@ const alertCount = computed(() => execStore.alerts.length)
     </XmCard>
   </div>
 </template>
+
+<style scoped>
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+</style>

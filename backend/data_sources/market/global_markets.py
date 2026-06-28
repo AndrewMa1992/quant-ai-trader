@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List
 from datetime import datetime, timedelta
-from backend.config import global_config
+from configs.settings import settings
 
 
 class GlobalMarketDataSource:
@@ -18,7 +18,7 @@ class GlobalMarketDataSource:
     """
     
     def __init__(self):
-        self.config = global_config
+        self.config = settings
         
         # 数据缓存
         self.cache = {}

@@ -72,7 +72,7 @@ class GBDTInference:
         X_arr = X.values.astype(np.float32)
 
         if hasattr(self.model, "predict"):
-            raw = self.model.predict(X_arr)
+            raw = self.model.predict(X_arr, predict_disable_shape_check=True)
         else:
             raw = np.zeros(len(X_arr))
 

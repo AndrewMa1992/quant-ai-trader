@@ -11,14 +11,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import numpy as np
 from loguru import logger
-from backend.config import model_config, CACHE_DIR
+from configs.settings import settings
 
 NEWS_CACHE_FILE = CACHE_DIR / "news_cache.json"
 NEWS_CACHE_TTL = 1800  # 30分钟缓存
 
 # 升级模型: ProsusAI/finbert → yiyanghkust/finbert-tone
 # finbert-tone 专为金融情感调优 (10-K报告 + 财报电话会议)
-PRIMARY_MODEL = model_config.SENTIMENT_MODEL  # 默认 yiyanghkust/finbert-tone
+PRIMARY_MODEL = settings.MODEL_SENTIMENT_MODEL  # 默认 yiyanghkust/finbert-tone
 FALLBACK_MODEL = "ProsusAI/finbert"  # 回退到原版
 
 

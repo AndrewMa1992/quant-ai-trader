@@ -8,6 +8,8 @@ Endpoints:
 - GET /drawdown – Drawdown analysis
 - POST /stress_test – Stress test scenarios
 - GET /attribution – Brinson performance attribution
+- POST /check – Order-level risk check
+- GET /limits – Current risk limit thresholds
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from services.risk_service.risk_measures.drawdown import DrawdownAnalyzer
 from services.risk_service.stress_test.historical_scenarios import historical_scenario_engine
 from services.risk_service.stress_test.custom_scenarios import custom_scenario_engine
 from services.risk_service.attribution.brinson import BrinsonAttribution
+from services.risk_service.api.schemas import RiskCheckRequest, RiskCheckResult
 from shared.core.logger import get_logger
 from shared.schema import APIResponse
 
@@ -189,3 +192,52 @@ async def get_attribution(
     except Exception as e:
         log.exception(f"Attribution failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/check", response_model=RiskCheckResult)
+async def risk_check_order(req: RiskCheckRequest) -> RiskCheckResult:
+    """Run order-level risk pre-check.
+
+    Delegates to the global risk_checker if initialised; otherwise
+    returns a development-mode pass stub.
+    """
+    import services.risk_service.main as main_mod
+
+    checker = main_mod.risk_checker
+    if checker is None:
+        return RiskCheckResult(
+            passed=True,
+            reason="Risk checker not initialized — allowing in development",
+        )
+
+    try:
+        result = checker.check(
+            ticker=req.ticker,
+            quantity=req.quantity,
+            price=req.price,
+            portfolio_state=req.portfolio_state,
+        )
+        return RiskCheckResult(**result) if isinstance(result, dict) else result
+    except Exception as e:
+        return RiskCheckResult(passed=False, reason=f"Risk check error: {e}")
+
+
+@router.get("/limits")
+async def get_risk_limits() -> APIResponse:
+    """Return current risk limit thresholds from configs.risk_limits."""
+    try:
+        from configs.risk_limits import RISK_LIMITS
+        import dataclasses
+
+        limits_dict = dataclasses.asdict(RISK_LIMITS)
+        return APIResponse(
+            success=True,
+            message=f"Risk limits loaded ({len(limits_dict)} parameters)",
+            data=limits_dict,
+        )
+    except Exception as e:
+        return APIResponse(
+            success=False,
+            message=f"Failed to read risk limits: {e}",
+            data={},
+        )

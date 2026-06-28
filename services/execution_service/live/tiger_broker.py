@@ -62,12 +62,27 @@ class TigerBroker:
             logger.error(f"Tiger broker init failed: {e}")
 
     def _load_key(self) -> str:
-        """Load RSA private key."""
+        """Load RSA private key, stripped of PEM headers for Tiger SDK.
+
+        Tiger SDK's ``load_private_key()`` expects raw base64 content, not PEM
+        format. If the key file has ``-----BEGIN …-----`` / ``-----END …-----``
+        wrapper lines, they are stripped before returning.
+
+        Returns:
+            Base64-encoded private key string, or empty string if file missing.
+        """
         import os
+
         path = os.path.expanduser(settings.TIGER_PRIVATE_KEY_PATH)
         if os.path.exists(path):
             with open(path) as f:
-                return f.read()
+                key = f.read().strip()
+            # Tiger SDK expects raw base64, not PEM format.
+            # Strip PEM header/footer lines if present.
+            if "BEGIN" in key:
+                lines = key.split("\n")
+                key = "".join(line.strip() for line in lines if not line.startswith("-----"))
+            return key
         return ""
 
     async def place_order(
@@ -191,38 +206,64 @@ class TigerBroker:
 
         try:
             positions = await asyncio.to_thread(self._client.get_positions)
-            return [
-                {
-                    "ticker": getattr(p, "symbol", ""),
+            result: list[dict[str, Any]] = []
+            for p in (positions or []):
+                # Tiger SDK: symbol lives under contract.symbol, not position.symbol
+                ticker = ""
+                if hasattr(p, "contract") and p.contract is not None:
+                    ticker = getattr(p.contract, "symbol", "") or ""
+                if not ticker:
+                    ticker = getattr(p, "symbol", "")
+                result.append({
+                    "ticker": ticker,
                     "quantity": getattr(p, "quantity", 0),
                     "avg_cost": getattr(p, "average_cost", 0.0),
                     "market_value": getattr(p, "market_value", 0.0),
-                }
-                for p in (positions or [])
-            ]
+                })
+            return result
         except Exception as e:
             logger.error(f"Failed to get positions: {e}")
             return []
 
     async def get_account_summary(self) -> dict[str, Any]:
-        """Get account summary.
+        """Get account summary via Tiger SDK ``get_assets()``.
+
+        The Tiger ``TradeClient.get_assets()`` method returns a list of
+        ``PortfolioAccount`` objects whose ``.summary`` attribute holds
+        ``Account`` fields like ``net_liquidation``, ``cash``, ``buying_power``.
+        Some summary fields may be ``inf`` (e.g. ``accrued_cash``); a safe-float
+        helper filters those out.
 
         Returns:
-            Account info dict.
+            Account info dict with keys: account, nav, cash, buying_power,
+            currency.
         """
         self._ensure_client()
         if not self._initialized:
             return {"account": self.account, "nav": 0, "cash": 0}
 
         try:
-            accounts = await asyncio.to_thread(self._client.get_accounts)
-            if accounts and len(accounts) > 0:
-                acc = accounts[0]
+            assets = await asyncio.to_thread(self._client.get_assets)
+            if assets and len(assets) > 0:
+                acc = assets[0]
+                summary = getattr(acc, "summary", acc)
+
+                def _safe_float(val: Any) -> float:
+                    """Convert value to float, returning 0.0 for inf/nan/errors."""
+                    try:
+                        v = float(val)
+                        if v == float("inf") or v == float("-inf") or v != v:  # inf or nan
+                            return 0.0
+                        return v
+                    except (TypeError, ValueError):
+                        return 0.0
+
                 return {
                     "account": self.account,
-                    "nav": getattr(acc, "net_liquidation", 0.0),
-                    "cash": getattr(acc, "cash", 0.0),
-                    "buying_power": getattr(acc, "buying_power", 0.0),
+                    "nav": _safe_float(getattr(summary, "net_liquidation", 0.0)),
+                    "cash": _safe_float(getattr(summary, "cash", 0.0)),
+                    "buying_power": _safe_float(getattr(summary, "buying_power", 0.0)),
+                    "currency": getattr(summary, "currency", "USD"),
                 }
         except Exception as e:
             logger.error(f"Failed to get account: {e}")

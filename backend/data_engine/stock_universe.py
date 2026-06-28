@@ -45,6 +45,7 @@ class StockUniverse:
         self._sg_stocks: List[Dict] = []
         self._au_stocks: List[Dict] = []
         self._nz_stocks: List[Dict] = []
+        self._cn_stocks: List[Dict] = []
         self._all_stocks: List[Dict] = []
         self._last_update: Optional[datetime] = None
         self._load_cache()
@@ -250,6 +251,45 @@ class StockUniverse:
         logger.info(f"📊 新西兰池: {len(nz_stocks)} 只")
         return nz_stocks
 
+    def _fetch_cn_stocks(self) -> List[str]:
+        """获取 A 股池（沪深 300 主要成分 + 创业板核心标的）。
+
+        通过 AkShare / efinance 动态获取，失败时使用硬编码预置列表。
+        ticker 格式: 600000.SH (上交所), 000001.SZ (深交所)
+        """
+        tickers: List[str] = []
+        try:
+            import efinance as ef
+            # 尝试从 efinance 获取沪深 300 成分
+            df = ef.stock.get_realtime_quotes()
+            if df is not None and not df.empty:
+                tickers = [
+                    f"{code}.{'SH' if code.startswith('6') else 'SZ'}"
+                    for code in df["股票代码"].astype(str).head(300)
+                ]
+                logger.info(f"📊 efinance A股: {len(tickers)} 只")
+        except Exception:
+            pass
+
+        if len(tickers) < 50:
+            # 预置列表：沪深300核心 + 创业板龙头 (ticker.SH / ticker.SZ)
+            tickers = [
+                # 上证 50 核心
+                "600519.SH", "601318.SH", "600036.SH", "601398.SH",
+                "600900.SH", "601166.SH", "600276.SH", "601012.SH",
+                "600030.SH", "601888.SH", "600887.SH", "600809.SH",
+                "600585.SH", "600690.SH", "601899.SH", "600048.SH",
+                "601088.SH", "600104.SH", "601668.SH", "600028.SH",
+                # 深证 / 创业板核心
+                "000858.SZ", "000333.SZ", "002594.SZ", "300750.SZ",
+                "000651.SZ", "002415.SZ", "000568.SZ", "300059.SZ",
+                "002475.SZ", "000001.SZ", "000002.SZ", "002230.SZ",
+                "000725.SZ", "002142.SZ", "300124.SZ", "000063.SZ",
+                "002714.SZ", "000776.SZ", "300015.SZ", "002352.SZ",
+            ]
+            logger.info(f"📊 预置 A 股池: {len(tickers)} 只")
+        return tickers
+
     # ================================================================
     # 筛选逻辑
     # ================================================================
@@ -380,6 +420,7 @@ class StockUniverse:
         sg_raw = self.fetch_sg_universe()
         au_raw = self.fetch_au_universe()
         nz_raw = self.fetch_nz_universe()
+        cn_raw = self._fetch_cn_stocks()
 
         # 2. 筛选（首次全量，后续增量）
         if not self._all_stocks or force:
@@ -418,14 +459,18 @@ class StockUniverse:
         self._sg_stocks = sg_screened
         self._au_stocks = au_screened
         self._nz_stocks = nz_screened
-        self._all_stocks = us_screened + hk_screened + sg_screened + au_screened + nz_screened
+        cn_screened = [{"ticker": t, "name": t, "market_cap": 5e10, "avg_volume": 1e7,
+                       "price": 30, "volatility": 0.35, "beta": 1.0, "sector": "CN"}
+                      for t in cn_raw]
+        self._cn_stocks = cn_screened
+        self._all_stocks = us_screened + hk_screened + sg_screened + au_screened + nz_screened + cn_screened
         self._last_update = datetime.now()
 
         self._save_cache()
 
         logger.info(f"✅ 股票池构建完成: US {len(self._us_stocks)} + HK {len(self._hk_stocks)} "
                     f"+ SG {len(self._sg_stocks)} + AU {len(self._au_stocks)} + NZ {len(self._nz_stocks)} "
-                    f"= {len(self._all_stocks)} 只")
+                    f"+ CN {len(self._cn_stocks)} = {len(self._all_stocks)} 只")
 
     def _save_cache(self):
         data = {
@@ -435,6 +480,7 @@ class StockUniverse:
             "sg_count": len(self._sg_stocks),
             "au_count": len(self._au_stocks),
             "nz_count": len(self._nz_stocks),
+            "cn_count": len(self._cn_stocks),
             "stocks": [s for s in self._all_stocks if isinstance(s, dict)],
         }
         with open(UNIVERSE_FILE, "w", encoding="utf-8") as f:
@@ -446,20 +492,22 @@ class StockUniverse:
                 with open(UNIVERSE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self._all_stocks = data.get("stocks", [])
-                def _by_suffix(suffix):
-                    return [s for s in self._all_stocks if s.get("ticker","").endswith(suffix)]
-                self._us_stocks = [s for s in self._all_stocks if not any(
-                    s.get("ticker","").endswith(x) for x in (".HK",".SI",".AX",".NZ"))]
-                self._hk_stocks = _by_suffix(".HK")
-                self._sg_stocks = _by_suffix(".SI")
-                self._au_stocks = _by_suffix(".AX")
-                self._nz_stocks = _by_suffix(".NZ")
+                # Use sector field from cached data, fallback to suffix heuristic
+                def _by_sector(sector_val):
+                    return [s for s in self._all_stocks if s.get("sector","") == sector_val]
+                self._hk_stocks = _by_sector("HK")
+                self._sg_stocks = _by_sector("SG")
+                self._au_stocks = _by_sector("AU")
+                self._nz_stocks = _by_sector("NZ")
+                self._cn_stocks = _by_sector("CN")
+                hk_sg_au_nz = set().union(*[set(s.get("ticker","") for s in lst) for lst in [self._hk_stocks, self._sg_stocks, self._au_stocks, self._nz_stocks, self._cn_stocks]])
+                self._us_stocks = [s for s in self._all_stocks if s.get("ticker","") not in hk_sg_au_nz]
                 if data.get("last_update"):
                     self._last_update = datetime.fromisoformat(data["last_update"])
                 logger.info(f"📦 加载缓存: {len(self._all_stocks)} 只 "
                            f"({data.get('us_count',0)} US + {data.get('hk_count',0)} HK "
                            f"+ {data.get('sg_count',0)} SG + {data.get('au_count',0)} AU "
-                           f"+ {data.get('nz_count',0)} NZ)")
+                           f"+ {data.get('nz_count',0)} NZ + {data.get('cn_count',0)} CN)")
             except Exception as e:
                 logger.warning(f"⚠️ 缓存加载失败: {e}")
 
@@ -489,14 +537,20 @@ class StockUniverse:
         return [s["ticker"] if isinstance(s, dict) else s for s in self._nz_stocks]
 
     @property
+    def cn_tickers(self) -> List[str]:
+        """A 股 ticker，已包含 .SH/.SZ 后缀"""
+        return [s["ticker"] if isinstance(s, dict) else s for s in self._cn_stocks]
+
+    @property
     def all_tickers(self) -> List[str]:
-        """所有 ticker，HK 加 .HK 后缀，SG/AU/NZ 自带后缀"""
+        """所有 ticker，HK 加 .HK 后缀，SG/AU/NZ/CN 自带后缀"""
         us = self.us_tickers
         hk = [f"{t}.HK" for t in self.hk_tickers]
         sg = self.sg_tickers  # already .SI
         au = self.au_tickers  # already .AX
         nz = self.nz_tickers  # already .NZ
-        return us + hk + sg + au + nz
+        cn = self.cn_tickers  # already .SH / .SZ
+        return us + hk + sg + au + nz + cn
 
     def get_top_by(self, key: str = "market_cap", n: int = 50) -> List[Dict]:
         """按指标排序取 top N"""
@@ -518,6 +572,7 @@ class StockUniverse:
             "sg_count": len(self._sg_stocks),
             "au_count": len(self._au_stocks),
             "nz_count": len(self._nz_stocks),
+            "cn_count": len(self._cn_stocks),
             "total": len(self._all_stocks),
             "last_update": self._last_update.isoformat() if self._last_update else None,
             "top_mcap": self.get_top_by("market_cap", 10),

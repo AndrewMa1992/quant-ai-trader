@@ -44,6 +44,7 @@ def create_dataset(
     engine = FactorEngine()
 
     frames: list[pd.DataFrame] = []
+    loaded_tickers: list[str] = []
     s_date = date.fromisoformat(start_date)
     e_date = date.fromisoformat(end_date)
 
@@ -65,11 +66,14 @@ def create_dataset(
                     engine.register_all()
                     factor_df = engine.compute_all(df)
                     frames.append(factor_df)
+                    loaded_tickers.append(ticker)
                 except Exception as e:
                     logger.warning(f"Factor computation failed for {ticker}: {e}")
                     frames.append(df)
+                    loaded_tickers.append(ticker)
             else:
                 frames.append(df)
+                loaded_tickers.append(ticker)
 
         except Exception as e:
             logger.error(f"Failed to load {ticker}: {e}")
@@ -79,7 +83,7 @@ def create_dataset(
         logger.error("No data loaded for any ticker")
         return None
 
-    combined = pd.concat(frames, keys=tickers, names=["ticker", "date"])
+    combined = pd.concat(frames, keys=loaded_tickers, names=["ticker", "date"])
 
     # Create target: forward return over horizon
     if "adj_close" in combined.columns:
@@ -97,9 +101,8 @@ def create_dataset(
     # Drop rows with NaN target
     combined = combined.dropna(subset=["target"])
 
-    # Remove infinite values
+    # Replace infinities (keep NaN for trainers to fill)
     combined = combined.replace([np.inf, -np.inf], np.nan)
-    combined = combined.dropna()
 
     logger.info(f"Dataset created: {len(combined)} rows, {len(combined.columns)} columns")
     return combined

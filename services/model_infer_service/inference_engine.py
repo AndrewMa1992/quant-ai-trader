@@ -48,6 +48,60 @@ class InferenceEngine:
 
         self._store = ParquetStore()
 
+        # Initialize FactorEngine once and reuse across predictions.
+        # Models were trained with 77 FactorEngine features; using the same
+        # engine here ensures feature-shape consistency at inference time.
+        self._factor_engine = None
+        try:
+            from services.factor_service.engine.factor_engine import FactorEngine
+
+            self._factor_engine = FactorEngine()
+            self._factor_engine.register_all()
+            logger.info(
+                f"InferenceEngine: FactorEngine ready with "
+                f"{len(self._factor_engine.factors)} factors"
+            )
+        except Exception as e:
+            logger.warning(f"InferenceEngine: FactorEngine not available: {e}")
+
+        # Load training-time feature column order (77 columns).
+        # Stored in feature_names.json — extracted from transformer checkpoint.
+        self._feature_names: list[str] = self._load_feature_names()
+
+    @staticmethod
+    def _load_feature_names() -> list[str]:
+        """Load the 77 training-time feature names in exact column order.
+
+        Models were trained with: close, high, low, open, volume,
+        ret_1d..ret_63d, F001..F311. The order is deterministic.
+        """
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).parent.parent.parent / "data" / "models" / "feature_names.json"
+        if path.exists():
+            try:
+                with open(path) as f:
+                    names = json.load(f)
+                if len(names) == 77:
+                    return names
+                logger.warning(f"feature_names.json has {len(names)} cols, expected 77")
+            except Exception:
+                pass
+
+        # Fallback: reconstruct from FactorEngine + OHLCV + returns
+        logger.warning("Reconstructing feature names from FactorEngine registry")
+        names = ["close", "high", "low", "open", "volume",
+                 "ret_1d", "ret_5d", "ret_21d", "ret_63d"]
+        # FactorEngine uses F001–F311 naming
+        from services.factor_service.engine.factor_engine import FactorEngine
+        fe = FactorEngine()
+        fe.register_all()
+        for name in fe.factors:
+            if name not in names:
+                names.append(name)
+        return names
+
     def load_models(self) -> dict[str, bool]:
         """Load all available production models.
 
@@ -96,8 +150,26 @@ class InferenceEngine:
             for name, model in self.models.items()
         }
 
+    def _compute_basic_returns(self, df: pd.DataFrame) -> None:
+        """Compute basic return features as a fallback when FactorEngine is unavailable.
+
+        Mutates ``df`` in place by adding ``ret_1d``, ``ret_5d``, ``ret_21d``,
+        and ``ret_63d`` columns.
+
+        Args:
+            df: OHLCV DataFrame (will be modified in place).
+        """
+        for p in [1, 5, 21, 63]:
+            col = "adj_close" if "adj_close" in df.columns else "close"
+            df[f"ret_{p}d"] = df[col].pct_change(p)
+
     def predict_single(self, ticker: str) -> dict[str, Any]:
         """Run all loaded models on a single ticker.
+
+        Uses ``FactorEngine`` to compute the same 77-feature set that was
+        used during training. If FactorEngine is unavailable, falls back to
+        basic return features (which will likely cause shape-mismatch errors
+        in trained models, but at least avoids hard crashes).
 
         Args:
             ticker: Stock ticker symbol.
@@ -115,15 +187,37 @@ class InferenceEngine:
                 "error": "Insufficient data",
             }
 
-        # Prepare features (use OHLCV + returns as minimal feature set)
-        df = df.tail(252).copy()
-        for p in [1, 5, 21, 63]:
-            col = "adj_close" if "adj_close" in df.columns else "close"
-            df[f"ret_{p}d"] = df[col].pct_change(p)
+        df = df.tail(504).copy()  # 2 years of daily data for sufficient context
 
-        # Drop date-level cols for prediction
-        feature_cols = [c for c in df.columns if c not in ("open", "high", "low", "close", "adj_close")]
-        X = df[feature_cols].fillna(0.0).tail(128)
+        # Compute full feature set using FactorEngine (same as training).
+        if self._factor_engine is not None:
+            try:
+                df = self._factor_engine.compute_all(df)
+            except Exception as e:
+                logger.warning(
+                    f"FactorEngine failed for {ticker}, using basic features: {e}"
+                )
+                self._compute_basic_returns(df)
+        else:
+            # Fallback: basic returns if FactorEngine not available
+            self._compute_basic_returns(df)
+
+        # Compute basic return columns (training included these alongside factors)
+        self._compute_basic_returns(df)
+
+        # Align columns to match exact training order (77 features).
+        # Training order: close, high, low, open, volume, ret_1d..ret_63d, F001..F311
+        train_cols = self._feature_names
+        aligned = pd.DataFrame(0.0, index=df.index, columns=train_cols)
+        for col in train_cols:
+            if col in df.columns:
+                aligned[col] = df[col].values
+            # If col not in df.columns, it stays 0.0 (missing feature)
+        missing = [c for c in train_cols if c not in df.columns]
+        if missing:
+            logger.debug(f"Missing features for {ticker} (padded=0): {missing[:5]}...")
+
+        X = aligned.fillna(0.0).tail(252)
 
         predictions: dict[str, Any] = {}
 
@@ -210,87 +304,131 @@ class InferenceEngine:
     def generate_signals_batch(
         self,
         input_data: pd.DataFrame | list[str],
+        top_n: int = 5,
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
     ) -> list[dict[str, Any]]:
-        """Generate signals for multiple tickers.
+        """Generate signals for multiple tickers, returning top-N by |signal|.
 
         Supports two input modes:
         1. pd.DataFrame with a 'ticker' column (from FactorEngine)
         2. list[str] of ticker symbols (direct lookup)
 
+        All tickers are inferred, then filtered by min_threshold + min_confidence,
+        sorted by |signal| descending, and the top_n are returned.
+
         Args:
             input_data: Factor DataFrame with 'ticker' column, or list of tickers.
+            top_n: Maximum number of signals to return.
+            min_threshold: Minimum absolute signal strength (floor).
+            min_confidence: Minimum confidence score.
 
         Returns:
-            List of signal dicts with signal, confidence, direction, components.
+            List of signal dicts (top-N by |signal|), each with
+            signal, confidence, direction, components.
         """
         if isinstance(input_data, pd.DataFrame):
-            return self._generate_signals_from_factor_df(input_data)
-        return self._generate_signals_from_tickers(input_data)
+            return self._generate_signals_from_factor_df(
+                input_data, min_threshold, min_confidence, top_n,
+            )
+        return self._generate_signals_from_tickers(
+            input_data, min_threshold, min_confidence, top_n,
+        )
 
     def _generate_signals_from_factor_df(
         self,
         factor_df: pd.DataFrame,
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
+        top_n: int = 5,
     ) -> list[dict[str, Any]]:
         """Generate signals from FactorEngine-computed factor DataFrame.
 
+        Full inference on all tickers, then Top-N selection by |signal| desc.
+
         Args:
             factor_df: DataFrame from FactorEngine, must have 'ticker' column.
+            min_threshold: Minimum absolute signal strength (floor).
+            min_confidence: Minimum confidence score.
+            top_n: Max signals to return.
 
         Returns:
-            [{"ticker": "AAPL", "signal": 0.6, "confidence": 0.8}, ...]
+            Top-N signal dicts sorted by |signal| descending.
         """
-        signals: list[dict[str, Any]] = []
+        all_signals: list[dict[str, Any]] = []
         tickers = (
             factor_df["ticker"].unique()
             if "ticker" in factor_df.columns
             else []
         )
 
-        for ticker in tickers[:50]:  # Max 50 per batch
+        for ticker in tickers:
             try:
-                ticker_data = (
-                    factor_df[factor_df["ticker"] == ticker]
-                    if "ticker" in factor_df.columns
-                    else factor_df
-                )
                 signal = self.generate_signal(str(ticker))
                 strength = float(signal.get("signal", 0) or 0)
                 confidence = float(signal.get("confidence", 0) or 0)
-                if abs(strength) >= 0.1:  # Minimum signal threshold
-                    signals.append({
+                if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    # Get latest price from ParquetStore for risk check
+                    price = 0.0
+                    try:
+                        df_t = self._store.read_daily(str(ticker))
+                        if df_t is not None and len(df_t) > 0:
+                            price = float(df_t["close"].iloc[-1])
+                    except Exception:
+                        pass
+                    all_signals.append({
                         "ticker": str(ticker),
                         "signal": round(strength, 4),
                         "confidence": round(confidence, 4),
                         "direction": signal.get("direction", "HOLD"),
+                        "price": price,
+                        "close": price,
                         "components": signal.get("components", {}),
                     })
             except Exception as e:
                 logger.warning(f"Inference failed for {ticker}: {e}")
 
-        return signals
+        # Top-N selection by |signal| descending
+        all_signals.sort(key=lambda s: abs(s["signal"]), reverse=True)
+        return all_signals[:top_n]
 
     def _generate_signals_from_tickers(
         self,
         tickers: list[str],
+        min_threshold: float = 0.05,
+        min_confidence: float = 0.3,
+        top_n: int = 5,
     ) -> list[dict[str, Any]]:
-        """Generate signals from a list of ticker symbols (legacy path)."""
-        signals: list[dict[str, Any]] = []
+        """Generate signals from a list of ticker symbols with Top-N selection."""
+        all_signals: list[dict[str, Any]] = []
         for ticker in tickers:
             try:
                 signal = self.generate_signal(ticker)
-                signals.append(signal)
+                strength = float(signal.get("signal", 0) or 0)
+                confidence = float(signal.get("confidence", 0) or 0)
+                if abs(strength) >= min_threshold and confidence >= min_confidence:
+                    price = 0.0
+                    try:
+                        df_t = self._store.read_daily(str(ticker))
+                        if df_t is not None and len(df_t) > 0:
+                            price = float(df_t["close"].iloc[-1])
+                    except Exception:
+                        pass
+                    all_signals.append({
+                        "ticker": str(ticker),
+                        "signal": round(strength, 4),
+                        "confidence": round(confidence, 4),
+                        "direction": signal.get("direction", "HOLD"),
+                        "price": price,
+                        "close": price,
+                        "components": signal.get("components", {}),
+                    })
             except Exception as e:
                 logger.error(f"Signal failed for {ticker}: {e}")
-                signals.append({
-                    "ticker": ticker,
-                    "signal": 0.0,
-                    "confidence": 0.0,
-                    "direction": "HOLD",
-                    "components": {},
-                    "error": str(e),
-                })
 
-        return signals
+        # Top-N selection by |signal| descending
+        all_signals.sort(key=lambda s: abs(s["signal"]), reverse=True)
+        return all_signals[:top_n]
 
     def update_weights(self, model_predictions: dict[str, np.ndarray],
                        realized_returns: np.ndarray) -> dict[str, float]:

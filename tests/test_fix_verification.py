@@ -97,7 +97,7 @@ class TestFuseSignalsDefense:
         from backend.trading_engine.executor import PaperExecutor
         from backend.trading_engine.portfolio import PortfolioManager
         from backend.trading_engine.risk_manager import RiskManager
-        from backend.config import trading_config
+        from configs.settings import settings
 
         transformer = MagicMock()
         transformer.is_ready.return_value = False
@@ -110,7 +110,7 @@ class TestFuseSignalsDefense:
 
         ensemble = MagicMock()
 
-        portfolio = PortfolioManager(trading_config.INITIAL_CAPITAL)
+        portfolio = PortfolioManager(settings.TRADING_INITIAL_CAPITAL)
         risk = RiskManager()
         executor = PaperExecutor(portfolio, risk)
 
@@ -248,9 +248,9 @@ class TestExecutorSignalAccess:
         from backend.trading_engine.executor import PaperExecutor
         from backend.trading_engine.portfolio import PortfolioManager
         from backend.trading_engine.risk_manager import RiskManager
-        from backend.config import trading_config
+        from configs.settings import settings
 
-        portfolio = PortfolioManager(trading_config.INITIAL_CAPITAL)
+        portfolio = PortfolioManager(settings.TRADING_INITIAL_CAPITAL)
         risk = RiskManager()
         executor = PaperExecutor(portfolio, risk)
 
@@ -277,9 +277,9 @@ class TestExecutorSignalAccess:
         from backend.trading_engine.executor import PaperExecutor
         from backend.trading_engine.portfolio import PortfolioManager
         from backend.trading_engine.risk_manager import RiskManager
-        from backend.config import trading_config
+        from configs.settings import settings
 
-        portfolio = PortfolioManager(trading_config.INITIAL_CAPITAL)
+        portfolio = PortfolioManager(settings.TRADING_INITIAL_CAPITAL)
         risk = RiskManager()
         executor = PaperExecutor(portfolio, risk)
 
@@ -469,6 +469,7 @@ class TestTigerSyncAllToDb:
             assert isinstance(result, dict)
             assert result["synced"] is False
 
+    @pytest.mark.skip(reason="auto_trader.py archived, replaced by trading_pipeline.py in v2.2")
     def test_auto_trader_calls_sync_all_to_db(self):
         """验证 auto_trader.py 在 run_cycle 中调用 tiger_client.sync_all_to_db()。"""
         proj_root = os.path.join(os.path.dirname(__file__), "..")

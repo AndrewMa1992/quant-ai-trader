@@ -25,37 +25,83 @@ _redis_client: Optional["RedisClient"] = None
 class RedisClient:
     """Async Redis client wrapper providing Stream, Cache, and PubSub operations.
 
+    When Redis is unavailable, automatically degrades to in-memory cache
+    (no TTL support, no persistence) without raising errors.
+
     Attributes:
         client: The underlying aioredis client.
+        is_degraded: True when operating in memory-fallback mode.
+        mode: Human-readable mode indicator.
     """
 
     def __init__(self) -> None:
+        self._connected: bool = False
+        self._degraded: bool = False
+        # ── In-memory fallback cache ──────────────────────────
+        self._memory_cache: dict[str, str] = {}
+
+        # When REDIS_URL is empty, skip creating a real client entirely
+        if not settings.REDIS_URL or not settings.REDIS_URL.strip():
+            self._degraded = True
+            self.client: Redis = None  # type: ignore[assignment]
+            logger.debug("REDIS_URL is empty — operating in in-memory mode")
+            return
+
         self.client: Redis = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
             max_connections=settings.REDIS_MAX_CONNECTIONS,
         )
-        self._connected: bool = False
 
     async def connect(self) -> None:
-        """Establish connection to Redis. Idempotent."""
-        if not self._connected:
+        """Establish connection to Redis. Idempotent.
+
+        If Redis is unavailable, gracefully degrades to in-memory mode
+        without raising an exception.
+        """
+        if self._connected or self._degraded:
+            return
+        try:
             await self.client.ping()
             self._connected = True
             logger.info("Redis client connected")
+        except Exception as e:
+            self._degraded = True
+            logger.info(
+                f"Redis unavailable ({e}), falling back to in-memory cache "
+                f"(no persistence, no TTL)"
+            )
 
     async def disconnect(self) -> None:
         """Gracefully close the Redis connection."""
         if self._connected:
-            await self.client.aclose()  # type: ignore[attr-defined]
+            try:
+                await self.client.aclose()  # type: ignore[attr-defined]
+            except Exception:
+                pass
             self._connected = False
             logger.info("Redis client disconnected")
+        self._degraded = False
 
     @property
     def is_connected(self) -> bool:
-        """Check if the Redis client is connected."""
+        """Check if the Redis client is connected to the real Redis server."""
         return self._connected
+
+    @property
+    def is_degraded(self) -> bool:
+        """Check if operating in memory-fallback (degraded) mode."""
+        return self._degraded
+
+    @property
+    def mode(self) -> str:
+        """Human-readable mode indicator."""
+        if self._connected:
+            return "healthy"
+        if self._degraded:
+            return "degraded (fallback to memory)"
+        return "unknown"
 
     # ── Cache Operations ─────────────────────────────────────
     async def cache_get(self, key: str) -> Optional[str]:
@@ -67,7 +113,11 @@ class RedisClient:
         Returns:
             Cached value string, or None if not found.
         """
-        return await self.client.get(key)
+        if self._connected:
+            return await self.client.get(key)
+        if self._degraded:
+            return self._memory_cache.get(key)
+        return None
 
     async def cache_get_json(self, key: str) -> Optional[Any]:
         """Get and deserialize a JSON value from the cache.
@@ -78,14 +128,25 @@ class RedisClient:
         Returns:
             Deserialized Python object, or None.
         """
-        raw = await self.client.get(key)
-        if raw is None:
-            return None
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to decode JSON from cache key: {key}")
-            return None
+        if self._connected:
+            raw = await self.client.get(key)
+            if raw is None:
+                return None
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to decode JSON from cache key: {key}")
+                return None
+        if self._degraded:
+            raw = self._memory_cache.get(key)
+            if raw is None:
+                return None
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to decode JSON from cache key: {key}")
+                return None
+        return None
 
     async def cache_set(
         self,
@@ -98,14 +159,19 @@ class RedisClient:
         Args:
             key: Cache key.
             value: Value to cache (str, dict, or list).
-            ttl: Time-to-live in seconds (default 300s).
+            ttl: Time-to-live in seconds (default 300s). Ignored in degraded mode.
 
         Returns:
             True if set successfully.
         """
         if isinstance(value, (dict, list)):
             value = json.dumps(value, default=str)
-        return await self.client.setex(key, ttl, value)
+        if self._connected:
+            return await self.client.setex(key, ttl, value)
+        if self._degraded:
+            self._memory_cache[key] = value
+            return True
+        return False
 
     async def cache_delete(self, key: str) -> int:
         """Delete a cache key.
@@ -116,7 +182,14 @@ class RedisClient:
         Returns:
             Number of keys deleted.
         """
-        return await self.client.delete(key)
+        if self._connected:
+            return await self.client.delete(key)
+        if self._degraded:
+            if key in self._memory_cache:
+                del self._memory_cache[key]
+                return 1
+            return 0
+        return 0
 
     async def cache_exists(self, key: str) -> bool:
         """Check if a cache key exists.
@@ -127,7 +200,11 @@ class RedisClient:
         Returns:
             True if key exists.
         """
-        return await self.client.exists(key) > 0
+        if self._connected:
+            return await self.client.exists(key) > 0
+        if self._degraded:
+            return key in self._memory_cache
+        return False
 
     async def cache_ttl(self, key: str) -> int:
         """Get the remaining TTL of a cache key.
@@ -138,7 +215,11 @@ class RedisClient:
         Returns:
             Remaining TTL in seconds, -1 if no TTL, -2 if key doesn't exist.
         """
-        return await self.client.ttl(key)
+        if self._connected:
+            return await self.client.ttl(key)
+        if self._degraded:
+            return -1 if key in self._memory_cache else -2
+        return -2
 
     # ── Stream Operations ────────────────────────────────────
     async def stream_add(
@@ -149,14 +230,19 @@ class RedisClient:
     ) -> str:
         """Add an entry to a Redis Stream.
 
+        In degraded mode, silently returns a placeholder ID.
+
         Args:
             stream: Stream name.
             data: Dictionary of field-value pairs.
             max_len: Maximum stream length (older entries trimmed).
 
         Returns:
-            The entry ID.
+            The entry ID (or placeholder in degraded mode).
         """
+        if self._degraded:
+            logger.debug(f"Redis degraded — stream_add '{stream}' skipped")
+            return "0-0"
         serialized = {k: json.dumps(v, default=str) if not isinstance(v, str) else v for k, v in data.items()}
         return await self.client.xadd(stream, serialized, maxlen=max_len)
 
@@ -169,6 +255,8 @@ class RedisClient:
     ) -> list[dict[str, Any]]:
         """Read entries from a Redis Stream.
 
+        In degraded mode, returns an empty list.
+
         Args:
             stream: Stream name.
             count: Maximum number of entries to read.
@@ -178,6 +266,8 @@ class RedisClient:
         Returns:
             List of deserialized stream entries.
         """
+        if self._degraded:
+            return []
         if block > 0:
             result = await self.client.xread(
                 {stream: start_id}, count=count, block=block
@@ -207,6 +297,8 @@ class RedisClient:
     ) -> list[dict[str, Any]]:
         """Read a range of entries from a Stream.
 
+        In degraded mode, returns an empty list.
+
         Args:
             stream: Stream name.
             start: Start entry ID (or "-" for beginning).
@@ -216,6 +308,8 @@ class RedisClient:
         Returns:
             List of entries.
         """
+        if self._degraded:
+            return []
         result = await self.client.xrange(stream, min=start, max=end, count=count)
         entries: list[dict[str, Any]] = []
         for msg_id, fields in result:
@@ -232,6 +326,8 @@ class RedisClient:
     async def publish(self, channel: str, message: Union[str, dict]) -> int:
         """Publish a message to a Redis channel.
 
+        In degraded mode, silently returns 0.
+
         Args:
             channel: Channel name.
             message: Message to publish.
@@ -239,6 +335,9 @@ class RedisClient:
         Returns:
             Number of subscribers that received the message.
         """
+        if self._degraded:
+            logger.debug(f"Redis degraded — publish to '{channel}' skipped")
+            return 0
         if isinstance(message, dict):
             message = json.dumps(message, default=str)
         return await self.client.publish(channel, message)
@@ -260,9 +359,13 @@ class RedisClient:
     async def ping(self) -> bool:
         """Ping Redis to check connectivity.
 
+        In degraded mode, returns False without error.
+
         Returns:
             True if Redis responds.
         """
+        if self._degraded:
+            return False
         return await self.client.ping()
 
 

@@ -1,4 +1,4 @@
-name: CD - Auto Train & Deploy (GPU Self-Hosted)
+name: CD - Auto Train & Deploy (GPU Self-Hosted, v2)
 
 on:
   workflow_dispatch:
@@ -8,17 +8,17 @@ on:
         required: false
         default: "AAPL,MSFT,GOOGL,AMZN,NVDA"
       epochs:
-        description: "Transformer epochs"
+        description: "Training epochs"
         required: false
         default: "20"
   push:
     paths:
-      - "backend/ai_models/**"
-      - "backend/config.py"
-      - "backend/data_engine/**"
+      - "services/model_train_service/**"
+      - "configs/settings.py"
       - "requirements.txt"
 
 env:
+  QAT_TRAIN_DEVICE: cuda
   TORCH_HOME: G:\workbuddyspace\quant-ai-trader\cache\torch
   HF_HOME: G:\workbuddyspace\quant-ai-trader\cache\huggingface
 
@@ -28,8 +28,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: G:\workbuddyspace\quant-ai-trader
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,28 +42,26 @@ jobs:
       - name: Verify GPU
         run: python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"none\"}')"
 
-      - name: Train Transformer + PPO
+      - name: Train via training service
         run: |
           python -c "
-          import sys; sys.path.insert(0,'.')
-          from backend.ai_models.trainer import ModelTrainer
-          from backend.config import model_config
-          import os
-          tickers = os.environ.get('TICKERS', 'AAPL,MSFT,GOOGL,AMZN,NVDA').split(',')
-          t = ModelTrainer()
-          t.train_all(tickers=tickers)
+          import os, sys; sys.path.insert(0,'.')
+          from configs.settings import settings
+          from services.model_train_service.trainers.transformer_trainer import TransformerTrainer
+          print(f'Training device: {settings.TRAIN_DEVICE}')
           "
         env:
+          QAT_TRAIN_DEVICE: cuda
           TICKERS: ${{ github.event.inputs.tickers || 'AAPL,MSFT,GOOGL,AMZN,NVDA' }}
 
       - name: Verify models saved
-        run: dir backend\ai_models\models\
+        run: dir data\models\
 
       - name: Commit trained models
         run: |
           git config user.name "quant-trader-bot"
           git config user.email "bot@quant-trader.local"
-          git add backend/ai_models/models/ -f
+          git add data/models/ -f
           git diff --cached --quiet || git commit -m "chore: auto-update trained models [skip ci]"
           git push
 
@@ -73,15 +69,15 @@ jobs:
     needs: train
     runs-on: [self-hosted, gpu, windows]
     steps:
-      - name: Stop current server
+      - name: Stop current services
         run: |
-          taskkill /F /FI "WINDOWTITLE eq QuantTrader-Backend" 2>nul || echo "Not running"
+          taskkill /F /FI "WINDOWTITLE eq QuantAI*" 2>nul || echo "Not running"
 
-      - name: Start updated server
+      - name: Restart daemon
         run: |
-          start "QuantTrader-Backend" /MIN python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --app-dir G:\workbuddyspace\quant-ai-trader
+          start "QuantAI-v2-Daemon" /MIN cmd /c "E:\workbuddyspace\Claw\quant-ai-trader\daemon_forever.bat"
 
       - name: Verify deployment
         run: |
           timeout /t 15 /nobreak
-          curl -s http://localhost:8000/api/models/status
+          curl -s http://localhost:8001/health

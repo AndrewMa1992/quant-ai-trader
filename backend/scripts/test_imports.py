@@ -12,8 +12,8 @@ import numpy as np; print(f"NumPy {np.__version__}")
 import pandas as pd; print(f"Pandas {pd.__version__}")
 
 # Config
-from backend.config import data_config, trading_config
-print(f"Config: {len(data_config.TICKERS)} tickers, ${trading_config.INITIAL_CAPITAL} capital")
+from configs.settings import settings
+print(f"Config: {len(settings.DATA_ALL_TICKERS)} tickers, ${settings.TRADING_INITIAL_CAPITAL} capital")
 
 # Data Engine
 print("Data Engine OK")

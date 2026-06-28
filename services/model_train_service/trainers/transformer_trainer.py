@@ -14,6 +14,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from loguru import logger
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from services.model_train_service.config import train_config
@@ -122,6 +123,7 @@ class TransformerTrainer(TrainerBase):
         seq_len: int = 64,
         forecast_horizon: int = 1,
         device: str | None = None,
+        lr: float | None = None,
     ) -> None:
         super().__init__(device=device or train_config.DEVICE)
         self.d_model = d_model or (
@@ -134,6 +136,7 @@ class TransformerTrainer(TrainerBase):
         self.seq_len = seq_len
         self.forecast_horizon = forecast_horizon
         self._grad_clip = train_config.GRADIENT_CLIP_VAL
+        self._lr = lr if lr is not None else 1e-4  # Lower default for Transformer stability
 
     def fit(
         self,
@@ -164,12 +167,19 @@ class TransformerTrainer(TrainerBase):
 
         epochs = kwargs.get("epochs", train_config.EPOCHS)
         batch_size = kwargs.get("batch_size", train_config.BATCH_SIZE)
-        lr = kwargs.get("lr", train_config.LEARNING_RATE)
+        lr = kwargs.get("lr", self._lr)
+
+        # ---- Feature normalization (fix NaN/inf) ----
+        self._feature_scaler = StandardScaler()
+        X_scaled = self._feature_scaler.fit_transform(X.values.astype(np.float64))
+        X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=1e4, neginf=-1e4)
 
         # Build sequences
-        X_train, y_train = self._build_sequences(X.values, y.values)
+        X_train, y_train = self._build_sequences(X_scaled, y.values)
         if X_valid is not None and y_valid is not None:
-            X_val, y_val = self._build_sequences(X_valid.values, y_valid.values)
+            X_v_scaled = self._feature_scaler.transform(X_valid.values.astype(np.float64))
+            X_v_scaled = np.nan_to_num(X_v_scaled, nan=0.0, posinf=1e4, neginf=-1e4)
+            X_val, y_val = self._build_sequences(X_v_scaled, y_valid.values)
         else:
             split = int(len(X_train) * 0.8)
             X_val, y_val = X_train[split:], y_train[split:]
@@ -225,6 +235,13 @@ class TransformerTrainer(TrainerBase):
 
             avg_train_loss = epoch_loss / len(train_loader)
             train_losses.append(avg_train_loss)
+
+            # NaN guard: skip epoch if loss is NaN/Inf
+            if math.isnan(avg_train_loss) or math.isinf(avg_train_loss):
+                logger.warning(
+                    f"Epoch {epoch+1}: NaN/Inf train_loss={avg_train_loss}, skipping update"
+                )
+                continue
 
             # Validation
             self.model.eval()
@@ -296,7 +313,12 @@ class TransformerTrainer(TrainerBase):
         if self.model is None:
             raise RuntimeError("Model not trained")
 
-        X_arr = X.values.astype(np.float32)
+        # Apply same normalization as training
+        if hasattr(self, '_feature_scaler') and self._feature_scaler is not None:
+            X_arr = self._feature_scaler.transform(X.values.astype(np.float64))
+            X_arr = np.nan_to_num(X_arr, nan=0.0, posinf=1e4, neginf=-1e4).astype(np.float32)
+        else:
+            X_arr = X.values.astype(np.float32)
         X_seqs, _ = self._build_sequences(X_arr, np.zeros(len(X_arr)))
 
         self.model.eval()
@@ -324,6 +346,7 @@ class TransformerTrainer(TrainerBase):
                 "seq_len": self.seq_len,
             },
             "feature_names": self._feature_names,
+            "scaler": self._feature_scaler if hasattr(self, '_feature_scaler') else None,
         }, path)
         logger.info(f"Transformer model saved to {path}")
 
@@ -332,6 +355,7 @@ class TransformerTrainer(TrainerBase):
         data = torch.load(path, map_location=self.device)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
+        self._feature_scaler = data.get("scaler", None)
 
         self.model = PatchTSTRegressor(
             n_features=config["n_features"],

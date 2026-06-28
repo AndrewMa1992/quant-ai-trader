@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from backend.config import data_config
+from configs.settings import settings
 from backend.api.models.signal import (
     RunAnalysisRequest, RunAnalysisResponse,
     SignalCard,
@@ -89,7 +89,7 @@ async def run_analysis(req: RunAnalysisRequest = None):
     from backend.data_engine import MarketDataEngine, DataPipeline
 
     # 确定需要分析的 tickers
-    tickers = req.tickers if req and req.tickers else data_config.ALL_TICKERS
+    tickers = req.tickers if req and req.tickers else settings.DATA_ALL_TICKERS
 
     # 获取市场数据
     engine = MarketDataEngine()
