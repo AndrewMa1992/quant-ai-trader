@@ -31,13 +31,13 @@ const option = computed(() => {
     {
       type: 'line' as const, name: 'Efficient Frontier',
       data: frontier.value.map((p) => [+p.risk.toFixed(4), +p.return_.toFixed(4)]),
-      smooth: true, lineStyle: { color: '#22c55e', width: 2 },
+      smooth: true, lineStyle: { color: '#FF6700', width: 2 },
       symbol: 'none' as const, z: 1,
     },
     {
       type: 'scatter' as const, name: 'Assets',
       data: individual.value.map((p) => [+p.risk.toFixed(4), +p.return_.toFixed(4)]),
-      symbolSize: 8, itemStyle: { color: '#3b82f6' }, z: 2,
+      symbolSize: 8, itemStyle: { color: '#666666' }, z: 2,
     },
   ]
 
@@ -45,7 +45,7 @@ const option = computed(() => {
     series.push({
       type: 'scatter' as const, name: 'Current Portfolio',
       data: [[props.current.risk, props.current.return_]],
-      symbolSize: 16, itemStyle: { color: '#22d3ee', borderColor: '#fff', borderWidth: 2 }, z: 3,
+      symbolSize: 16, itemStyle: { color: '#16A34A', borderColor: '#fff', borderWidth: 2 }, z: 3,
     })
   }
 
