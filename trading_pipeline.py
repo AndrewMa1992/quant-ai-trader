@@ -171,10 +171,15 @@ class TradingPipeline:
         else:
             logger.warning("  ⚠️ Tiger Broker 未连接 — Paper Trading 模式")
 
-        # ── 执行器 ───────────────────────────────────────────
+        # ── 执行器（模拟账号默认 paper；仅显式 live 且非 sim 才实盘）──
         logger.info("初始化 TigerExecutor...")
+        from shared.execution_mode import get_execution_mode, is_simulation_mode
+
+        exec_mode = get_execution_mode()
+        if is_simulation_mode():
+            logger.info("  🔒 模拟账号模式已锁定 — EXECUTION_MODE=paper")
         self.executor: TigerExecutor = TigerExecutor(
-            mode="live" if (self.tiger_ready and self.config.EXECUTION_MODE == "live") else "paper",
+            mode=exec_mode if (self.tiger_ready and exec_mode == "live") else "paper",
             portfolio=self.portfolio,
             risk=self.risk_manager,
             tiger_bridge=self.tiger,

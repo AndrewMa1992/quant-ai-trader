@@ -259,9 +259,13 @@ class RiskManager:
 
         live_mode: bool = False
         try:
-            live_mode = tiger_bridge.is_connected()
+            from shared.execution_mode import can_place_live_order
+
+            live_mode = can_place_live_order(tiger_bridge)
         except Exception:
-            pass
+            live_mode = False
+        if not live_mode:
+            logger.info("📭 模拟/paper 模式平仓 — 仅更新本地持仓，不下实盘单")
 
         for ticker, shares in list(self.positions.items()):
             if shares <= 0:
@@ -605,9 +609,11 @@ class RiskManager:
                 f"🔧 修复空头: {ticker} | 本地 {shares:.2f} 股 → 买入 {buy_qty:.2f} 股"
             )
 
-            # Attempt live fix via Tiger.
+            # Attempt live fix via Tiger only in live mode.
             try:
-                if tiger_bridge.is_connected():
+                from shared.execution_mode import can_place_live_order
+
+                if can_place_live_order(tiger_bridge):
                     tiger_bridge.place_order(
                         ticker=ticker,
                         action="BUY",
@@ -615,6 +621,8 @@ class RiskManager:
                         order_type="MKT",
                     )
                     logger.info(f"  ✅ Tiger实盘修复 {ticker}: BUY {int(buy_qty)}")
+                else:
+                    logger.info(f"  📝 Paper修复 {ticker}: BUY {int(buy_qty)} (本地)")
             except Exception as exc:
                 logger.error(f"  ❌ Tiger修复失败 {ticker}: {exc}")
 

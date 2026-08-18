@@ -74,7 +74,7 @@ MODEL_FILES: dict[str, str] = {
     "transformer": "transformer_v2.pt",
     "tcn": "tcn_v2.pt",
     "tft": "tft_v2.pt",
-    "rl": "rl_v2.joblib",
+    "rl": "rl_v2.zip",
 }
 
 
@@ -90,9 +90,11 @@ def _load_data() -> tuple[pd.DataFrame, pd.Series]:
     if df is None or len(df) < 200:
         # Fallback to raw parquet
         logger.warning("DataLoader returned sparse data, loading raw parquet...")
-        parquet_files = sorted(DATA_DIR.glob("*.parquet"))
+        parquet_files = sorted((DATA_DIR / "daily").glob("*.parquet"))
         if not parquet_files:
-            raise RuntimeError("No parquet data found")
+            parquet_files = sorted(DATA_DIR.glob("*.parquet"))
+        if not parquet_files:
+            raise RuntimeError("No parquet data found under data/daily or data/")
         dfs = [pd.read_parquet(pf) for pf in parquet_files[-5:]]
         df = pd.concat(dfs, ignore_index=True)
         df = df.select_dtypes(include=[np.number])
@@ -162,7 +164,8 @@ def _train_rl(X: pd.DataFrame, y: pd.Series, cfg: dict, save_path: str) -> dict:
     y_np = y.values.astype(np.float32)
     metrics = trainer.fit(
         pd.DataFrame(X_np, columns=X.columns), pd.Series(y_np),
-        n_steps=cfg["n_steps"], total_timesteps=cfg["total_timesteps"],
+        n_steps=cfg["n_steps"],
+        rl_timesteps=cfg["total_timesteps"],
         lr=cfg.get("lr", 3e-4),
     )
     if metrics.get("mean_reward", -999) > QUALITY_CHECK["rl"]["min_mean_reward"]:

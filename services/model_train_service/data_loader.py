@@ -42,15 +42,55 @@ def create_dataset(
     store = ParquetStore()
     cleanser = DataCleanser()
     engine = FactorEngine()
+    if include_factors:
+        try:
+            engine.register_all()
+        except Exception as e:
+            logger.warning(f"Factor registration failed: {e}")
 
     frames: list[pd.DataFrame] = []
     loaded_tickers: list[str] = []
     s_date = date.fromisoformat(start_date)
     e_date = date.fromisoformat(end_date)
 
+    def _load_ticker_frame(ticker: str) -> Optional[pd.DataFrame]:
+        df = store.read_daily(ticker, s_date, e_date)
+        if df is not None and len(df) >= 100:
+            return df
+        # Fallback: raw script downloads under data/daily/{ticker}.parquet
+        from pathlib import Path
+
+        for candidate in (
+            Path("data/daily") / f"{ticker}.parquet",
+            Path("data") / f"{ticker}.parquet",
+            Path("cache/market_data/daily") / f"{ticker}.parquet",
+        ):
+            if candidate.exists():
+                raw = pd.read_parquet(candidate)
+                if raw is None or len(raw) < 100:
+                    continue
+                raw = raw.copy()
+                raw.columns = [str(c).lower() for c in raw.columns]
+                if not isinstance(raw.index, pd.DatetimeIndex):
+                    if "date" in raw.columns:
+                        raw["date"] = pd.to_datetime(raw["date"])
+                        raw = raw.set_index("date")
+                    elif "datetime" in raw.columns:
+                        raw["datetime"] = pd.to_datetime(raw["datetime"])
+                        raw = raw.set_index("datetime")
+                if getattr(raw.index, "tz", None) is not None:
+                    raw.index = raw.index.tz_localize(None)
+                if s_date:
+                    raw = raw[raw.index >= pd.Timestamp(s_date)]
+                if e_date:
+                    raw = raw[raw.index <= pd.Timestamp(e_date)]
+                if len(raw) >= 100:
+                    return raw.sort_index()
+        return None
+
     for ticker in tickers:
         try:
-            df = store.read_daily(ticker, s_date, e_date)
+            df = _load_ticker_frame(ticker)
             if df is None or len(df) < 100:
                 logger.warning(f"Skipping {ticker}: insufficient data ({len(df) if df is not None else 0})")
                 continue
@@ -63,7 +103,6 @@ def create_dataset(
             # Add factors
             if include_factors:
                 try:
-                    engine.register_all()
                     factor_df = engine.compute_all(df)
                     frames.append(factor_df)
                     loaded_tickers.append(ticker)
