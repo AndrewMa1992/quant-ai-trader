@@ -30,6 +30,7 @@ from shared.core.logger import setup_logger
 from shared.database.engine import close_engine, get_engine
 from shared.redis_client import close_redis, get_redis
 from shared.schema import HealthResponse
+from shared.service_discovery import SERVICE_PORT_MAP, service_base_url, service_health_url
 
 # Application startup time for uptime tracking
 _START_TIME: float = time.time()
@@ -179,9 +180,7 @@ async def health_check(request: Request) -> HealthResponse:
         """Probe a single downstream service via HTTP GET /health."""
         client: httpx.AsyncClient = request.app.state.http_client
         try:
-            resp = await client.get(
-                f"http://127.0.0.1:{port}/health", timeout=2.0
-            )
+            resp = await client.get(service_health_url(name), timeout=2.0)
             if resp.status_code == 200:
                 return (name, "healthy")
             return (name, f"degraded (HTTP {resp.status_code})")
@@ -244,17 +243,9 @@ async def root() -> dict:
 async def api_status() -> dict:
     """API v2 status with live service health probes.
 
-    Probes each microservice via TCP connect on the configured port
+    Probes each microservice via TCP connect on the configured host/port
     with a 2-second timeout per service.
     """
-    SERVICE_PORTS: dict[str, int] = {
-        "data": 8011,
-        "factor": 8012,
-        "model_train": 8013,
-        "model_infer": 8014,
-        "risk": 8015,
-        "execution": 8016,
-    }
 
     def _probe_tcp(host: str, port: int, timeout: float = 2.0) -> str:
         """Probe a TCP port and return status string."""
@@ -269,12 +260,14 @@ async def api_status() -> dict:
         except Exception:
             return "error"
 
+    from shared.service_discovery import service_host
+
     loop = asyncio.get_running_loop()
     services: dict[str, dict[str, object]] = {}
-    for name, port in SERVICE_PORTS.items():
-        # Run blocking TCP probe in thread to avoid blocking the event loop
-        status = await loop.run_in_executor(None, _probe_tcp, "127.0.0.1", port, 2.0)
-        services[name] = {"port": port, "status": status}
+    for name, port in SERVICE_PORT_MAP.items():
+        host = service_host(name)
+        status = await loop.run_in_executor(None, _probe_tcp, host, port, 2.0)
+        services[name] = {"host": host, "port": port, "status": status}
 
     all_healthy = all(s["status"] == "healthy" for s in services.values())
 
@@ -363,14 +356,6 @@ async def push_tiger_snapshot(data: dict) -> dict:
 # ── Microservice Reverse Proxy ──────────────────────────────
 # /api/v2/status (above) is registered first so it takes
 # precedence over the catch-all proxy route below.
-SERVICE_PORT_MAP: dict[str, int] = {
-    "data": 8011,
-    "factor": 8012,
-    "model_train": 8013,
-    "model_infer": 8014,
-    "risk": 8015,
-    "execution": 8016,
-}
 
 # User-facing route name → canonical service name aliases
 SERVICE_ALIASES: dict[str, str] = {
@@ -399,7 +384,7 @@ async def proxy_to_service(service: str, path: str, request: Request) -> Respons
     # Resolve alias to canonical service name for the target URL
     canonical = SERVICE_ALIASES.get(service, service)
     port = SERVICE_PORT_MAP[canonical]
-    target_url = f"http://127.0.0.1:{port}/api/v2/{canonical}/{path}"
+    target_url = f"{service_base_url(canonical)}/api/v2/{canonical}/{path}"
 
     if request.query_params:
         target_url += f"?{request.query_params}"

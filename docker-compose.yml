@@ -1,13 +1,39 @@
 # ============================================================
-# Quant AI Trader v2 – Docker Compose (Single-Machine Deploy)
-# Nine containers: postgres, redis, api-gateway, 6 services, mlflow
+# Quant AI Trader v2 – One-Click Paper Deploy
+# Usage: ./scripts/docker_deploy.sh
 # ============================================================
-version: "3.9"
 
-x-common-service: &common-service
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile.app
   restart: unless-stopped
   env_file:
     - .env
+  environment: &app-env
+    QAT_USE_DOCKER: "true"
+    QAT_EXECUTION_MODE: paper
+    QAT_TRADING_SIMULATION_MODE: "true"
+    QAT_TRAIN_DEVICE: cpu
+    QAT_POSTGRES_HOST: postgres
+    QAT_POSTGRES_PORT: "5432"
+    QAT_POSTGRES_URL: postgresql+asyncpg://qat:${QAT_POSTGRES_PASSWORD:-qat_secret}@postgres:5432/${QAT_POSTGRES_DB:-quant_trader}
+    QAT_POSTGRES_SYNC_URL: postgresql+psycopg2://qat:${QAT_POSTGRES_PASSWORD:-qat_secret}@postgres:5432/${QAT_POSTGRES_DB:-quant_trader}
+    QAT_REDIS_HOST: redis
+    QAT_REDIS_PORT: "6379"
+    QAT_REDIS_URL: redis://:${QAT_REDIS_PASSWORD:-redis_secret}@redis:6379/0
+    QAT_REDIS_PASSWORD: ${QAT_REDIS_PASSWORD:-redis_secret}
+    QAT_MLFLOW_TRACKING_URI: http://mlflow:5000
+    QAT_SVC_DATA_HOST: data-service
+    QAT_SVC_FACTOR_HOST: factor-service
+    QAT_SVC_MODEL_TRAIN_HOST: model-train
+    QAT_SVC_MODEL_INFER_HOST: model-infer
+    QAT_SVC_RISK_HOST: risk-service
+    QAT_SVC_EXEC_HOST: execution-service
+  volumes:
+    - ./data:/app/data
+    - ./cache:/app/cache
+    - ./logs:/app/logs
   networks:
     - qat-network
   depends_on:
@@ -17,7 +43,6 @@ x-common-service: &common-service
       condition: service_healthy
 
 services:
-  # ── Infrastructure ──────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: qat-postgres
@@ -34,7 +59,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${QAT_POSTGRES_USER:-qat} -d ${QAT_POSTGRES_DB:-quant_trader}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
     networks:
       - qat-network
 
@@ -48,121 +73,153 @@ services:
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=${QAT_REDIS_PASSWORD:-redis_secret} redis-cli ping | grep PONG"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
     networks:
       - qat-network
 
-  # ── API Gateway ─────────────────────────────────────────────
   api-gateway:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    <<: *app-common
     container_name: qat-api-gateway
+    command: uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001 --log-level info
     ports:
       - "${QAT_API_PORT:-8001}:8001"
-    volumes:
-      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 25s
+      retries: 8
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      data-service:
+        condition: service_started
+      factor-service:
+        condition: service_started
+      risk-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
 
-  # ── Microservices ──────────────────────────────────────────
   data-service:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.data
+    <<: *app-common
     container_name: qat-data-service
+    command: uvicorn services.data_service.main:app --host 0.0.0.0 --port 8011 --log-level info
     ports:
       - "${QAT_DATA_PORT:-8011}:8011"
-    volumes:
-      - ./cache:/app/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 8
 
   factor-service:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.factor
+    <<: *app-common
     container_name: qat-factor-service
+    command: uvicorn services.factor_service.main:app --host 0.0.0.0 --port 8012 --log-level info
     ports:
       - "${QAT_FACTOR_PORT:-8012}:8012"
-    volumes:
-      - ./cache:/app/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 8
 
   model-train:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.model-train
+    <<: *app-common
     container_name: qat-model-train
+    command: uvicorn services.model_train_service.main:app --host 0.0.0.0 --port 8013 --log-level info
     ports:
       - "${QAT_MODEL_TRAIN_PORT:-8013}:8013"
-    volumes:
-      - ./cache:/app/cache
-      - mlruns:/app/mlruns
     environment:
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      <<: *app-env
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - mlruns:/app/mlruns
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 8
 
   model-infer:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.model-infer
+    <<: *app-common
     container_name: qat-model-infer
+    command: uvicorn services.model_infer_service.main:app --host 0.0.0.0 --port 8014 --log-level info
     ports:
       - "${QAT_MODEL_INFER_PORT:-8014}:8014"
     volumes:
+      - ./data:/app/data
       - ./cache:/app/cache
+      - ./logs:/app/logs
       - mlruns:/app/mlruns
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 8
 
   risk-service:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.risk
+    <<: *app-common
     container_name: qat-risk-service
+    command: uvicorn services.risk_service.main:app --host 0.0.0.0 --port 8015 --log-level info
     ports:
       - "${QAT_RISK_PORT:-8015}:8015"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 8
 
   execution-service:
-    <<: *common-service
-    build:
-      context: .
-      dockerfile: Dockerfile.execution
+    <<: *app-common
     container_name: qat-execution-service
+    command: uvicorn services.execution_service.main:app --host 0.0.0.0 --port 8016 --log-level info
     ports:
       - "${QAT_EXEC_PORT:-8016}:8016"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8016/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 8
 
-  # ── Trading Pipeline (optional — scale=0 by default) ──────
-  trading-pipeline:
+  frontend:
     build:
       context: .
-      dockerfile: Dockerfile.api
-    container_name: qat-trading-pipeline
-    command: python trading_pipeline.py --once
-    restart: "no"
-    env_file:
-      - .env
+      dockerfile: Dockerfile.frontend
+    container_name: qat-frontend
+    restart: unless-stopped
+    ports:
+      - "${QAT_FRONTEND_PORT:-5180}:80"
+    depends_on:
+      - api-gateway
     networks:
       - qat-network
-    depends_on:
-      api-gateway:
-        condition: service_started
     profiles:
-      - pipeline
+      - frontend
 
-  # ── MLflow Tracking ─────────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.10.0
     container_name: qat-mlflow
     restart: unless-stopped
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://${QAT_POSTGRES_USER:-qat}:${QAT_POSTGRES_PASSWORD:-qat_secret}@postgres:5432/${QAT_POSTGRES_DB:-quant_trader} --default-artifact-root file:///mlflow/artifacts
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql://${QAT_POSTGRES_USER:-qat}:${QAT_POSTGRES_PASSWORD:-qat_secret}@postgres:5432/${QAT_POSTGRES_DB:-quant_trader}
+      --default-artifact-root /mlflow/artifacts
     ports:
       - "${QAT_MLFLOW_PORT:-5000}:5000"
     volumes:
@@ -172,6 +229,19 @@ services:
         condition: service_healthy
     networks:
       - qat-network
+    profiles:
+      - mlflow
+
+  trading-pipeline:
+    <<: *app-common
+    container_name: qat-trading-pipeline
+    command: python trading_pipeline.py --once
+    restart: "no"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    profiles:
+      - pipeline
 
 volumes:
   pgdata:
