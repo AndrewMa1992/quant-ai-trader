@@ -22,6 +22,7 @@ from services.model_infer_service.ensemble.bayesian_weighting import BayesianWei
 from services.model_infer_service.ensemble.blender import SignalBlender
 from services.model_infer_service.ensemble.market_state import MarketStateDetector
 from services.model_infer_service.model_registry import ModelRegistry
+from services.model_infer_service.models.preprocess import confidence_haircut
 from services.model_infer_service.models.gbdt_model import GBDTInference
 from services.model_infer_service.models.transformer_model import TransformerInference
 from services.model_infer_service.models.tcn_model import TCNInference
@@ -134,6 +135,20 @@ class InferenceEngine:
 
             load_status[model_type] = loaded
 
+        loaded_count = sum(1 for v in load_status.values() if v)
+        if loaded_count == 0:
+            logger.error(
+                "InferenceEngine: no models loaded — signals will be HOLD. "
+                "Train checkpoints into data/models/ (gbdt/transformer/tcn/tft/rl)."
+            )
+        elif loaded_count < 2:
+            logger.warning(
+                f"InferenceEngine: only {loaded_count} model(s) loaded — "
+                f"ensemble degraded ({load_status})"
+            )
+        else:
+            logger.info(f"InferenceEngine: {loaded_count}/{len(self.models)} models loaded")
+
         return load_status
 
     def get_status(self) -> dict[str, dict[str, Any]]:
@@ -206,16 +221,18 @@ class InferenceEngine:
         self._compute_basic_returns(df)
 
         # Align columns to match exact training order (77 features).
-        # Training order: close, high, low, open, volume, ret_1d..ret_63d, F001..F311
         train_cols = self._feature_names
         aligned = pd.DataFrame(0.0, index=df.index, columns=train_cols)
+        present = 0
         for col in train_cols:
             if col in df.columns:
                 aligned[col] = df[col].values
-            # If col not in df.columns, it stays 0.0 (missing feature)
-        missing = [c for c in train_cols if c not in df.columns]
-        if missing:
-            logger.debug(f"Missing features for {ticker} (padded=0): {missing[:5]}...")
+                present += 1
+        missing_frac = 1.0 - (present / max(len(train_cols), 1))
+        if missing_frac > 0:
+            logger.debug(
+                f"Missing features for {ticker}: {missing_frac:.0%} padded=0"
+            )
 
         X = aligned.fillna(0.0).tail(252)
 
@@ -228,12 +245,17 @@ class InferenceEngine:
                 raw_pred = model.predict(X)
                 recent_pred = float(raw_pred[-1]) if len(raw_pred) > 0 else 0.0
 
-                # Determine confidence
+                # Model-specific missing fraction (scaler path) if available
+                model_miss = float(getattr(model, "last_missing_fraction", 0.0) or 0.0)
+                miss = max(missing_frac, model_miss)
+
                 if hasattr(model, "predict_direction_prob"):
                     probs = model.predict_direction_prob(X.tail(1))
                     confidence = max(float(probs["up_prob"][-1]), float(probs["down_prob"][-1]))
                 else:
                     confidence = 0.5 + min(abs(recent_pred) * 2.0, 0.45)
+
+                confidence = confidence_haircut(confidence, miss)
 
                 direction = "BUY" if recent_pred > 0.01 else ("SELL" if recent_pred < -0.01 else "HOLD")
 
@@ -241,6 +263,7 @@ class InferenceEngine:
                     "value": round(recent_pred, 6),
                     "confidence": round(confidence, 4),
                     "direction": direction,
+                    "missing_frac": round(miss, 4),
                 }
 
             except Exception as e:
@@ -251,6 +274,7 @@ class InferenceEngine:
             "ticker": ticker,
             "predictions": predictions,
             "available_models": len(predictions),
+            "missing_frac": round(missing_frac, 4),
         }
 
     def generate_signal(self, ticker: str) -> dict[str, Any]:
@@ -285,10 +309,17 @@ class InferenceEngine:
             k: v for k, v in predictions.items() if k in model_subset
         } if model_subset else predictions
 
-        # Get Bayesian weights
+        # Get Bayesian weights; renormalize to active subset
         weights = self.bayesian.get_weights()
         if not weights:
             weights = {name: 1.0 / len(subset_predictions) for name in subset_predictions}
+        else:
+            active = {k: float(v) for k, v in weights.items() if k in subset_predictions}
+            s = sum(active.values())
+            if s > 0:
+                weights = {k: v / s for k, v in active.items()}
+            else:
+                weights = {name: 1.0 / len(subset_predictions) for name in subset_predictions}
 
         # Blend
         blended = self.blender.blend(subset_predictions, weights)
@@ -299,6 +330,8 @@ class InferenceEngine:
             "confidence": blended["confidence"],
             "direction": blended["direction"],
             "components": blended.get("components", {}),
+            "regime": self.market_state.state_name,
+            "weights": weights,
         }
 
     def generate_signals_batch(
@@ -453,3 +486,69 @@ class InferenceEngine:
             Current regime.
         """
         return self.market_state.fit(returns)
+
+    def adapt_from_market(
+        self,
+        benchmark_ticker: str = "SPY",
+        lookback: int = 252,
+    ) -> dict[str, Any]:
+        """Fit regime detector from benchmark returns (call once per cycle)."""
+        try:
+            df = self._store.read_daily(benchmark_ticker)
+            if df is None or len(df) < 60:
+                for alt in ("QQQ", "IWM", "AAPL"):
+                    df = self._store.read_daily(alt)
+                    if df is not None and len(df) >= 60:
+                        benchmark_ticker = alt
+                        break
+            if df is None or len(df) < 60:
+                return {"regime": self.market_state.state_name, "fitted": False}
+
+            close = df["close"].astype(float).tail(lookback)
+            returns = close.pct_change().dropna().values
+            regime = self.set_market_state(returns)
+            return {
+                "regime": self.market_state.state_name,
+                "regime_id": int(regime),
+                "benchmark": benchmark_ticker,
+                "fitted": True,
+                "n": int(len(returns)),
+            }
+        except Exception as exc:
+            logger.warning(f"adapt_from_market failed: {exc}")
+            return {"regime": self.market_state.state_name, "fitted": False}
+
+    def update_ensemble_from_signals(
+        self,
+        signals: list[dict[str, Any]],
+        realized_returns: dict[str, float] | None = None,
+    ) -> dict[str, float]:
+        """Update Bayesian weights from last cycle signals vs realized returns.
+
+        If ``realized_returns`` is None, uses a weak prior from signal confidence
+        (no-op until real PnL feedback is available).
+        """
+        if not signals:
+            return self.bayesian.get_weights()
+
+        # Aggregate component predictions across tickers into model vectors
+        model_preds: dict[str, list[float]] = {}
+        rets: list[float] = []
+        for sig in signals:
+            comps = sig.get("components") or {}
+            ticker = str(sig.get("ticker", ""))
+            r = 0.0
+            if realized_returns and ticker in realized_returns:
+                r = float(realized_returns[ticker])
+            else:
+                # Weak prior: treat signed confidence as pseudo-return proxy
+                r = float(sig.get("signal", 0.0)) * 0.01
+            rets.append(r)
+            for name, val in comps.items():
+                model_preds.setdefault(name, []).append(float(val))
+
+        if not model_preds or len(rets) < 3:
+            return self.bayesian.get_weights()
+
+        arr_preds = {k: np.asarray(v, dtype=float) for k, v in model_preds.items()}
+        return self.update_weights(arr_preds, np.asarray(rets, dtype=float))

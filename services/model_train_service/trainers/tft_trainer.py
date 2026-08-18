@@ -156,8 +156,13 @@ class TFTTrainer(TrainerBase):
         self._validate_data(X, y)
         self._feature_names = list(X.columns)
 
-        # ── NaN safeguard ──
-        X_arr = np.nan_to_num(X.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
+        from sklearn.preprocessing import StandardScaler
+
+        # ── NaN safeguard + scale (match TCN/Transformer serve path) ──
+        self._feature_scaler = StandardScaler()
+        X_arr = self._feature_scaler.fit_transform(
+            np.nan_to_num(X.values.astype(np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
+        ).astype(np.float32)
         y_arr = np.nan_to_num(y.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0)
 
         epochs = kwargs.get("epochs", train_config.EPOCHS)
@@ -166,8 +171,11 @@ class TFTTrainer(TrainerBase):
 
         X_seqs, y_seqs = self._build_sequences(X_arr, y_arr)
         if X_valid is not None and y_valid is not None:
+            X_v = self._feature_scaler.transform(
+                np.nan_to_num(X_valid.values.astype(np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
+            ).astype(np.float32)
             X_vs, y_vs = self._build_sequences(
-                np.nan_to_num(X_valid.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
+                X_v,
                 np.nan_to_num(y_valid.values.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0),
             )
         else:
@@ -254,7 +262,13 @@ class TFTTrainer(TrainerBase):
         """Return median quantile predictions."""
         if self.model is None:
             raise RuntimeError("Model not trained")
-        X_arr = X.values.astype(np.float32)
+        X_arr = X.values.astype(np.float64)
+        if getattr(self, "_feature_scaler", None) is not None:
+            X_arr = self._feature_scaler.transform(
+                np.nan_to_num(X_arr, nan=0.0, posinf=1.0, neginf=-1.0)
+            ).astype(np.float32)
+        else:
+            X_arr = np.nan_to_num(X_arr, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
         X_seqs, _ = self._build_sequences(X_arr, np.zeros(len(X_arr)))
         self.model.eval()
         with torch.no_grad():
@@ -274,7 +288,13 @@ class TFTTrainer(TrainerBase):
         """
         if self.model is None:
             raise RuntimeError("Model not trained")
-        X_arr = X.values.astype(np.float32)
+        X_arr = X.values.astype(np.float64)
+        if getattr(self, "_feature_scaler", None) is not None:
+            X_arr = self._feature_scaler.transform(
+                np.nan_to_num(X_arr, nan=0.0, posinf=1.0, neginf=-1.0)
+            ).astype(np.float32)
+        else:
+            X_arr = np.nan_to_num(X_arr, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
         X_seqs, _ = self._build_sequences(X_arr, np.zeros(len(X_arr)))
         self.model.eval()
         with torch.no_grad():
@@ -294,17 +314,26 @@ class TFTTrainer(TrainerBase):
     def save(self, path: str) -> None:
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        torch.save({"model_state": self.model.state_dict(),
-                     "config": {"n_features": len(self._feature_names), "hidden_dim": self.hidden_dim,
-                                "n_heads": self.n_heads, "lstm_layers": self.lstm_layers,
-                                "dropout": self.dropout, "seq_len": self.seq_len},
-                     "feature_names": self._feature_names}, path)
+        torch.save({
+            "model_state": self.model.state_dict(),
+            "config": {
+                "n_features": len(self._feature_names),
+                "hidden_dim": self.hidden_dim,
+                "n_heads": self.n_heads,
+                "lstm_layers": self.lstm_layers,
+                "dropout": self.dropout,
+                "seq_len": self.seq_len,
+            },
+            "feature_names": self._feature_names,
+            "scaler": getattr(self, "_feature_scaler", None),
+        }, path)
         logger.info(f"TFT model saved to {path}")
 
     def load(self, path: str) -> None:
-        data = torch.load(path, map_location=self.device)
+        data = torch.load(path, map_location=self.device, weights_only=False)
         config = data["config"]
         self._feature_names = data.get("feature_names", [])
+        self._feature_scaler = data.get("scaler")
         self.model = TFTModel(n_features=config["n_features"], hidden_dim=config["hidden_dim"],
                               n_heads=config["n_heads"], lstm_layers=config["lstm_layers"],
                               dropout=config["dropout"], seq_len=config["seq_len"]).to(self.device)

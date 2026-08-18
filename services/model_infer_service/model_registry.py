@@ -235,4 +235,12 @@ class ModelRegistry:
         logger.debug(
             f"get_model_path({model_type}): selected v{best_version} at {best_path}"
         )
+        try:
+            age_days = (time.time() - os.path.getmtime(best_path)) / 86400.0
+            if age_days > 30:
+                logger.warning(
+                    f"{model_type} checkpoint is {age_days:.0f}d old — retrain recommended"
+                )
+        except Exception:
+            pass
         return best_path

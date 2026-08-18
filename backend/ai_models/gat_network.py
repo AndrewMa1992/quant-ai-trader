@@ -18,7 +18,7 @@ from loguru import logger
 from configs.settings import settings
 from pathlib import Path
 
-torch_cache = CACHE_DIR / "torch"
+torch_cache = Path(settings.CACHE_DIR) / "torch"
 torch_cache.mkdir(parents=True, exist_ok=True)
 
 
