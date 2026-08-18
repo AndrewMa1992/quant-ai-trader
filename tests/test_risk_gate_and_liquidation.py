@@ -81,6 +81,8 @@ def test_portfolio_apply_liquidation():
 
 
 def test_extreme_dd_after_sync_triggers():
+    from shared.kill_switch import get_kill_switch
+
     rm = RiskManager(initial_capital=1_000_000)
     rm.portfolio_value = 50_000
     rm.peak_value = 1_000_000
@@ -88,6 +90,10 @@ def test_extreme_dd_after_sync_triggers():
     rm._tiger_synced = True
     report = rm.check_circuit_breaker()
     assert report.circuit_breaker is True
+    # Institutional path engages durable kill switch — reset for other tests
+    rm.force_reset_circuit()
+    if get_kill_switch().engaged:
+        get_kill_switch().reset(reset_by="test_cleanup")
 
 
 def test_cn_removed_from_rotation():

@@ -256,7 +256,10 @@ class Settings(BaseSettings):
     # ── Trading ──────────────────────────────────────────────
     TRADING_INITIAL_CAPITAL: float = Field(default=10000.0, description="Initial trading capital")
     TRADING_BASE_CURRENCY: str = Field(default="USD")
-    TRADING_SIMULATION_MODE: bool = Field(default=False)
+    TRADING_SIMULATION_MODE: bool = Field(
+        default=True,
+        description="Paper/sim lock — must be false AND live promotion approved for live orders",
+    )
 
     TRADING_CURRENCY_RATES: str = Field(
         default='{"USD": 1.0, "HKD": 0.128, "SGD": 0.75, "AUD": 0.67, "NZD": 0.62}',

@@ -20,14 +20,16 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from configs.risk_limits import RISK_LIMITS
 
-# ── Default risk constants (self-contained, no backend.config) ──
-DAILY_LOSS_LIMIT: float = 0.05       # 5% daily loss → circuit breaker
-MAX_DRAWDOWN: float = 0.25           # 25% peak drawdown → circuit breaker
-CIRCUIT_BREAKER_COOLDOWN: int = 3600  # 1 hour cool-down
-MAX_CASH_USAGE: float = 0.95         # Max fraction of cash for a single buy
-MAX_POSITION_SIZE: float = 0.20      # Max single-position weight
-MIN_TRADE_VALUE: float = 100.0       # Minimum notional per trade
+
+# ── Default risk constants (sourced from institutional RISK_LIMITS) ──
+DAILY_LOSS_LIMIT: float = RISK_LIMITS.DAILY_LOSS_LIMIT
+MAX_DRAWDOWN: float = RISK_LIMITS.MAX_DRAWDOWN_PORTFOLIO
+CIRCUIT_BREAKER_COOLDOWN: int = int(RISK_LIMITS.COOLING_OFF_MINUTES * 60)
+MAX_CASH_USAGE: float = 1.0 - RISK_LIMITS.MIN_CASH_BUFFER
+MAX_POSITION_SIZE: float = RISK_LIMITS.MAX_POSITION_SIZE
+MIN_TRADE_VALUE: float = 100.0
 DEFAULT_BREAKER_MODE: str = "hard"
 
 
@@ -109,11 +111,15 @@ class RiskManager:
         # ── Tiger sync flag (P0 fix: prevent false circuit breaker) ─
         self._tiger_synced: bool = False
 
+        # Institutional kill switch (durable)
+        self.kill_switch_engaged: bool = False
+
         logger.info(
             f"RiskManager initialised | mode={breaker_mode} | "
             f"capital=${initial_capital:,.0f} | "
             f"daily_loss_limit={self.DAILY_LOSS_LIMIT:.0%} | "
-            f"max_drawdown={self.MAX_DRAWDOWN:.0%}"
+            f"max_drawdown={self.MAX_DRAWDOWN:.0%} | "
+            f"limits=RISK_LIMITS"
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -137,6 +143,21 @@ class RiskManager:
         """
         report = RiskReport()
         is_warn: bool = self.breaker_mode == "warn"
+
+        # Durable kill switch always blocks (no auto-lift)
+        try:
+            from shared.kill_switch import get_kill_switch
+
+            ks = get_kill_switch()
+            self.kill_switch_engaged = ks.engaged
+            if ks.engaged:
+                report.circuit_breaker = True
+                report.passed = False
+                report.reason = f"🛑 Kill switch engaged: {ks.status().get('reason', '')}"
+                report.details["kill_switch"] = ks.status()
+                return report
+        except Exception:
+            pass
 
         # ── Lazy initialise daily start on first call ──────────
         if self.daily_start_value <= 0.0:
@@ -195,6 +216,12 @@ class RiskManager:
             if not is_warn:
                 self.circuit_breaker_triggered = True
                 self.circuit_breaker_time = datetime.now()
+                try:
+                    from shared.kill_switch import get_kill_switch
+
+                    get_kill_switch().engage(msg, engaged_by="risk_manager.daily_loss")
+                except Exception:
+                    pass
             report.details["daily_pnl_pct"] = round(daily_loss_pct, 4)
             (logger.warning if is_warn else logger.error)(msg)
 
@@ -215,6 +242,12 @@ class RiskManager:
                 if not is_warn:
                     self.circuit_breaker_triggered = True
                     self.circuit_breaker_time = datetime.now()
+                    try:
+                        from shared.kill_switch import get_kill_switch
+
+                        get_kill_switch().engage(msg2, engaged_by="risk_manager.drawdown")
+                    except Exception:
+                        pass
                 report.details["current_drawdown"] = round(current_dd, 4)
             elif anomaly_skip:
                 logger.warning(
@@ -259,9 +292,14 @@ class RiskManager:
 
         live_mode: bool = False
         try:
-            live_mode = tiger_bridge.is_connected()
+            from shared.execution_mode import can_place_live_order
+            from shared.live_promotion import can_place_live_orders
+
+            live_mode = can_place_live_order(tiger_bridge) and can_place_live_orders()
         except Exception:
-            pass
+            live_mode = False
+        if not live_mode:
+            logger.info("📭 模拟/paper 模式平仓 — 仅更新本地持仓，不下实盘单")
 
         for ticker, shares in list(self.positions.items()):
             if shares <= 0:
@@ -667,6 +705,14 @@ class RiskManager:
         """Force-reset the circuit breaker (e.g. from dashboard)."""
         self.circuit_breaker_triggered = False
         self.circuit_breaker_time = None
+        try:
+            from shared.kill_switch import get_kill_switch
+
+            get_kill_switch().reset(reset_by="risk_manager.force_reset")
+            self.kill_switch_engaged = False
+        except Exception:
+            pass
+        logger.info("Circuit breaker + kill switch force-reset")
         self.peak_value = max(self.peak_value, self.portfolio_value)
         logger.info(f"🔄 断路器已重置，峰值校准至 ${self.peak_value:,.2f}")
 

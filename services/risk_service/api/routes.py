@@ -290,3 +290,62 @@ async def toggle_circuit_breaker_mode(payload: dict | None = None) -> dict:
         mode = "warn" if _breaker_state["breaker_mode"] == "hard" else "hard"
     _breaker_state["breaker_mode"] = mode
     return {"toggled": True, "breaker_mode": mode}
+
+
+# ── Institutional kill switch & live promotion ───────────────
+@router.get("/kill-switch")
+async def get_kill_switch_status() -> dict:
+    from shared.kill_switch import get_kill_switch
+
+    return get_kill_switch().status()
+
+
+@router.post("/kill-switch/engage")
+async def engage_kill_switch(payload: dict | None = None) -> dict:
+    from shared.kill_switch import get_kill_switch
+
+    payload = payload or {}
+    reason = str(payload.get("reason") or "manual engage")
+    engaged_by = str(payload.get("engaged_by") or "api")
+    return get_kill_switch().engage(reason, engaged_by=engaged_by)
+
+
+@router.post("/kill-switch/reset")
+async def reset_kill_switch(payload: dict | None = None) -> dict:
+    from shared.kill_switch import get_kill_switch
+
+    payload = payload or {}
+    reset_by = str(payload.get("reset_by") or "api")
+    _breaker_state["circuit_breaker_triggered"] = False
+    return get_kill_switch().reset(reset_by=reset_by)
+
+
+@router.get("/live-promotion")
+async def get_live_promotion_status() -> dict:
+    from shared.live_promotion import status
+
+    return status()
+
+
+@router.post("/live-promotion/approve")
+async def approve_live_promotion(payload: dict | None = None) -> dict:
+    from shared.live_promotion import approve_live
+
+    payload = payload or {}
+    operator = str(payload.get("operator") or "api")
+    checklist = dict(payload.get("checklist") or {})
+    try:
+        return approve_live(operator, checklist)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/live-promotion/revoke")
+async def revoke_live_promotion(payload: dict | None = None) -> dict:
+    from shared.live_promotion import revoke_live
+
+    payload = payload or {}
+    return revoke_live(
+        str(payload.get("operator") or "api"),
+        str(payload.get("reason") or ""),
+    )

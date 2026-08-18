@@ -215,6 +215,37 @@ class TigerExecutor:
 
         # ── Execute ────────────────────────────────────────────
         if self.mode == "live":
+            try:
+                from shared.kill_switch import get_kill_switch
+                from shared.live_promotion import can_place_live_orders
+
+                if get_kill_switch().engaged:
+                    logger.error(f"🛑 Kill switch blocks live order: {ticker}")
+                    return {
+                        "ticker": ticker,
+                        "side": decision_upper.lower(),
+                        "quantity": round(quantity, 4),
+                        "price": round(price, 2),
+                        "rejected": True,
+                        "reason": "kill_switch_engaged",
+                        "strategy": strategy,
+                    }
+                if not can_place_live_orders():
+                    logger.warning(
+                        f"Live promotion gate blocked {ticker} — forcing paper fill"
+                    )
+                    trade = self._execute_paper(
+                        ticker, decision_upper, quantity, price, strategy
+                    )
+                    if trade:
+                        trade["forced_paper"] = True
+                        self._attach_tca(trade, arrival_price=price)
+                        self.filled_orders.append(trade)
+                        self.risk.record_trade()
+                    return trade
+            except Exception as gate_exc:
+                logger.warning(f"Live gate check error: {gate_exc}")
+
             trade: Optional[Dict[str, Any]] = self._execute_live(
                 ticker, decision_upper, quantity, price, strategy
             )
@@ -224,10 +255,35 @@ class TigerExecutor:
             )
 
         if trade:
+            self._attach_tca(trade, arrival_price=price)
             self.filled_orders.append(trade)
             self.risk.record_trade()
 
         return trade
+
+    def _attach_tca(self, trade: Dict[str, Any], arrival_price: float) -> None:
+        """Record institutional-lite TCA on fills (non-blocking)."""
+        if trade.get("rejected"):
+            return
+        try:
+            from services.execution_service.live.tca import analyze_fill, to_dict
+            from shared.audit_trail import get_audit_trail
+
+            fill_px = float(trade.get("price") or arrival_price or 0.0)
+            result = analyze_fill(
+                ticker=str(trade.get("ticker", "")),
+                side=str(trade.get("side", "buy")),
+                quantity=float(trade.get("quantity") or 0.0),
+                arrival_price=float(arrival_price or fill_px),
+                fill_price=fill_px,
+                adv_usd=None,
+            )
+            trade["tca"] = to_dict(result)
+            get_audit_trail().write("tca", trade["tca"])
+            if not result.passed:
+                logger.warning(f"TCA flag {trade.get('ticker')}: {result.reason}")
+        except Exception as exc:
+            logger.debug(f"TCA attach skipped: {exc}")
 
     def execute_rebalance(
         self,
