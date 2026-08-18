@@ -101,27 +101,37 @@ class TestCircuitBreakerDrawdownFix:
     # ── Protection 2: >= 90% drawdown skipped (data anomaly) ──
 
     def test_drawdown_90pct_skipped(self):
-        """90% drawdown → data anomaly → SKIP breaker.
+        """90% drawdown → data anomaly (unsynced) → SKIP breaker.
 
         Daily loss is neutralized so only drawdown is tested.
-        The log should show '⚠️ 检测到异常回撤 90.00%，疑似数据同步问题，跳过熔断'
         """
         rm = make_rm(portfolio_value=120_000, peak_value=1_200_000)
+        rm._tiger_synced = False
         report = rm.check_circuit_breaker()
         assert report.circuit_breaker is False, \
             f"90% DD should be skipped (data anomaly). Got: {report.circuit_breaker}"
 
     def test_drawdown_95pct_skipped(self):
-        """95% drawdown → data anomaly → skip breaker."""
+        """95% drawdown → data anomaly → skip breaker when unsynced."""
         rm = make_rm(portfolio_value=60_000, peak_value=1_200_000)
+        rm._tiger_synced = False
         report = rm.check_circuit_breaker()
         assert report.circuit_breaker is False
 
     def test_drawdown_99pct_skipped(self):
-        """99% drawdown → data anomaly → skip breaker."""
+        """99% drawdown → data anomaly → skip breaker when unsynced."""
         rm = make_rm(portfolio_value=12_000, peak_value=1_200_000)
+        rm._tiger_synced = False
         report = rm.check_circuit_breaker()
         assert report.circuit_breaker is False
+
+    def test_drawdown_90pct_triggers_after_sync(self):
+        """After broker sync, extreme drawdown must still trip the breaker."""
+        rm = make_rm(portfolio_value=120_000, peak_value=1_200_000)
+        rm._tiger_synced = True
+        report = rm.check_circuit_breaker()
+        assert report.circuit_breaker is True, \
+            "90% DD after sync must trigger circuit breaker"
 
     # ── Edge: Initial state (peak == portfolio) ──
 

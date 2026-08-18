@@ -322,7 +322,16 @@ class TradingPipeline:
                     self.risk_manager.sync_portfolio_value(
                         self.portfolio.total_value,
                         self.portfolio.cash,
+                        is_tiger_sync=True,
                     )
+                    self.risk_manager.update_portfolio_state(
+                        self.portfolio.total_value,
+                        self.portfolio.cash,
+                        dict(self.portfolio.positions),
+                        {},
+                    )
+                    if self.circuit_breaker is not None:
+                        self.circuit_breaker.set_nav(self.portfolio.total_value)
                     logger.info(
                         f"🔄 Tiger 同步: {sync_result.get('positions')} 只持仓, "
                         f"现金 ${sync_result.get('cash', 0):,.2f}"
@@ -337,6 +346,19 @@ class TradingPipeline:
         except Exception:
             prices = {}
 
+        # Keep RiskManager positions in sync so liquidation is not a no-op
+        self.risk_manager.update_portfolio_state(
+            self.portfolio.total_value,
+            self.portfolio.cash,
+            dict(self.portfolio.positions),
+            prices,
+        )
+        if self.circuit_breaker is not None:
+            try:
+                self.circuit_breaker.set_nav(self.portfolio.total_value)
+            except Exception:
+                pass
+
         report = self.risk_manager.check_circuit_breaker()
         if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
             logger.error(f"🚨 熔断触发: {report.reason}")
@@ -350,10 +372,19 @@ class TradingPipeline:
                             prices[ticker] = float(quote["last"])
                 except Exception:
                     pass
-            self.risk_manager.liquidate_all(prices, self.tiger)
+            # Re-sync positions with latest prices before liquidation
+            self.risk_manager.update_portfolio_state(
+                self.portfolio.total_value,
+                self.portfolio.cash,
+                dict(self.portfolio.positions),
+                prices,
+            )
+            liq_records = self.risk_manager.liquidate_all(prices, self.tiger)
+            self.portfolio.apply_liquidation(liq_records, prices)
             await self._push_step_update(-1, {
                 "circuit_breaker": True,
                 "reason": report.reason,
+                "liquidated": len(liq_records),
             })
             return None
 
@@ -1072,35 +1103,8 @@ class TradingPipeline:
             except Exception as e:
                 logger.warning(f"Failed to write cycle_history.jsonl: {e}")
 
-            # ── PostgreSQL 写入（optional，try/except 包裹）──
-            try:
-                from shared.database import SessionLocal
-                from shared.database.models import CyclePerformance
-
-                db = SessionLocal()
-                try:
-                    record = CyclePerformance(
-                        cycle=self.cycle_count,
-                        trade_date=self.trade_date,
-                        order_count=len(orders),
-                        trades_today=self.trades_today,
-                        total_value=metrics.get("total_value", 0),
-                        total_return_pct=metrics.get("total_return_pct", 0),
-                        num_positions=metrics.get("num_positions", 0),
-                        created_at=datetime.utcnow(),
-                    )
-                    db.add(record)
-                    db.commit()
-                    logger.debug(f"Cycle #{self.cycle_count} written to PostgreSQL")
-                except Exception as e:
-                    db.rollback()
-                    logger.debug(f"PostgreSQL write skipped: {e}")
-                finally:
-                    db.close()
-            except ImportError:
-                logger.debug("PostgreSQL not configured — skipping DB write")
-            except Exception as e:
-                logger.debug(f"PostgreSQL write failed (non-critical): {e}")
+            # PostgreSQL CyclePerformance table is optional; JSONL is source of truth.
+            # (Previously imported non-existent shared.database.models.CyclePerformance.)
 
         except Exception as e:
             logger.error(f"Step 7 绩效记录异常: {e}")

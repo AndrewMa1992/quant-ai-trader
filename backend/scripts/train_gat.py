@@ -61,7 +61,9 @@ def main():
 
     # 2. 训练 GAT
     logger.info("🧠 训练 GAT (50 epochs)...")
-    gat = GATSignalGenerator(lookback=20, device="cpu")
+    import torch
+    device = "cuda" if torch.cuda.is_available() else ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
+    gat = GATSignalGenerator(lookback=20, device=device)
     gat.train_gat(tickers=tickers, features_dict=features_dict, epochs=50, lr=1e-3)
 
     # 3. 验证

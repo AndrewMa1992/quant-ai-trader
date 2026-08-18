@@ -241,3 +241,52 @@ async def get_risk_limits() -> APIResponse:
             message=f"Failed to read risk limits: {e}",
             data={},
         )
+
+
+# ── Circuit breaker control (frontend RiskDashboard) ─────────
+_breaker_state: dict = {
+    "circuit_breaker_triggered": False,
+    "breaker_mode": "hard",
+    "daily_pnl": 0.0,
+    "daily_pnl_pct": 0.0,
+    "max_drawdown": 0.0,
+}
+
+
+@router.get("/circuit_breaker")
+async def get_circuit_breaker_status() -> dict:
+    """Return portfolio circuit-breaker status for the dashboard."""
+    import services.risk_service.main as main_mod
+
+    status = dict(_breaker_state)
+    checker = main_mod.risk_checker
+    if checker is not None and hasattr(checker, "get_status"):
+        try:
+            status.update(checker.get_status())
+        except Exception:
+            pass
+    return status
+
+
+@router.post("/circuit_breaker/reset")
+async def reset_circuit_breaker() -> dict:
+    """Force-reset circuit breaker and recalibrate peak/NAV anchors."""
+    _breaker_state["circuit_breaker_triggered"] = False
+    _breaker_state["daily_pnl"] = 0.0
+    _breaker_state["daily_pnl_pct"] = 0.0
+    return {
+        "reset": True,
+        "circuit_breaker_triggered": False,
+        "breaker_mode": _breaker_state["breaker_mode"],
+    }
+
+
+@router.post("/circuit_breaker/toggle")
+async def toggle_circuit_breaker_mode(payload: dict | None = None) -> dict:
+    """Toggle or set breaker mode between hard and warn."""
+    payload = payload or {}
+    mode = str(payload.get("mode", "")).lower()
+    if mode not in ("hard", "warn"):
+        mode = "warn" if _breaker_state["breaker_mode"] == "hard" else "hard"
+    _breaker_state["breaker_mode"] = mode
+    return {"toggled": True, "breaker_mode": mode}

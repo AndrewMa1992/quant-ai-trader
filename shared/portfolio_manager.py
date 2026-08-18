@@ -567,3 +567,48 @@ class PortfolioManager:
         self._daily_returns.clear()
         self._tiger_initial_capital_synced = False
         logger.info("PortfolioManager reset to initial state")
+
+    def apply_liquidation(
+        self,
+        liquidation_records: List[Dict[str, Any]],
+        prices: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Apply circuit-breaker liquidation results to local portfolio state.
+
+        Args:
+            liquidation_records: Records from ``RiskManager.liquidate_all``.
+            prices: Optional price map for ``update_value``.
+        """
+        if not liquidation_records:
+            return
+
+        for rec in liquidation_records:
+            if rec.get("order_failed"):
+                continue
+            ticker = str(rec.get("ticker", ""))
+            shares = float(rec.get("shares", 0) or 0)
+            price = float(rec.get("price", 0) or 0)
+            if not ticker or shares <= 0:
+                continue
+            held = float(self.positions.get(ticker, 0.0) or 0.0)
+            sell_qty = min(held, shares) if held > 0 else shares
+            if sell_qty <= 0:
+                continue
+            px = price if price > 0 else float((prices or {}).get(ticker, 0.0) or 0.0)
+            if px <= 0:
+                # Force-clear position book without cash credit if price missing
+                self.positions.pop(ticker, None)
+                self.avg_costs.pop(ticker, None)
+                continue
+            self.execute_trade(ticker, "SELL", px, sell_qty, strategy="circuit_breaker")
+
+        # Drop zero/failed leftovers and refresh NAV
+        self.positions = {t: s for t, s in self.positions.items() if s != 0}
+        if prices:
+            self.update_value(prices)
+        else:
+            self.save_state()
+        logger.warning(
+            f"PortfolioManager: applied {len(liquidation_records)} liquidation records "
+            f"| positions={len(self.positions)} cash=${self.cash:,.2f}"
+        )

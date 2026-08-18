@@ -127,8 +127,7 @@ US_STOCKS: list[StockEntry] = [
     {"ticker": "PSX", "name": "Phillips 66", "sector": "Energy", "market": "US", "currency": "USD", "benchmark_weight": 0.1},
     {"ticker": "VLO", "name": "Valero Energy", "sector": "Energy", "market": "US", "currency": "USD", "benchmark_weight": 0.1},
     {"ticker": "OXY", "name": "Occidental Petroleum", "sector": "Energy", "market": "US", "currency": "USD", "benchmark_weight": 0.1},
-    {"ticker": "PXD", "name": "Pioneer Natural Resources", "sector": "Energy", "market": "US", "currency": "USD", "benchmark_weight": 0.1},
-    # Industrials
+    # Industrials (PXD removed — delisted after Exxon merger)
     {"ticker": "CAT", "name": "Caterpillar Inc.", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.3},
     {"ticker": "GE", "name": "General Electric", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.3},
     {"ticker": "RTX", "name": "RTX Corp.", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.3},
@@ -138,7 +137,6 @@ US_STOCKS: list[StockEntry] = [
     {"ticker": "UPS", "name": "United Parcel Service", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.3},
     {"ticker": "DE", "name": "Deere & Company", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.2},
     {"ticker": "LMT", "name": "Lockheed Martin", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.2},
-    {"ticker": "CAT", "name": "Caterpillar Inc.", "sector": "Industrials", "market": "US", "currency": "USD", "benchmark_weight": 0.2},
     # Communication Services
     {"ticker": "NFLX", "name": "Netflix Inc.", "sector": "Communication", "market": "US", "currency": "USD", "benchmark_weight": 0.6},
     {"ticker": "DIS", "name": "Walt Disney Co.", "sector": "Communication", "market": "US", "currency": "USD", "benchmark_weight": 0.4},

@@ -70,9 +70,9 @@ export const dataApi = {
     return data.data
   },
 
-  // Dashboard summary
+  // Dashboard summary (gateway aggregate)
   async getDashboard() {
-    const { data } = await apiClient.get(`${BASE}/dashboard`)
-    return data.data
+    const { data } = await apiClient.get('/v2/dashboard')
+    return data.data ?? data
   },
 }
