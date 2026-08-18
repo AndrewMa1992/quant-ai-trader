@@ -100,6 +100,15 @@ class SignalBlender:
         if weights is None:
             n = len(predictions)
             weights = {name: 1.0 / n for name in predictions}
+        else:
+            # Renormalize to the filtered subset so dropped models don't leak weight
+            active = {k: float(v) for k, v in weights.items() if k in predictions and float(v) > 0}
+            s = sum(active.values())
+            if s > 0:
+                weights = {k: v / s for k, v in active.items()}
+            else:
+                n = len(predictions)
+                weights = {name: 1.0 / n for name in predictions}
 
         total_weight = 0.0
         weighted_signal = 0.0
@@ -114,6 +123,7 @@ class SignalBlender:
             sig = float(pred.get("value", pred.get("signal", 0.0)))
             conf = float(pred.get("confidence", 0.5))
 
+            # Weight by model weight only (confidence already used as filter gate)
             weighted_signal += sig * w
             weighted_confidence += conf * w
             total_weight += w

@@ -179,10 +179,13 @@ class RLTrainer(TrainerBase):
             kwargs.get("total_timesteps", train_config.RL_TIMESTEPS),
         )
 
+        # TradingEnv uses Discrete(3) — SAC requires continuous Box actions.
         if self.algo == "SAC":
-            # TradingEnv uses Discrete actions; SAC needs continuous — fall back to PPO
-            logger.warning("SAC incompatible with Discrete TradingEnv — using PPO")
+            logger.warning(
+                "SAC is incompatible with Discrete(3) TradingEnv; forcing PPO"
+            )
             self.algo = "PPO"
+
         self.model = PPO(
             "MlpPolicy", env, verbose=0, device=self.device,
             learning_rate=kwargs.get("lr", 3e-4),
@@ -269,10 +272,12 @@ class RLTrainer(TrainerBase):
         return probs
 
     def save(self, path: str) -> None:
+        import json
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         # SB3 always writes .zip; normalize extension for registry compatibility
         if HAS_SB3 and not isinstance(self.model, dict):
+<<<<<<< HEAD
             save_path = path if path.endswith(".zip") else f"{os.path.splitext(path)[0]}.zip"
             self.model.save(save_path)
             logger.info(f"RL model saved to {save_path}")
@@ -280,17 +285,46 @@ class RLTrainer(TrainerBase):
             import joblib
             joblib.dump({"algo": self.algo, "mock": True}, path)
             logger.info(f"RL mock model saved to {path}")
+=======
+            # SB3 expects .zip for native format
+            save_path = path if path.lower().endswith(".zip") else f"{path}.zip"
+            self.model.save(save_path)
+            meta = {
+                "algo": self.algo,
+                "window": 20,
+                "feature_names": self._feature_names,
+                "n_features": len(self._feature_names),
+                # Training stacks [y, X] → env n_features = 1 + len(X cols)
+                "obs_feature_dim": 1 + len(self._feature_names),
+            }
+            meta_path = save_path + ".meta.json"
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+            logger.info(f"RL model saved to {save_path} (+ meta)")
+        else:
+            import joblib
+            joblib.dump({"algo": self.algo, "mock": True}, path)
+            logger.info(f"RL mock saved to {path}")
+>>>>>>> origin/cursor/optimize-ai-models-a75f
 
     def load(self, path: str) -> None:
+        import json
         import os
-        if os.path.exists(path) and HAS_SB3:
-            import joblib
-            data = joblib.load(path)
-            if isinstance(data, dict) and data.get("mock"):
-                self.model = data
-            elif HAS_SB3:
-                if self.algo == "SAC":
-                    self.model = SAC.load(path, device=self.device)
-                else:
-                    self.model = PPO.load(path, device=self.device)
+
+        if not os.path.exists(path) or not HAS_SB3:
+            logger.warning(f"RL load skipped: {path}")
+            return
+        meta_path = path + ".meta.json"
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                self._feature_names = list(meta.get("feature_names") or [])
+                self.algo = str(meta.get("algo", self.algo)).upper()
+            except Exception as exc:
+                logger.debug(f"RL meta read failed: {exc}")
+        if self.algo == "SAC":
+            logger.warning("SAC load blocked on Discrete env — use PPO checkpoint")
+            return
+        self.model = PPO.load(path, device=self.device)
         logger.info(f"RL model loaded from {path}")

@@ -416,99 +416,77 @@ class TradingRLAgent:
         price: float = 0.0,
         position_pct: float = 0.0,
     ) -> dict:
-        """
-        P1-2: 单股票信号推理（重构版）。
+        """Single-ticker inference for a multi-ticker PPO policy.
 
-        使用均值投影替代随机噪声：
-        - 取最近特征的均值填充非首 ticker 位置，消除随机性
-        - 维度假定：obs_shape = n_tickers * feat_dim + n_tickers + 1
-        - 确定性推理模式，提升信号稳定性
-
-        Args:
-            features: 特征矩阵 (seq_len, n_features)
-            ticker: 股票代码
-            price: 当前价格
-            position_pct: 当前仓位占比 0~1
-
-        Returns:
-            {signal: buy/sell/hold, strength: 0~1, confidence: 0~1}
+        Only the first ticker slot is filled with real features; remaining
+        slots are zero (not mean-cloned). Confidence is haircut when the
+        policy was trained with many more names than one.
         """
         if not self._is_trained or features.shape[0] < 30:
             return {"signal": "neutral", "strength": 0.0, "confidence": 0.0}
 
         try:
-            # 获取模型期望的观测维度
             obs_shape = self.model.observation_space.shape[0]
             n_features = min(features.shape[1], 37)
 
             recent = features[-20:]
             feat_last = recent[-1, :n_features].astype(np.float64)
 
-            # 计算趋势和波动率
-            trend = (recent[-1, 0] - recent[0, 0]) / (recent[0, 0] + 1e-8)
-            volatility = float(np.std(np.diff(recent[:, 0]) / (recent[:-1, 0] + 1e-8)))
-
-            # P1-2: 使用均值投影替代随机噪声
-            # 计算需要多少个虚拟 ticker
-            # obs_shape = n_tickers * n_features + n_tickers + 1
+            # obs = [feat_t0..feat_tn] + [pos_t0..pos_tn] + [cash]
             n_virtual = max(1, (obs_shape - 1) // (n_features + 1))
 
-            # 所有虚拟 ticker 使用相同的特征（均值填充，无噪声）
             state_parts = []
             for i in range(n_virtual):
-                state_parts.append(feat_last)
+                if i == 0:
+                    state_parts.append(feat_last)
+                else:
+                    state_parts.append(np.zeros(n_features, dtype=np.float64))
 
-            # 仓位部分：首 ticker 用实际仓位，其余为 0
             for i in range(n_virtual):
                 state_parts.append(np.array([position_pct if i == 0 else 0.0]))
 
-            # 余额比例
             state_parts.append(np.array([1.0 - position_pct]))
 
             state = np.nan_to_num(np.concatenate(state_parts).astype(np.float32))
-
-            # 确保维度匹配
             if len(state) < obs_shape:
-                state = np.pad(state, (0, obs_shape - len(state)), mode='constant')
+                state = np.pad(state, (0, obs_shape - len(state)), mode="constant")
             elif len(state) > obs_shape:
                 state = state[:obs_shape]
-
             state = np.clip(state, -10, 10)
 
-            # P1-2: 使用确定性推理
             action, _states = self.model.predict(state, deterministic=True)
 
-            # 解析动作
             if isinstance(action, np.ndarray):
-                action_val = float(np.mean(action))
+                # Prefer first ticker action if vector-valued
+                action_val = float(action.ravel()[0])
             else:
                 action_val = float(action)
 
-            # 动作映射：正→buy，负→sell
             if action_val > 0.05:
                 signal = "buy"
-                strength = min(action_val * 2.0, 1.0)
-                confidence = min(abs(action_val) * 1.5 + 0.3, 1.0)
+                strength = min(abs(action_val) * 2.0, 1.0)
             elif action_val < -0.05:
                 signal = "sell"
                 strength = min(abs(action_val) * 2.0, 1.0)
-                confidence = min(abs(action_val) * 1.5 + 0.3, 1.0)
             else:
-                signal = "neutral"
+                signal = "hold"
                 strength = 0.0
-                confidence = 0.2
+
+            confidence = min(abs(action_val) * 1.5 + 0.3, 1.0)
+            # Haircut when policy is multi-name and we only filled one slot
+            if n_virtual > 1:
+                confidence *= max(0.35, 1.0 / np.sqrt(n_virtual))
 
             return {
                 "signal": signal,
                 "strength": float(strength),
-                "confidence": float(confidence),
-                "rl_action": float(action_val),
-                "trend": float(trend),
-                "volatility": float(volatility),
+                "confidence": float(np.clip(confidence, 0.0, 1.0)),
+                "single_ticker_mode": True,
+                "n_virtual_slots": n_virtual,
+                "ticker": ticker,
             }
-
         except Exception as e:
-            logger.debug(f"RL 推理跳过 ({ticker}): {e}")
+            logger.warning(f"RL predict_signal failed for {ticker}: {e}")
             return {"signal": "neutral", "strength": 0.0, "confidence": 0.0}
 
     def predict_portfolio(

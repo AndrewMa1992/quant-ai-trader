@@ -79,13 +79,13 @@ class TestTFTInference:
 class TestRLInference:
     """Tests for RLInference."""
 
-    def test_unloaded_returns_noisy_signals(self):
+    def test_unloaded_returns_zeros(self):
         model = RLInference()
         X = pd.DataFrame({"a": np.random.randn(50)})
         pred = model.predict(X)
         assert len(pred) == 50
-        # Should return random-like values in [-0.2, 0.2]
-        assert all(-0.3 <= p <= 0.3 for p in pred)
+        # Unloaded models must not inject random noise into the ensemble
+        assert all(p == 0.0 for p in pred)
 
     def test_action_probs(self):
         model = RLInference()

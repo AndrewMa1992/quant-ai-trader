@@ -799,6 +799,16 @@ class TradingPipeline:
                 logger.warning("  Step 3: 无有数据的 ticker，跳过推理")
                 return []
 
+            # Regime adapt once per cycle (SPY / fallback)
+            try:
+                adapt = self.inference_engine.adapt_from_market()
+                logger.info(
+                    f"  Step 3: market regime={adapt.get('regime')} "
+                    f"(fitted={adapt.get('fitted')}, bench={adapt.get('benchmark')})"
+                )
+            except Exception as adapt_exc:
+                logger.debug(f"  Step 3: regime adapt skipped: {adapt_exc}")
+
             # Ensure factor_df has a 'ticker' column for batch inference
             if "ticker" not in factor_df.columns and len(factor_df) <= len(tickers):
                 factor_df = factor_df.copy()
@@ -810,6 +820,14 @@ class TradingPipeline:
                 min_threshold=self.config.SIGNAL_THRESHOLD_MIN,
                 min_confidence=self.config.MIN_CONFIDENCE,
             )
+
+            # Feed ensemble Bayesian weights with this cycle's components
+            try:
+                weights = self.inference_engine.update_ensemble_from_signals(signals)
+                if weights:
+                    logger.debug(f"  Step 3: bayesian weights={weights}")
+            except Exception as bw_exc:
+                logger.debug(f"  Step 3: bayesian update skipped: {bw_exc}")
 
             elapsed: float = time.time() - t0
             logger.info(
