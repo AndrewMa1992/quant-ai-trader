@@ -186,17 +186,19 @@ class MLflowManager:
             )
             logger.info(f"Registered model {model_name} v{result.version}")
 
-            # Transition to staging → production
+            # Institutional default: stay in Staging until explicit promote gate
             client = mlflow.tracking.MlflowClient()
+            target_stage = (stage or train_config.MODEL_REGISTRY_STAGE or "Staging").title()
+            if target_stage.lower() == "production":
+                logger.warning(
+                    "Auto-production disabled — registering to Staging; "
+                    "call promote_to_production() after gates pass"
+                )
+                target_stage = "Staging"
             client.transition_model_version_stage(
                 name=f"quant-{model_name}",
                 version=result.version,
-                stage="staging",
-            )
-            client.transition_model_version_stage(
-                name=f"quant-{model_name}",
-                version=result.version,
-                stage="production",
+                stage=target_stage,
             )
 
             return result.version

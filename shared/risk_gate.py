@@ -1,11 +1,13 @@
 """
 Risk Gate — 交易管线风控统一入口
 =================================
-封装四道风控检查，下单前统一过闸：
+下单前统一过闸（机构级）：
+0. KillSwitch — 持久化紧急停机
 1. CircuitBreaker.allow_order() — 熔断器
 2. Barra 因子暴露检查 — 不超过 BARRA_EXPOSURE_MAX_Z
 3. VaR 检查 — 日 VaR < VAR_LIMIT_PCT × 组合价值
 4. CVaR 检查 — CVaR < CVAR_LIMIT_PCT × 组合价值
+5. Gross / Net / Single exposure — RISK_LIMITS
 """
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -26,7 +28,7 @@ class RiskResult:
 
 
 class RiskGate:
-    """风控统一入口，封装四道检查。
+    """风控统一入口（KillSwitch + CB + Barra + VaR + CVaR + Exposure）。
 
     依赖:
         - circuit_breaker: services.execution_service.monitor.circuit_breaker.CircuitBreaker
@@ -85,6 +87,23 @@ class RiskGate:
         order_value: float = quantity * price
         warnings: List[str] = []
 
+        # ── Gate 0: Durable kill switch (always first) ─────
+        try:
+            from shared.kill_switch import get_kill_switch
+
+            if get_kill_switch().engaged:
+                return RiskResult(
+                    passed=False,
+                    reason="KillSwitch: trading halted until operator reset",
+                    warnings=warnings,
+                )
+        except Exception as e:
+            fail = self._on_check_failure(f"KillSwitch check error: {e}")
+            if not fail["passed"]:
+                return RiskResult(passed=False, reason=fail["reason"], warnings=warnings)
+            if fail.get("warning"):
+                warnings.append(fail["warning"])
+
         # ── Gate 1: CircuitBreaker ──────────────────────────
         cb_result = await self._check_circuit_breaker(ticker, quantity, price)
         if not cb_result["passed"]:
@@ -132,6 +151,19 @@ class RiskGate:
             )
         if cvar_result.get("warning"):
             warnings.append(cvar_result["warning"])
+
+        # ── Gate 5: Gross / Net / Position exposure (local, always-on) ──
+        exposure_result = self._check_exposures(
+            ticker, quantity, price, portfolio_state
+        )
+        if not exposure_result["passed"]:
+            return RiskResult(
+                passed=False,
+                reason=f"Exposure: {exposure_result['reason']}",
+                warnings=warnings,
+            )
+        if exposure_result.get("warning"):
+            warnings.append(exposure_result["warning"])
 
         # 全部通过
         if warnings:
@@ -385,3 +417,61 @@ class RiskGate:
         except Exception as e:
             logger.warning(f"CVaR check error: {e}")
             return self._on_check_failure(f"CVaR check error: {e}")
+
+    def _check_exposures(
+        self,
+        ticker: str,
+        quantity: int,
+        price: float,
+        portfolio_state: Dict,
+    ) -> Dict:
+        """Gate 5: gross / net / single-name exposure vs RISK_LIMITS."""
+        if not pipeline_config.ENABLE_RISK_CHECKS:
+            return {"passed": True}
+
+        try:
+            from configs.risk_limits import RISK_LIMITS
+
+            nav = float(portfolio_state.get("total_value") or 0.0)
+            if nav <= 0:
+                return {"passed": True, "warning": "NAV unknown — exposure check skipped"}
+
+            pos_values = dict(portfolio_state.get("position_values") or {})
+            # Project post-trade market value for this ticker
+            side_sign = 1.0 if quantity >= 0 else -1.0
+            # quantity is absolute shares for buy intent in pipeline; treat as buy notional add
+            delta = abs(quantity) * price * side_sign
+            current_mv = float(pos_values.get(ticker, 0.0) or 0.0)
+            pos_values[ticker] = current_mv + delta
+
+            gross = sum(abs(v) for v in pos_values.values()) / nav
+            net = sum(pos_values.values()) / nav
+            single = abs(pos_values.get(ticker, 0.0)) / nav
+
+            if single > RISK_LIMITS.MAX_SINGLE_STOCK_EXPOSURE:
+                return {
+                    "passed": False,
+                    "reason": (
+                        f"{ticker} weight {single:.2%} > "
+                        f"MAX_SINGLE_STOCK_EXPOSURE {RISK_LIMITS.MAX_SINGLE_STOCK_EXPOSURE:.0%}"
+                    ),
+                }
+            if gross > RISK_LIMITS.MAX_GROSS_EXPOSURE:
+                return {
+                    "passed": False,
+                    "reason": (
+                        f"gross exposure {gross:.2%} > "
+                        f"MAX_GROSS_EXPOSURE {RISK_LIMITS.MAX_GROSS_EXPOSURE:.2f}"
+                    ),
+                }
+            if abs(net) > RISK_LIMITS.MAX_NET_EXPOSURE:
+                return {
+                    "passed": False,
+                    "reason": (
+                        f"net exposure {net:.2%} > "
+                        f"MAX_NET_EXPOSURE {RISK_LIMITS.MAX_NET_EXPOSURE:.2f}"
+                    ),
+                }
+            return {"passed": True}
+        except Exception as e:
+            return self._on_check_failure(f"Exposure check error: {e}")

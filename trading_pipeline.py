@@ -367,6 +367,12 @@ class TradingPipeline:
         report = self.risk_manager.check_circuit_breaker()
         if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
             logger.error(f"🚨 熔断触发: {report.reason}")
+            try:
+                from shared.kill_switch import get_kill_switch
+
+                get_kill_switch().engage(report.reason or "circuit_breaker", engaged_by="trading_pipeline")
+            except Exception:
+                pass
             await self.ws_pusher.push_alert("circuit_breaker", report.reason)
             # P1-2: Tiger price fallback when HTTP prices are empty
             if not prices and self.tiger_ready:
@@ -843,6 +849,7 @@ class TradingPipeline:
             "total_value": self.portfolio.total_value,
             "cash": self.portfolio.cash,
             "positions": dict(self.portfolio.positions),
+            "position_values": dict(getattr(self.risk_manager, "position_values", {}) or {}),
         }
 
         for sig in signals:
@@ -876,6 +883,12 @@ class TradingPipeline:
                 approved.append(sig)
             else:
                 rejected.append(f"{ticker}: {result.reason}")
+                try:
+                    from shared.audit_trail import get_audit_trail
+
+                    get_audit_trail().risk_reject(ticker, result.reason)
+                except Exception:
+                    pass
                 if result.warnings:
                     for w in result.warnings:
                         logger.debug(f"    ⚠️ {ticker}: {w}")
@@ -1085,6 +1098,26 @@ class TradingPipeline:
                 f"盈亏 {metrics.get('total_return_pct', 0):+.1f}% | "
                 f"持仓 {metrics.get('num_positions', 0)} 只"
             )
+
+            # Institutional audit trail
+            try:
+                from shared.audit_trail import get_audit_trail
+                from shared.kill_switch import get_kill_switch
+
+                get_audit_trail().cycle(
+                    self.cycle_count,
+                    self.trade_date,
+                    orders=len(orders),
+                    risk_snapshot={
+                        **self.risk_manager.get_status(),
+                        "kill_switch": get_kill_switch().status(),
+                    },
+                    extra={"metrics": metrics},
+                )
+                for o in orders:
+                    get_audit_trail().order(o)
+            except Exception as audit_exc:
+                logger.debug(f"AuditTrail skipped: {audit_exc}")
 
             # ── CycleSummary 持久化到 cache/cycle_history.jsonl（追加模式）──
             cycle_summary = {

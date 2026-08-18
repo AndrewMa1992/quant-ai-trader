@@ -59,14 +59,18 @@ class PipelineConfig:
     HTTP_RETRIES: int = 3                      # 重试次数
 
     def __post_init__(self) -> None:
-        """从环境变量覆盖关键配置；模拟模式强制 paper。"""
+        """从环境变量覆盖关键配置；模拟锁强制 paper。"""
         import os
 
         self.EXECUTION_MODE = os.getenv("QAT_EXECUTION_MODE", self.EXECUTION_MODE)
-        # Simulation lock: paper is mandatory unless sim mode is explicitly disabled
-        sim = os.getenv("QAT_TRADING_SIMULATION_MODE", "true").strip().lower()
-        if sim in ("1", "true", "yes", "on", ""):
-            self.EXECUTION_MODE = "paper"
+        try:
+            from shared.execution_mode import get_execution_mode
+
+            self.EXECUTION_MODE = get_execution_mode()
+        except Exception:
+            sim = os.getenv("QAT_TRADING_SIMULATION_MODE", "true").strip().lower()
+            if sim in ("1", "true", "yes", "on", ""):
+                self.EXECUTION_MODE = "paper"
 
 
 def _build_service_urls() -> dict:
