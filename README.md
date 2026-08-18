@@ -3,6 +3,16 @@
 > 最前沿科技打造的量化AI美股交易系统，对标顶级量化基金标准。  
 > Python 全栈 + PyTorch/TensorFlow AI 引擎 + Vue 3 前端 + 老虎证券 API
 
+## 🐳 Docker 一键部署（模拟盘）
+
+```bash
+chmod +x scripts/docker_deploy.sh
+./scripts/docker_deploy.sh
+# API http://localhost:8001  |  Frontend http://localhost:5180
+```
+
+详见 [DEPLOY.md](./DEPLOY.md)。默认强制 `paper` 模拟模式。
+
 ## 🚀 核心功能
 
 | 模块 | 技术 | 功能 |

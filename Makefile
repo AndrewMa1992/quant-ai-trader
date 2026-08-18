@@ -9,25 +9,29 @@ help: ## Show this help
 	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ── Docker Compose ───────────────────────────────────────────
-up: ## Start all services (detached)
-	docker-compose up -d
+up: ## Start core paper stack (detached)
+	docker compose up -d
 
-down: ## Stop all services and remove containers
-	docker-compose down
+deploy: ## One-click paper Docker deploy (build + up + health)
+	./scripts/docker_deploy.sh
 
-restart: down up ## Restart all services
+down: ## Stop all services (incl. profiles)
+	./scripts/docker_down.sh
+
+restart: down up ## Restart core services
 
 logs: ## Tail logs from all services
-	docker-compose logs -f --tail=100
+	docker compose logs -f --tail=100
 
 status: ## Show running container status
-	docker-compose ps
+	docker compose ps
 
-build: ## Build all Docker images
-	docker-compose build --no-cache
+build: ## Build app + frontend images
+	docker compose build
+	docker compose --profile frontend build
 
-clean: down ## Stop containers and remove volumes/images
-	docker-compose down -v --rmi all
+clean: ## Stop containers and remove volumes
+	docker compose --profile frontend --profile mlflow --profile pipeline down -v
 
 # ── Python / Dev ─────────────────────────────────────────────
 install: ## Install package in editable mode with dev deps

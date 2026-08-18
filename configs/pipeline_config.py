@@ -70,17 +70,29 @@ class PipelineConfig:
 
 
 def _build_service_urls() -> dict:
-    """Dynamically read service ports from central settings."""
-    from configs.settings import settings
+    """Dynamically read service ports from central settings / discovery."""
+    try:
+        from shared.service_discovery import service_base_url
 
-    return {
-        "data": f"http://localhost:{settings.DATA_PORT}",
-        "factor": f"http://localhost:{settings.FACTOR_PORT}",
-        "model_train": f"http://localhost:{settings.MODEL_TRAIN_PORT}",
-        "model_infer": f"http://localhost:{settings.MODEL_INFER_PORT}",
-        "risk": f"http://localhost:{settings.RISK_PORT}",
-        "execution": f"http://localhost:{settings.EXEC_PORT}",
-    }
+        return {
+            "data": service_base_url("data"),
+            "factor": service_base_url("factor"),
+            "model_train": service_base_url("model_train"),
+            "model_infer": service_base_url("model_infer"),
+            "risk": service_base_url("risk"),
+            "execution": service_base_url("execution"),
+        }
+    except Exception:
+        from configs.settings import settings
+
+        return {
+            "data": f"http://localhost:{settings.DATA_PORT}",
+            "factor": f"http://localhost:{settings.FACTOR_PORT}",
+            "model_train": f"http://localhost:{settings.MODEL_TRAIN_PORT}",
+            "model_infer": f"http://localhost:{settings.MODEL_INFER_PORT}",
+            "risk": f"http://localhost:{settings.RISK_PORT}",
+            "execution": f"http://localhost:{settings.EXEC_PORT}",
+        }
 
 
 # 全局单例（方便直接 import）
