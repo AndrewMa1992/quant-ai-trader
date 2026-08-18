@@ -357,11 +357,26 @@ async def push_tiger_snapshot(data: dict) -> dict:
 # /api/v2/status (above) is registered first so it takes
 # precedence over the catch-all proxy route below.
 
-# User-facing route name → canonical service name aliases
+# User-facing URL segment → canonical service name (port lookup)
 SERVICE_ALIASES: dict[str, str] = {
     "trade": "execution",
     "model": "model_infer",
-    "analysis": "risk",  # portfolio-history / yearly-returns live under risk service
+    "analysis": "risk",
+    # Frontend-friendly path segments (match service mount prefixes)
+    "factors": "factor",
+    "train": "model_train",
+    "infer": "model_infer",
+}
+
+# Canonical service → URL path prefix on the microservice
+# (mounts are /api/v2/factors, /api/v2/train, /api/v2/infer — not the service key)
+SERVICE_PATH_PREFIX: dict[str, str] = {
+    "data": "data",
+    "factor": "factors",
+    "model_train": "train",
+    "model_infer": "infer",
+    "risk": "risk",
+    "execution": "execution",
 }
 
 # Combined lookup: canonical names + aliases (for 404 validation)
@@ -375,23 +390,24 @@ _ALL_SERVICE_NAMES: set[str] = set(SERVICE_PORT_MAP.keys()) | set(SERVICE_ALIASE
 async def proxy_to_service(service: str, path: str, request: Request) -> Response:
     """Reverse-proxy /api/v2/{service}/* to the matching microservice port.
 
-    Supports canonical service names (data, factor, model_train, model_infer,
-    risk, execution) and user-facing aliases (trade→execution, model→model_infer).
+    Supports canonical names, frontend aliases (factors/train/infer/trade/…),
+    and remaps path prefixes to each service's real mount
+    (e.g. factor → /api/v2/factors/…).
     """
     if service not in _ALL_SERVICE_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown service: {service}")
 
-    # Resolve alias to canonical service name for the target URL
     canonical = SERVICE_ALIASES.get(service, service)
     port = SERVICE_PORT_MAP[canonical]
-    target_url = f"{service_base_url(canonical)}/api/v2/{canonical}/{path}"
+    path_prefix = SERVICE_PATH_PREFIX.get(canonical, canonical)
+    # Docker-aware host via service_discovery + correct mount path prefix
+    target_url = f"{service_base_url(canonical)}/api/v2/{path_prefix}/{path}"
 
     if request.query_params:
         target_url += f"?{request.query_params}"
 
     try:
         body = await request.body() if request.method in ("POST", "PUT", "PATCH") else None
-        # Strip hop-by-hop headers that httpx handles internally
         headers = {
             k: v
             for k, v in request.headers.items()

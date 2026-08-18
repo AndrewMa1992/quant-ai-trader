@@ -16,37 +16,52 @@ interface DecayPoint {
 const props = defineProps<{ data: DecayPoint[]; halfLife?: number }>()
 
 const option = computed(() => ({
-  title: { text: props.halfLife != null ? `Half-life: ${props.halfLife}d` : 'IC Decay',
-    textStyle: { color: '#8b92a8', fontSize: 13 }, left: 'center' },
-  tooltip: { trigger: 'axis' as const },
+  title: {
+    text: props.halfLife != null ? `Half-life: ${props.halfLife}d` : 'IC Decay',
+    textStyle: { color: '#999999', fontSize: 13 },
+    left: 'center',
+  },
+  tooltip: {
+    trigger: 'axis' as const,
+    backgroundColor: '#fff',
+    borderColor: '#EEEEEE',
+    textStyle: { color: '#1A1A1A', fontSize: 12 },
+  },
   grid: { top: 40, right: 20, bottom: 30, left: 50 },
   xAxis: {
-    type: 'value' as const, name: 'Lag (days)',
-    axisLabel: { color: '#5c6378', fontSize: 10 },
-    nameTextStyle: { color: '#8b92a8' },
+    type: 'value' as const,
+    name: 'Lag (days)',
+    axisLabel: { color: '#999999', fontSize: 10 },
+    nameTextStyle: { color: '#999999' },
+    splitLine: { lineStyle: { color: '#F5F5F5' } },
   },
   yAxis: {
-    type: 'value' as const, name: 'IC',
-    axisLabel: { color: '#5c6378', fontSize: 10 },
-    nameTextStyle: { color: '#8b92a8' },
-    splitLine: { lineStyle: { color: '#1e293b' } },
+    type: 'value' as const,
+    name: 'IC',
+    axisLabel: { color: '#999999', fontSize: 10 },
+    nameTextStyle: { color: '#999999' },
+    splitLine: { lineStyle: { color: '#F5F5F5' } },
   },
   series: [{
     type: 'line' as const,
     data: props.data.map((d) => [+d.lag, +d.ic.toFixed(4)]),
     smooth: true,
-    lineStyle: { color: '#22c55e', width: 2 },
-    itemStyle: { color: '#22c55e' },
-    areaStyle: { color: 'rgba(34, 197, 94, 0.1)' },
-    markLine: props.halfLife != null ? {
-      silent: true,
-      data: [{ xAxis: props.halfLife, label: { formatter: `HL: ${props.halfLife}d`, color: '#eab308' }, lineStyle: { color: '#eab308', type: 'dashed' as const } }],
-    } : undefined,
+    lineStyle: { color: '#FF6700', width: 2 },
+    itemStyle: { color: '#FF6700' },
+    areaStyle: {
+      color: {
+        type: 'linear',
+        x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: '#FF670030' },
+          { offset: 1, color: '#FF670005' },
+        ],
+      },
+    },
   }],
 }))
 </script>
 
 <template>
-  <VChart v-if="data.length > 0" :option="option" style="height: 260px" autoresize />
-  <p v-else class="text-text-muted text-sm text-center py-8">No decay data</p>
+  <VChart :option="option" autoresize class="w-full h-56" />
 </template>

@@ -1,7 +1,7 @@
-/** api/factorApi.ts – /api/v2/factors/* endpoints */
-import axios from 'axios'
+/** api/factorApi.ts – /api/v2/factors/* endpoints (via apiClient + API key) */
+import apiClient from './index'
 
-const BASE = '/api/v2/factors'
+const BASE = '/v2/factors'
 
 export interface FactorDef {
   id: string
@@ -12,7 +12,6 @@ export interface FactorDef {
   lookback_default: number
   frequency: string
   direction: number
-  /** Performance statistics populated by /api/v2/factors/factors */
   ic_mean?: number
   ic_std?: number
   ir?: number
@@ -31,43 +30,43 @@ export interface ICAnalysis {
 
 export const factorApi = {
   async listFactors(category?: string) {
-    const { data } = await axios.get(`${BASE}/factors`, { params: { category } })
-    return data.data
+    const { data } = await apiClient.get(`${BASE}/factors`, { params: { category } })
+    return data.data ?? data
   },
 
   async getFactor(name: string) {
-    const { data } = await axios.get(`${BASE}/factors/${name}`)
-    return data.data
+    const { data } = await apiClient.get(`${BASE}/factors/${name}`)
+    return data.data ?? data
   },
 
   async getICAnalysis(factorName: string, window = 252): Promise<ICAnalysis> {
-    const { data } = await axios.get(`${BASE}/ic-analysis`, {
+    const { data } = await apiClient.get(`${BASE}/ic-analysis`, {
       params: { factor_name: factorName, window },
     })
-    return data.data
+    return data.data ?? data
   },
 
   async getCorrelation(factorNames: string) {
-    const { data } = await axios.get(`${BASE}/correlation`, {
+    const { data } = await apiClient.get(`${BASE}/correlation`, {
       params: { factor_names: factorNames },
     })
-    return data.data
+    return data.data ?? data
   },
 
   async getDecay(factorName: string, maxLags = 20) {
-    const { data } = await axios.get(`${BASE}/decay`, {
+    const { data } = await apiClient.get(`${BASE}/decay`, {
       params: { factor_name: factorName, max_lags: maxLags },
     })
-    return data.data
+    return data.data ?? data
   },
 
   async computeFactors(tickers: string[], factorNames?: string[], startDate?: string, endDate?: string) {
-    const { data } = await axios.post(`${BASE}/compute`, {
+    const { data } = await apiClient.post(`${BASE}/compute`, {
       tickers,
       factor_names: factorNames ?? [],
       start_date: startDate,
       end_date: endDate,
     })
-    return data.data
+    return data.data ?? data
   },
 }

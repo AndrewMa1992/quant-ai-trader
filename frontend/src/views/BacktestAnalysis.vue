@@ -13,116 +13,124 @@ use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, Canv
 
 const portfolioStore = usePortfolioStore()
 
-// ── Reactive state ──
+const tickersInput = ref('AAPL,MSFT,GOOGL,SPY')
+const startDate = ref('2023-01-01')
+const endDate = ref(new Date().toISOString().slice(0, 10))
+const capital = ref(1_000_000)
+const running = ref(false)
+const runError = ref('')
+
 const historyData = ref<PortfolioHistoryPoint[]>([])
 const yearlyReturnData = ref<YearlyReturn[]>([])
-const loading = ref(false)
-const hasData = computed(() => !loading.value && historyData.value.length > 0)
+const historyLoading = ref(false)
 
-// ── Fetch real data ──
+const hasBacktest = computed(() => !!portfolioStore.backtestResult)
+const hasHistory = computed(() => !historyLoading.value && historyData.value.length > 0)
+
 onMounted(async () => {
-  loading.value = true
+  await loadSecondaryCharts()
+})
+
+async function loadSecondaryCharts() {
+  historyLoading.value = true
   try {
     const [history, yearly] = await Promise.all([
-      analysisApi.getPortfolioHistory(),
-      analysisApi.getYearlyReturns(),
+      analysisApi.getPortfolioHistory().catch(() => [] as PortfolioHistoryPoint[]),
+      analysisApi.getYearlyReturns().catch(() => [] as YearlyReturn[]),
     ])
     historyData.value = history ?? []
     yearlyReturnData.value = yearly ?? []
   } catch {
-    // Silent degrade — leave data empty for empty-state UI
+    historyData.value = []
+    yearlyReturnData.value = []
   } finally {
-    loading.value = false
+    historyLoading.value = false
   }
-})
+}
 
-// ── Derived equity curves from NAV history ──
-const equityCurve = computed<number[]>(() => historyData.value.map((p) => p.nav))
-const benchmarkCurve = computed<number[]>(() => historyData.value.map((p) => p.benchmark))
+async function submitBacktest() {
+  runError.value = ''
+  const tickers = tickersInput.value
+    .split(',')
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean)
+  if (tickers.length === 0) {
+    runError.value = 'Enter at least one ticker'
+    return
+  }
+  if (!startDate.value || !endDate.value) {
+    runError.value = 'Start and end dates are required'
+    return
+  }
 
-// ── Compute performance metrics from portfolio history ──
+  running.value = true
+  try {
+    await portfolioStore.runBacktest(tickers, startDate.value, endDate.value, capital.value)
+    if (!portfolioStore.backtestResult && portfolioStore.error) {
+      runError.value = portfolioStore.error
+    }
+    await loadSecondaryCharts()
+  } catch (e: unknown) {
+    runError.value = e instanceof Error ? e.message : 'Backtest failed'
+  } finally {
+    running.value = false
+  }
+}
+
 interface PerfMetric {
   label: string
   value: string
   isPositive: boolean
 }
 
-/** Daily returns from the NAV curve. */
-function dailyReturns(navs: number[]): number[] {
-  const rets: number[] = []
-  for (let i = 1; i < navs.length; i++) {
-    if (navs[i - 1] > 0) {
-      rets.push(navs[i] / navs[i - 1] - 1)
-    }
-  }
-  return rets
-}
-
-/** Maximum drawdown from NAV peak. */
-function maxDrawdown(navs: number[]): number {
-  let peak = navs[0] ?? 0
-  let mdd = 0
-  for (const n of navs) {
-    if (n > peak) peak = n
-    const dd = peak > 0 ? (n - peak) / peak : 0
-    if (dd < mdd) mdd = dd
-  }
-  return mdd
-}
-
-const perfMetrics = computed<PerfMetric[]>(() => {
-  const navs = equityCurve.value
-  if (navs.length < 2) {
+const backtestMetrics = computed<PerfMetric[]>(() => {
+  const bt = portfolioStore.backtestResult
+  if (!bt) {
     return [
       { label: 'Total Return', value: '—', isPositive: true },
       { label: 'Annual Return', value: '—', isPositive: true },
       { label: 'Sharpe Ratio', value: '—', isPositive: true },
       { label: 'Max Drawdown', value: '—', isPositive: false },
-      { label: 'Win Rate', value: '—', isPositive: true },
-      { label: 'Profit Factor', value: '—', isPositive: true },
+      { label: 'Final Value', value: '—', isPositive: true },
+      { label: 'Initial Capital', value: '—', isPositive: true },
     ]
   }
-
-  const initialNav = navs[0]
-  const finalNav = navs[navs.length - 1]
-  const totalReturn = initialNav > 0 ? (finalNav / initialNav - 1) : 0
-
-  // Approximate annualized return (252 trading days ≈ 1 year)
-  const years = navs.length / 252
-  const annualReturn = years > 0 ? (Math.pow(1 + totalReturn, 1 / years) - 1) : 0
-
-  // Sharpe ratio from daily returns
-  const rets = dailyReturns(navs)
-  const avgRet = rets.length > 0 ? rets.reduce((a, b) => a + b, 0) / rets.length : 0
-  const stdRet =
-    rets.length > 1
-      ? Math.sqrt(rets.reduce((s, r) => s + (r - avgRet) ** 2, 0) / (rets.length - 1))
-      : 0
-  const sharpe = stdRet > 0 ? (avgRet / stdRet) * Math.sqrt(252) : 0
-
-  // Max drawdown
-  const mdd = maxDrawdown(navs)
-
-  // Win rate
-  const wins = rets.filter((r) => r > 0).length
-  const winRate = rets.length > 0 ? wins / rets.length : 0
-
-  // Profit factor
-  const grossProfit = rets.filter((r) => r > 0).reduce((a, b) => a + b, 0)
-  const grossLoss = Math.abs(rets.filter((r) => r < 0).reduce((a, b) => a + b, 0))
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0
-
   return [
-    { label: 'Total Return', value: `${(totalReturn * 100).toFixed(1)}%`, isPositive: totalReturn >= 0 },
-    { label: 'Annual Return', value: `${(annualReturn * 100).toFixed(1)}%`, isPositive: annualReturn >= 0 },
-    { label: 'Sharpe Ratio', value: sharpe.toFixed(2), isPositive: sharpe >= 0 },
-    { label: 'Max Drawdown', value: `${(mdd * 100).toFixed(1)}%`, isPositive: false },
-    { label: 'Win Rate', value: `${(winRate * 100).toFixed(1)}%`, isPositive: winRate >= 0.5 },
-    { label: 'Profit Factor', value: profitFactor === Infinity ? '∞' : profitFactor.toFixed(2), isPositive: profitFactor >= 1 },
+    {
+      label: 'Total Return',
+      value: `${(bt.total_return * 100).toFixed(1)}%`,
+      isPositive: bt.total_return >= 0,
+    },
+    {
+      label: 'Annual Return',
+      value: `${(bt.annual_return * 100).toFixed(1)}%`,
+      isPositive: bt.annual_return >= 0,
+    },
+    {
+      label: 'Sharpe Ratio',
+      value: bt.sharpe_ratio.toFixed(2),
+      isPositive: bt.sharpe_ratio >= 0,
+    },
+    {
+      label: 'Max Drawdown',
+      value: `${(bt.max_drawdown * 100).toFixed(1)}%`,
+      isPositive: false,
+    },
+    {
+      label: 'Final Value',
+      value: `$${Math.round(bt.final_value).toLocaleString()}`,
+      isPositive: bt.final_value >= capital.value,
+    },
+    {
+      label: 'Initial Capital',
+      value: `$${capital.value.toLocaleString()}`,
+      isPositive: true,
+    },
   ]
 })
 
-// ── ECharts options ──
+const equityCurve = computed<number[]>(() => historyData.value.map((p) => p.nav))
+const benchmarkCurve = computed<number[]>(() => historyData.value.map((p) => p.benchmark))
 
 const equityChartOption = computed(() => ({
   grid: { top: 12, right: 16, bottom: 4, left: 60 },
@@ -158,10 +166,7 @@ const equityChartOption = computed(() => ({
       areaStyle: {
         color: {
           type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
+          x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
             { offset: 0, color: '#FF670020' },
             { offset: 1, color: '#FF670002' },
@@ -214,33 +219,78 @@ const yearlyChartOption = computed(() => ({
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Performance Metrics -->
+    <XmCard title="Run Backtest" class="!p-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="lg:col-span-2">
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Tickers</label>
+          <input
+            v-model="tickersInput"
+            class="xm-input w-full"
+            placeholder="AAPL,MSFT,GOOGL,SPY"
+            :disabled="running"
+          />
+        </div>
+        <div>
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Start Date</label>
+          <input v-model="startDate" type="date" class="xm-input w-full" :disabled="running" />
+        </div>
+        <div>
+          <label class="block text-xxs text-xm-text-tertiary mb-1">End Date</label>
+          <input v-model="endDate" type="date" class="xm-input w-full" :disabled="running" />
+        </div>
+        <div>
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Capital</label>
+          <input v-model.number="capital" type="number" min="1000" step="1000" class="xm-input w-full" :disabled="running" />
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="xm-btn-primary" :disabled="running" @click="submitBacktest">
+          {{ running ? 'Running...' : 'Run Backtest' }}
+        </button>
+        <span v-if="runError" class="text-sm text-loss">{{ runError }}</span>
+      </div>
+    </XmCard>
+
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      <XmCard v-for="m in perfMetrics" :key="m.label" class="!p-3">
+      <XmCard v-for="m in backtestMetrics" :key="m.label" class="!p-3">
         <div class="xm-metric-label text-xxs">{{ m.label }}</div>
-        <div class="text-base font-mono font-bold mt-1" :class="m.isPositive ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+        <div
+          class="text-base font-mono font-bold mt-1"
+          :class="m.isPositive ? 'xm-pnl-positive' : 'xm-pnl-negative'"
+        >
           {{ m.value }}
         </div>
       </XmCard>
     </div>
 
-    <!-- Equity Curve -->
-    <XmCard title="Backtest Equity Curve" subtitle="Strategy vs Benchmark">
-      <div v-if="loading" class="flex items-center justify-center h-[360px] text-xm-text-tertiary text-sm">
-        Loading portfolio data...
+    <div
+      v-if="!hasBacktest && !running"
+      class="text-center py-4 text-xm-text-tertiary text-sm"
+    >
+      Submit a backtest to see strategy metrics. Portfolio history charts below load independently.
+    </div>
+
+    <XmCard title="Portfolio History" subtitle="Secondary — from analysis API">
+      <div v-if="historyLoading" class="flex items-center justify-center h-[360px] text-xm-text-tertiary text-sm">
+        Loading portfolio history...
       </div>
-      <div v-else-if="!hasData" class="flex flex-col items-center justify-center h-[360px] text-xm-text-tertiary text-sm gap-2">
-        <span>暂无回测数据，请先运行回测或积累交易数据</span>
+      <div
+        v-else-if="!hasHistory"
+        class="flex flex-col items-center justify-center h-[360px] text-xm-text-tertiary text-sm gap-2"
+      >
+        <span>No portfolio history available yet.</span>
       </div>
       <VChart v-else :option="equityChartOption" style="height: 360px" autoresize />
     </XmCard>
 
-    <!-- Yearly Returns -->
     <XmCard title="Annual Returns">
-      <div v-if="yearlyReturnData.length === 0 && !loading" class="flex items-center justify-center h-[260px] text-xm-text-tertiary text-sm">
+      <div
+        v-if="yearlyReturnData.length === 0 && !historyLoading"
+        class="flex items-center justify-center h-[260px] text-xm-text-tertiary text-sm"
+      >
         No yearly return data available
       </div>
-      <VChart v-else :option="yearlyChartOption" style="height: 260px" autoresize />
+      <VChart v-else-if="yearlyReturnData.length > 0" :option="yearlyChartOption" style="height: 260px" autoresize />
     </XmCard>
   </div>
 </template>

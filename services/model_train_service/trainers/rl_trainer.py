@@ -277,17 +277,7 @@ class RLTrainer(TrainerBase):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         # SB3 always writes .zip; normalize extension for registry compatibility
         if HAS_SB3 and not isinstance(self.model, dict):
-<<<<<<< HEAD
-            save_path = path if path.endswith(".zip") else f"{os.path.splitext(path)[0]}.zip"
-            self.model.save(save_path)
-            logger.info(f"RL model saved to {save_path}")
-        else:
-            import joblib
-            joblib.dump({"algo": self.algo, "mock": True}, path)
-            logger.info(f"RL mock model saved to {path}")
-=======
-            # SB3 expects .zip for native format
-            save_path = path if path.lower().endswith(".zip") else f"{path}.zip"
+            save_path = path if path.lower().endswith(".zip") else f"{os.path.splitext(path)[0]}.zip"
             self.model.save(save_path)
             meta = {
                 "algo": self.algo,
@@ -304,8 +294,7 @@ class RLTrainer(TrainerBase):
         else:
             import joblib
             joblib.dump({"algo": self.algo, "mock": True}, path)
-            logger.info(f"RL mock saved to {path}")
->>>>>>> origin/cursor/optimize-ai-models-a75f
+            logger.info(f"RL mock model saved to {path}")
 
     def load(self, path: str) -> None:
         import json

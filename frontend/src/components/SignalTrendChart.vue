@@ -1,33 +1,35 @@
 <template>
   <div class="signal-trend-chart" :style="{ width, height }">
-    <div :ref="(el) => chartRef = el" style="width: 100%; height: 100%;"></div>
+    <div ref="chartRef" style="width: 100%; height: 100%;"></div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
+import type { ECharts } from 'echarts'
 
-const props = defineProps({
-  ticker: String,
-  history: {
-    type: Array,
-    default: () => [],
-  },
-  width: {
-    type: String,
-    default: '100%',
-  },
-  height: {
-    type: String,
-    default: '80px',
-  },
+interface SignalPoint {
+  cycle?: number
+  strength?: number
+  decision?: string
+}
+
+const props = withDefaults(defineProps<{
+  ticker?: string
+  history?: SignalPoint[]
+  width?: string
+  height?: string
+}>(), {
+  history: () => [],
+  width: '100%',
+  height: '80px',
 })
 
-const chartRef = ref(null)
-let chart = null
+const chartRef = ref<HTMLElement | null>(null)
+let chart: ECharts | null = null
 
-function getColor(decision) {
+function getColor(decision: string) {
   if (decision === 'buy') return '#22c55e'
   if (decision === 'sell') return '#ef4444'
   return '#6b7280'
@@ -45,11 +47,16 @@ function renderChart() {
   const strengths = data.map((d) => d.strength || 0)
   const decisions = data.map((d) => d.decision || 'hold')
 
-  const lineColor = '#8b5cf6'
-  const areaColor = 'rgba(139, 92, 246, 0.1)'
+  const lineColor = '#FF6700'
+  const areaColor = 'rgba(255, 103, 0, 0.12)'
 
-  // 标记 decision 变化点
-  const markPoints = []
+  const markPoints: Array<{
+    coord: [number, number]
+    symbol: string
+    symbolSize: number
+    itemStyle: { color: string }
+    label: { show: boolean }
+  }> = []
   for (let i = 1; i < decisions.length; i++) {
     if (decisions[i] !== decisions[i - 1]) {
       markPoints.push({
@@ -57,9 +64,7 @@ function renderChart() {
         symbol: 'pin',
         symbolSize: 24,
         itemStyle: { color: getColor(decisions[i]) },
-        label: {
-          show: false,
-        },
+        label: { show: false },
       })
     }
   }
@@ -112,20 +117,25 @@ function renderChart() {
   })
 }
 
+function handleResize() {
+  chart?.resize()
+}
+
 watch(
   () => props.history,
   () => renderChart(),
-  { deep: true }
+  { deep: true },
 )
 
 onMounted(() => {
   renderChart()
-  window.addEventListener('resize', () => chart?.resize())
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', () => chart?.resize())
+  window.removeEventListener('resize', handleResize)
   chart?.dispose()
+  chart = null
 })
 </script>
 

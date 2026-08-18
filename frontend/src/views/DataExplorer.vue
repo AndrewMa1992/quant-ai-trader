@@ -1,259 +1,214 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CandlestickChart, LineChart, BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, DataZoomComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
-import { useDataStore } from '@/stores/useDataStore'
+import { syncApi } from '@/api/syncApi'
 
-const dataStore = useDataStore()
+use([CandlestickChart, LineChart, BarChart, GridComponent, TooltipComponent, DataZoomComponent, LegendComponent, CanvasRenderer])
 
-const activeTab = ref<'fundamentals' | 'capitalFlow' | 'calendar'>('fundamentals')
+const tickerInput = ref('AAPL')
+const loading = ref(false)
+const error = ref('')
 
-// Tab 1 — Fundamentals
-const fundTicker = ref('')
-const fundData = ref<Record<string, any>>({})
-const fundLoading = ref(false)
+const tickerInfo = ref<Record<string, unknown> | null>(null)
+const quote = ref<Record<string, unknown> | null>(null)
+const bars = ref<Array<Record<string, unknown>>>([])
 
-async function searchFundamentals() {
-  if (!fundTicker.value.trim()) return
-  fundLoading.value = true
+async function searchTicker() {
+  const ticker = tickerInput.value.trim().toUpperCase()
+  if (!ticker) return
+
+  loading.value = true
+  error.value = ''
+  tickerInfo.value = null
+  quote.value = null
+  bars.value = []
+
   try {
-    await dataStore.fetchFundamentals(fundTicker.value.trim().toUpperCase())
-    fundData.value = dataStore.fundamentals[fundTicker.value.trim().toUpperCase()] || {}
-  } catch { fundData.value = {} }
-  finally { fundLoading.value = false }
+    const [infoRes, quoteRes, barsRes] = await Promise.allSettled([
+      syncApi.getTickerInfo(ticker),
+      syncApi.getQuote(ticker),
+      syncApi.getBars(ticker),
+    ])
+
+    if (infoRes.status === 'fulfilled') {
+      tickerInfo.value = (infoRes.value as Record<string, unknown>) ?? null
+    }
+    if (quoteRes.status === 'fulfilled') {
+      quote.value = (quoteRes.value as Record<string, unknown>) ?? null
+    }
+    if (barsRes.status === 'fulfilled') {
+      const payload = barsRes.value as Record<string, unknown> | unknown[]
+      if (Array.isArray(payload)) {
+        bars.value = payload as Array<Record<string, unknown>>
+      } else if (payload && Array.isArray((payload as Record<string, unknown>).bars)) {
+        bars.value = (payload as { bars: Array<Record<string, unknown>> }).bars
+      } else if (payload && Array.isArray((payload as Record<string, unknown>).data)) {
+        bars.value = (payload as { data: Array<Record<string, unknown>> }).data
+      } else {
+        bars.value = []
+      }
+    }
+
+    if (!tickerInfo.value && !quote.value && bars.value.length === 0) {
+      error.value = `No data found for ${ticker}. API may be offline.`
+    }
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Search failed'
+  } finally {
+    loading.value = false
+  }
 }
 
-// Tab 2 — Capital Flow
-const flowTicker = ref('')
-const flowStartDate = ref('')
-const flowEndDate = ref('')
-const flowData = ref<any[]>([])
-const flowLoading = ref(false)
-
-async function searchCapitalFlow() {
-  if (!flowTicker.value.trim()) return
-  flowLoading.value = true
-  const ticker = flowTicker.value.trim().toUpperCase()
-  const params: { start_date?: string; end_date?: string; limit?: number } = { limit: 30 }
-  if (flowStartDate.value) params.start_date = flowStartDate.value
-  if (flowEndDate.value) params.end_date = flowEndDate.value
-  try {
-    await dataStore.fetchCapitalFlow(ticker, params)
-    flowData.value = dataStore.capitalFlows[ticker] || []
-  } catch { flowData.value = [] }
-  finally { flowLoading.value = false }
-}
-
-// Tab 3 — Calendar
-const calMarket = ref('US')
-
-async function loadCalendar() {
-  await dataStore.fetchCalendar({ market: calMarket.value, trading_only: true })
-}
-
-function fmtNum(v: any) {
+function fmtNum(v: unknown) {
   if (v === null || v === undefined) return '-'
   const n = Number(v)
   if (isNaN(n)) return String(v)
   return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
-function fmtCurrency(v: any) {
-  if (v === null || v === undefined) return '-'
-  const n = Number(v)
-  if (isNaN(n)) return String(v)
-  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 })
-}
+const closeSeries = computed(() =>
+  bars.value.map((b) => Number(b.close ?? b.adj_close ?? 0)),
+)
+const dateSeries = computed(() =>
+  bars.value.map((b) => String(b.date ?? b.timestamp ?? '').slice(0, 10)),
+)
 
-const calendarRecords = ref(dataStore.calendar)
+const barsChartOption = computed(() => ({
+  grid: { top: 16, right: 16, bottom: 40, left: 56 },
+  tooltip: {
+    trigger: 'axis' as const,
+    backgroundColor: '#fff',
+    borderColor: '#EEEEEE',
+    textStyle: { color: '#1A1A1A', fontSize: 12 },
+  },
+  dataZoom: [{ type: 'inside' as const }, { type: 'slider' as const, height: 18 }],
+  xAxis: {
+    type: 'category' as const,
+    data: dateSeries.value,
+    axisLabel: { fontSize: 10, color: '#999999' },
+  },
+  yAxis: {
+    type: 'value' as const,
+    scale: true,
+    splitLine: { lineStyle: { color: '#F5F5F5' } },
+    axisLabel: { fontSize: 10, color: '#999999' },
+  },
+  series: [{
+    type: 'line',
+    name: 'Close',
+    data: closeSeries.value,
+    smooth: true,
+    symbol: 'none',
+    lineStyle: { color: '#FF6700', width: 2 },
+    areaStyle: {
+      color: {
+        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: '#FF670025' },
+          { offset: 1, color: '#FF670005' },
+        ],
+      },
+    },
+  }],
+}))
 
-onMounted(() => {
-  loadCalendar()
+const infoFields = computed(() => {
+  const info = tickerInfo.value ?? {}
+  return [
+    { label: 'Name', value: String(info.name ?? info.longName ?? '-') },
+    { label: 'Sector', value: String(info.sector ?? '-') },
+    { label: 'Industry', value: String(info.industry ?? '-') },
+    { label: 'Market', value: String(info.market ?? info.exchange ?? '-') },
+    { label: 'Currency', value: String(info.currency ?? '-') },
+  ]
+})
+
+const quoteFields = computed(() => {
+  const q = quote.value ?? {}
+  return [
+    { label: 'Last', value: fmtNum(q.last ?? q.price ?? q.close) },
+    { label: 'Bid', value: fmtNum(q.bid) },
+    { label: 'Ask', value: fmtNum(q.ask) },
+    { label: 'Volume', value: fmtNum(q.volume) },
+    { label: 'Change %', value: q.change_pct != null ? `${Number(q.change_pct).toFixed(2)}%` : fmtNum(q.changePercent) },
+  ]
 })
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Tab Switcher -->
-    <div class="flex gap-1 p-1 bg-xm-bg-surface rounded-lg w-fit">
-      <button
-        v-for="tab in ([
-          { key: 'fundamentals', label: 'Fundamentals', icon: '📊' },
-          { key: 'capitalFlow', label: 'Capital Flow', icon: '💸' },
-          { key: 'calendar', label: 'Calendar', icon: '📅' },
-        ] as const)"
-        :key="tab.key"
-        class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-xm ease-xm"
-        :class="activeTab === tab.key
-          ? 'bg-white text-xm-primary shadow-xm'
-          : 'text-xm-text-secondary hover:text-xm-text-primary'"
-        @click="activeTab = tab.key"
-      >
-        <span class="mr-1.5">{{ tab.icon }}</span>{{ tab.label }}
-      </button>
-    </div>
-
-    <!-- ═══ Tab 1: Fundamentals ═══ -->
-    <div v-if="activeTab === 'fundamentals'" class="space-y-4">
-      <div class="flex items-end gap-3">
-        <div class="flex-1 max-w-[300px]">
-          <label class="block text-xxs text-xm-text-tertiary mb-1">Ticker</label>
-          <input
-            v-model="fundTicker"
-            placeholder="e.g. AAPL"
-            class="xm-input w-full"
-            @keyup.enter="searchFundamentals"
-          />
-        </div>
-        <button class="xm-btn-primary" :disabled="fundLoading" @click="searchFundamentals">
-          {{ fundLoading ? 'Loading...' : 'Search' }}
-        </button>
-      </div>
-
-      <div v-if="Object.keys(fundData).length > 0" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">PE Ratio</div>
-          <div class="xm-metric-value text-base">{{ fmtNum(fundData.pe_ratio) }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">PB Ratio</div>
-          <div class="xm-metric-value text-base">{{ fmtNum(fundData.pb_ratio) }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">EPS</div>
-          <div class="xm-metric-value text-base">{{ fmtNum(fundData.eps) }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">Dividend Yield</div>
-          <div class="xm-metric-value text-base">{{ fundData.dividend_yield ? (fundData.dividend_yield * 100).toFixed(2) + '%' : '-' }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">Beta</div>
-          <div class="xm-metric-value text-base">{{ fmtNum(fundData.beta) }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">Market Cap</div>
-          <div class="xm-metric-value text-base">{{ fmtCurrency(fundData.market_cap) }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">Sector</div>
-          <div class="xm-metric-value text-base">{{ fundData.sector || '-' }}</div>
-        </XmCard>
-        <XmCard class="!p-4">
-          <div class="xm-metric-label">Industry</div>
-          <div class="xm-metric-value text-base">{{ fundData.industry || '-' }}</div>
-        </XmCard>
-      </div>
-      <div v-else-if="!fundLoading && fundTicker" class="text-center py-10 text-xm-text-tertiary text-sm">
-        No fundamentals found. Try searching a different ticker.
-      </div>
-    </div>
-
-    <!-- ═══ Tab 2: Capital Flow ═══ -->
-    <div v-if="activeTab === 'capitalFlow'" class="space-y-4">
+    <XmCard class="!p-4">
       <div class="flex flex-wrap items-end gap-3">
-        <div class="flex-1 min-w-[140px] max-w-[200px]">
+        <div class="flex-1 min-w-[160px] max-w-[280px]">
           <label class="block text-xxs text-xm-text-tertiary mb-1">Ticker</label>
           <input
-            v-model="flowTicker"
-            placeholder="e.g. AAPL"
+            v-model="tickerInput"
             class="xm-input w-full"
-            @keyup.enter="searchCapitalFlow"
+            placeholder="e.g. AAPL"
+            @keyup.enter="searchTicker"
           />
         </div>
-        <div class="w-[150px]">
-          <label class="block text-xxs text-xm-text-tertiary mb-1">Start Date</label>
-          <input v-model="flowStartDate" type="date" class="xm-input w-full" />
-        </div>
-        <div class="w-[150px]">
-          <label class="block text-xxs text-xm-text-tertiary mb-1">End Date</label>
-          <input v-model="flowEndDate" type="date" class="xm-input w-full" />
-        </div>
-        <button class="xm-btn-primary" :disabled="flowLoading" @click="searchCapitalFlow">
-          {{ flowLoading ? 'Loading...' : 'Search' }}
+        <button class="xm-btn-primary" :disabled="loading" @click="searchTicker">
+          {{ loading ? 'Loading...' : 'Search' }}
         </button>
       </div>
+    </XmCard>
 
-      <XmCard v-if="flowData.length > 0" title="Capital Flow History" :subtitle="`${flowData.length} records`">
-        <table class="xm-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th class="text-right">Net Inflow</th>
-              <th class="text-right">Main Inflow</th>
-              <th class="text-right">Main Outflow</th>
-              <th class="text-right">Super-Large Inflow</th>
-              <th class="text-right">Super-Large Outflow</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, idx) in flowData" :key="idx">
-              <td class="text-xs">{{ row.date || '-' }}</td>
-              <td class="text-right font-mono text-sm" :class="(row.net_inflow ?? 0) >= 0 ? 'text-profit' : 'text-loss'">
-                {{ fmtCurrency(row.net_inflow) }}
-              </td>
-              <td class="text-right font-mono text-sm text-profit">{{ fmtCurrency(row.main_inflow) }}</td>
-              <td class="text-right font-mono text-sm text-loss">{{ fmtCurrency(row.main_outflow) }}</td>
-              <td class="text-right font-mono text-sm text-profit">{{ fmtCurrency(row.super_large_inflow) }}</td>
-              <td class="text-right font-mono text-sm text-loss">{{ fmtCurrency(row.super_large_outflow) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </XmCard>
-      <div v-else-if="!flowLoading && flowTicker" class="text-center py-10 text-xm-text-tertiary text-sm">
-        No capital flow data found. Try adjusting your date range.
-      </div>
+    <div v-if="error" class="p-3 rounded-lg bg-loss-bg border border-loss/20 text-sm text-loss">
+      {{ error }}
     </div>
 
-    <!-- ═══ Tab 3: Calendar ═══ -->
-    <div v-if="activeTab === 'calendar'" class="space-y-4">
-      <div class="flex items-end gap-3">
-        <div class="w-[150px]">
-          <label class="block text-xxs text-xm-text-tertiary mb-1">Market</label>
-          <select v-model="calMarket" class="xm-input w-full" @change="loadCalendar">
-            <option value="US">US</option>
-            <option value="HK">HK</option>
-            <option value="SG">SG</option>
-          </select>
+    <div v-if="tickerInfo || quote" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <XmCard title="Ticker Info">
+        <div v-if="tickerInfo" class="space-y-3">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="font-mono font-semibold text-base">{{ String(tickerInfo.ticker || tickerInput).toUpperCase() }}</span>
+            <XmBadge variant="info">{{ String(tickerInfo.market || tickerInfo.exchange || 'US') }}</XmBadge>
+          </div>
+          <div
+            v-for="field in infoFields"
+            :key="field.label"
+            class="flex justify-between py-2 border-b border-xm-border-light last:border-0"
+          >
+            <span class="text-sm text-xm-text-secondary">{{ field.label }}</span>
+            <span class="text-sm font-mono">{{ field.value }}</span>
+          </div>
         </div>
-        <button class="xm-btn-secondary" @click="loadCalendar">Refresh</button>
-      </div>
-
-      <XmCard v-if="dataStore.tradingDays.length > 0" title="Trading Days" :subtitle="`${dataStore.tradingDays.length} days`">
-        <table class="xm-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Market</th>
-              <th>Open Time</th>
-              <th>Close Time</th>
-              <th>Holiday</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(day, idx) in dataStore.tradingDays.slice(0, 60)" :key="idx">
-              <td class="font-mono text-xs">{{ day.date }}</td>
-              <td>
-                <XmBadge variant="info">{{ day.market }}</XmBadge>
-              </td>
-              <td class="text-xs">{{ day.open_time || '-' }}</td>
-              <td class="text-xs">{{ day.close_time || '-' }}</td>
-              <td class="text-xs text-xm-text-tertiary">{{ day.holiday_name || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="text-center py-8 text-xm-text-tertiary text-sm">No ticker info</div>
       </XmCard>
-      <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
-        No calendar data available. Try selecting a different market.
-      </div>
+
+      <XmCard title="Quote">
+        <div v-if="quote" class="space-y-3">
+          <div
+            v-for="field in quoteFields"
+            :key="field.label"
+            class="flex justify-between py-2 border-b border-xm-border-light last:border-0"
+          >
+            <span class="text-sm text-xm-text-secondary">{{ field.label }}</span>
+            <span class="text-sm font-mono font-semibold">{{ field.value }}</span>
+          </div>
+        </div>
+        <div v-else class="text-center py-8 text-xm-text-tertiary text-sm">No quote data</div>
+      </XmCard>
     </div>
 
-    <!-- Error Banner -->
-    <div
-      v-if="dataStore.error"
-      class="p-3 rounded-lg bg-loss-bg border border-loss/20 text-sm text-loss"
-    >
-      {{ dataStore.error }}
-    </div>
+    <XmCard title="Price Bars" :subtitle="bars.length ? `${bars.length} bars` : 'Search a ticker to load OHLCV'">
+      <div v-if="loading" class="flex items-center justify-center h-[320px] text-xm-text-tertiary text-sm">
+        Loading bars...
+      </div>
+      <div
+        v-else-if="bars.length === 0"
+        class="flex items-center justify-center h-[320px] text-xm-text-tertiary text-sm"
+      >
+        No bar data. Search a ticker above.
+      </div>
+      <VChart v-else :option="barsChartOption" style="height: 320px" autoresize />
+    </XmCard>
   </div>
 </template>

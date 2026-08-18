@@ -42,6 +42,10 @@ function fmtDate(val?: string) {
   try { return new Date(val).toLocaleString() } catch { return val }
 }
 
+function orderId(order: { order_id?: string; orderId?: string }) {
+  return order.order_id || order.orderId || '-'
+}
+
 onMounted(() => {
   dataStore.fetchOrders({ limit: 50 })
 })
@@ -49,7 +53,6 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- KPI Cards -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <XmCard class="!p-4">
         <div class="xm-metric-label">Total Orders</div>
@@ -69,7 +72,6 @@ onMounted(() => {
       </XmCard>
     </div>
 
-    <!-- Filter Bar -->
     <XmCard class="!p-4">
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-[140px]">
@@ -99,7 +101,6 @@ onMounted(() => {
       </div>
     </XmCard>
 
-    <!-- Orders Table -->
     <XmCard title="Orders" :subtitle="`${dataStore.orders.length} records`">
       <div v-if="dataStore.loading" class="text-center py-10 text-xm-text-tertiary text-sm">
         Loading orders...
@@ -118,28 +119,27 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="order in dataStore.orders" :key="order.order_id">
-            <td class="font-mono text-xs">{{ order.order_id }}</td>
+          <tr v-for="(order, idx) in dataStore.orders" :key="orderId(order) + '-' + idx">
+            <td class="font-mono text-xs">{{ orderId(order) }}</td>
             <td class="font-mono font-semibold">{{ order.ticker }}</td>
             <td>
               <XmBadge :variant="sideBadge(order.side) as any">{{ (order.side || '').toUpperCase() }}</XmBadge>
             </td>
             <td class="text-right font-mono">{{ order.quantity }}</td>
             <td class="text-right font-mono">{{ order.price ? '$' + order.price.toFixed(2) : '-' }}</td>
-            <td class="text-xs">{{ order.order_type || '-' }}</td>
+            <td class="text-xs">{{ order.order_type || order.strategy || '-' }}</td>
             <td>
               <XmBadge :variant="statusBadge(order.status) as any">{{ order.status }}</XmBadge>
             </td>
-            <td class="text-xs text-xm-text-tertiary">{{ fmtDate(order.created_at) }}</td>
+            <td class="text-xs text-xm-text-tertiary">{{ fmtDate(order.created_at || order.timestamp) }}</td>
           </tr>
         </tbody>
       </table>
       <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
-        No orders found. Try adjusting your filters.
+        No orders found. Try adjusting your filters or ensure the execution API is reachable.
       </div>
     </XmCard>
 
-    <!-- Error Banner -->
     <div
       v-if="dataStore.error"
       class="p-3 rounded-lg bg-loss-bg border border-loss/20 text-sm text-loss"
