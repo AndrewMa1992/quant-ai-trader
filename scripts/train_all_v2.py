@@ -62,10 +62,7 @@ def download_data(tickers: list, market: str = "US", years: int = 2):
 def compute_factors_for_training():
     """计算所有已下载标的的因子，返回训练数据"""
     from services.factor_service.engine.factor_engine import FactorEngine
-    from services.factor_service.factors.technical import TECHNICAL_FACTORS
-    from services.factor_service.factors.fundamental import FUNDAMENTAL_FACTORS
-    from services.factor_service.factors.microstructure import MICROSTRUCTURE_FACTORS
-    
+
     data_dir = Path("data/daily")
     parquet_files = list(data_dir.glob("*.parquet"))
     
@@ -74,14 +71,8 @@ def compute_factors_for_training():
         return None, None
     
     engine = FactorEngine()
-    
-    # Register all factors
-    for f_cls in TECHNICAL_FACTORS + FUNDAMENTAL_FACTORS + MICROSTRUCTURE_FACTORS:
-        try:
-            engine.register(f_cls())
-        except Exception:
-            pass
-    
+    # register_all() registers TECHNICAL/FUNDAMENTAL/... factor instances
+    engine.register_all()
     logger.info(f"已注册 {len(engine.factors)} 个因子")
     
     all_features = []

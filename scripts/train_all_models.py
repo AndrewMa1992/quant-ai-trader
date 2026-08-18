@@ -88,9 +88,10 @@ def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
 
     all_factor_classes = TECHNICAL_FACTORS + FUNDAMENTAL_FACTORS + MICROSTRUCTURE_FACTORS
     registered = 0
-    for f_cls in all_factor_classes:
+    for factor in all_factor_classes:
         try:
-            engine.register(f_cls())
+            # Lists already contain FactorBase instances
+            engine.register(factor)
             registered += 1
         except Exception:
             pass

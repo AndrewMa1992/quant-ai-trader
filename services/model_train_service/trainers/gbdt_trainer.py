@@ -99,6 +99,7 @@ class GBDTTrainer(TrainerBase):
             Training metrics dictionary.
         """
         self._validate_data(X, y)
+        self._feature_names = list(X.columns)
         params = {**self.params, **kwargs}
 
         # Split validation if not provided
