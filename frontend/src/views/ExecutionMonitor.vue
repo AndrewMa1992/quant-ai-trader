@@ -3,27 +3,43 @@ import { computed, onMounted, ref } from 'vue'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import XmStatusDot from '@/components/ui/XmStatusDot.vue'
+import OrderSliceProgress from '@/components/execution/OrderSliceProgress.vue'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { executionApi } from '@/api/executionApi'
 import { tradeApi, type TradeRecord } from '@/api/tradeApi'
 
 const execStore = useExecutionStore()
 
-interface TradeLog {
+interface OrderRow {
   id: string
   ticker: string
   side: string
   quantity: number
+  filled: number
   price: number
   value: number
   status: string
   timestamp: string
   algo: string
+  slices?: Array<{ label: string; completed: number; total: number; status: 'pending' | 'executing' | 'filled' }>
 }
 
-const tradeLogs = ref<TradeLog[]>([])
+const orders = ref<OrderRow[]>([])
+const sideFilter = ref('all')
+const statusFilter = ref('all')
+const loading = ref(false)
+const selectedOrderId = ref<string | null>(null)
+
+const filteredOrders = computed(() => {
+  return orders.value.filter((o) => {
+    if (sideFilter.value !== 'all' && o.side.toLowerCase() !== sideFilter.value) return false
+    if (statusFilter.value !== 'all' && o.status.toLowerCase() !== statusFilter.value) return false
+    return true
+  })
+})
 
 const todayStats = computed(() => {
-  const filled = tradeLogs.value.filter((t) => t.status === 'filled')
+  const filled = orders.value.filter((t) => t.status === 'filled' || t.status === 'partial')
   const buys = filled.filter((t) => t.side === 'buy')
   const sells = filled.filter((t) => t.side === 'sell')
   const totalValue = filled.reduce((s, t) => s + t.value, 0)
@@ -32,37 +48,95 @@ const todayStats = computed(() => {
     buyCount: buys.length,
     sellCount: sells.length,
     totalValue,
-    rejectedCount: tradeLogs.value.filter((t) => t.status === 'rejected').length,
+    rejectedCount: orders.value.filter((t) => t.status === 'rejected').length,
   }
+})
+
+const selectedSlices = computed(() => {
+  const order = orders.value.find((o) => o.id === selectedOrderId.value)
+  if (!order) return []
+  if (order.slices && order.slices.length > 0) return order.slices
+  // Fallback progress from filled/qty
+  const filled = order.filled || (order.status === 'filled' ? order.quantity : 0)
+  const status: 'pending' | 'executing' | 'filled' =
+    order.status === 'filled' ? 'filled' : filled > 0 ? 'executing' : 'pending'
+  return [{
+    label: order.ticker,
+    completed: filled,
+    total: Math.max(order.quantity, 1),
+    status,
+  }]
 })
 
 onMounted(async () => {
   await Promise.all([
     execStore.fetchAlerts(),
-    fetchTradeHistory(),
+    fetchOrders(),
   ])
 })
 
-/** Fetch trade history from /api/trade/history and map to TradeLog format */
-async function fetchTradeHistory(): Promise<void> {
+async function fetchOrders(): Promise<void> {
+  loading.value = true
   try {
+    // Prefer execution API orders
+    try {
+      const data = await executionApi.getTradeLogs()
+      const raw = (data?.orders ?? data ?? []) as Array<Record<string, unknown>>
+      if (Array.isArray(raw) && raw.length > 0) {
+        orders.value = raw.map(mapOrder)
+        return
+      }
+    } catch {
+      // fall through
+    }
+
     const result = await tradeApi.getTradeHistory(50)
     const trades: TradeRecord[] = result.trades ?? []
-    if (trades.length > 0) {
-      tradeLogs.value = trades.map((t) => ({
-        id: `T-${String(t.id)}`,
-        ticker: t.ticker,
-        side: t.side,
-        quantity: t.quantity,
-        price: t.price,
-        value: t.value ?? t.quantity * t.price,
-        status: t.status ?? 'filled',
-        timestamp: t.timestamp,
-        algo: t.strategy ?? 'TWAP',
-      }))
-    }
+    orders.value = trades.map((t) => ({
+      id: `T-${String(t.id)}`,
+      ticker: t.ticker,
+      side: String(t.side || '').toLowerCase(),
+      quantity: t.quantity,
+      filled: t.status === 'filled' ? t.quantity : 0,
+      price: t.price,
+      value: t.value ?? t.quantity * t.price,
+      status: String(t.status ?? 'filled').toLowerCase(),
+      timestamp: t.timestamp,
+      algo: t.strategy ?? 'TWAP',
+    }))
   } catch {
-    // Silent degradation — trade log remains empty
+    orders.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function mapOrder(t: Record<string, unknown>): OrderRow {
+  const qty = Number(t.quantity ?? t.qty ?? 0)
+  const filled = Number(t.filled ?? t.filled_qty ?? (String(t.status).toLowerCase() === 'filled' ? qty : 0))
+  const price = Number(t.price ?? t.avg_price ?? 0)
+  const slicesRaw = t.slices as Array<Record<string, unknown>> | undefined
+  const slices = Array.isArray(slicesRaw)
+    ? slicesRaw.map((s, i) => ({
+        label: String(s.label ?? `S${i + 1}`),
+        completed: Number(s.completed ?? s.filled ?? 0),
+        total: Number(s.total ?? s.quantity ?? 1),
+        status: (String(s.status || 'pending') as 'pending' | 'executing' | 'filled'),
+      }))
+    : undefined
+
+  return {
+    id: String(t.order_id ?? t.id ?? `O-${Math.random().toString(36).slice(2, 8)}`),
+    ticker: String(t.ticker ?? ''),
+    side: String(t.side ?? '').toLowerCase(),
+    quantity: qty,
+    filled,
+    price,
+    value: Number(t.value ?? qty * price),
+    status: String(t.status ?? 'unknown').toLowerCase(),
+    timestamp: String(t.timestamp ?? t.created_at ?? ''),
+    algo: String(t.algo ?? t.strategy ?? 'TWAP'),
+    slices,
   }
 }
 
@@ -74,14 +148,19 @@ function statusBadge(status: string): string {
     default: return 'info'
   }
 }
+
+function fillPct(order: OrderRow): number {
+  if (order.quantity <= 0) return 0
+  const filled = order.filled || (order.status === 'filled' ? order.quantity : 0)
+  return Math.min(100, (filled / order.quantity) * 100)
+}
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Stats Row — computed from real trade data -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <XmCard class="!p-4">
-        <div class="xm-metric-label">Today's Trades</div>
+        <div class="xm-metric-label">Orders</div>
         <div class="xm-metric-value text-lg">{{ todayStats.totalTrades }}</div>
       </XmCard>
       <XmCard class="!p-4">
@@ -98,11 +177,13 @@ function statusBadge(status: string): string {
       </XmCard>
     </div>
 
-    <!-- Recent Alerts -->
-    <XmCard v-if="execStore.alerts.length > 0" title="System Alerts">
-      <div class="space-y-2">
+    <XmCard title="System Alerts">
+      <div v-if="execStore.alerts.length === 0" class="text-center py-6 text-xm-text-tertiary text-sm">
+        No active alerts.
+      </div>
+      <div v-else class="space-y-2">
         <div
-          v-for="alert in execStore.alerts.slice(0, 5)"
+          v-for="alert in execStore.alerts.slice(0, 8)"
           :key="alert.id"
           class="flex items-start gap-3 p-3 rounded-lg border"
           :class="alert.severity === 'CRITICAL' ? 'border-risk-red/30 bg-loss-bg' : 'border-xm-border-light bg-xm-bg-surface'"
@@ -121,50 +202,85 @@ function statusBadge(status: string): string {
       </div>
     </XmCard>
 
-    <!-- Trade Log Timeline — real data from API -->
-    <XmCard title="Trade Log" subtitle="Real-time order timeline">
-      <div v-if="tradeLogs.length === 0" class="text-center py-10 text-xm-text-tertiary text-sm">
-        No trade history available. Orders will appear here once executed.
+    <XmCard title="Orders" subtitle="Filter by side / status">
+      <div class="flex flex-wrap items-end gap-3 mb-4">
+        <div class="w-[140px]">
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Side</label>
+          <select v-model="sideFilter" class="xm-input w-full">
+            <option value="all">All</option>
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+          </select>
+        </div>
+        <div class="w-[160px]">
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Status</label>
+          <select v-model="statusFilter" class="xm-input w-full">
+            <option value="all">All</option>
+            <option value="filled">Filled</option>
+            <option value="partial">Partial</option>
+            <option value="pending">Pending</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <button class="xm-btn-secondary" :disabled="loading" @click="fetchOrders">
+          {{ loading ? 'Loading...' : 'Refresh' }}
+        </button>
       </div>
-      <div v-else class="space-y-0">
-        <div
-          v-for="(log, idx) in tradeLogs"
-          :key="log.id"
-          class="flex items-center gap-4 py-3 px-4 border-b border-xm-border-light last:border-0 hover:bg-xm-bg-surface/50 transition-colors"
-        >
-          <!-- Timeline dot -->
-          <div class="flex-shrink-0 flex flex-col items-center">
-            <span class="w-2.5 h-2.5 rounded-full" :class="{
-              'bg-profit': log.status === 'filled',
-              'bg-risk-yellow': log.status === 'partial',
-              'bg-risk-red': log.status === 'rejected',
-              'bg-xm-border': log.status === 'pending',
-            }" />
-            <div v-if="idx < tradeLogs.length - 1" class="w-px h-8 bg-xm-border-light mt-1" />
-          </div>
 
-          <!-- Content -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-mono font-semibold">{{ log.ticker }}</span>
+      <div v-if="loading" class="text-center py-10 text-xm-text-tertiary text-sm">Loading orders...</div>
+      <div v-else-if="filteredOrders.length === 0" class="text-center py-10 text-xm-text-tertiary text-sm">
+        No orders match the current filters.
+      </div>
+      <table v-else class="xm-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Ticker</th>
+            <th>Side</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Filled</th>
+            <th>Progress</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="log in filteredOrders"
+            :key="log.id"
+            class="cursor-pointer"
+            :class="{ 'bg-xm-primary-light/40': selectedOrderId === log.id }"
+            @click="selectedOrderId = log.id"
+          >
+            <td class="font-mono text-xs">{{ log.id }}</td>
+            <td class="font-mono font-semibold">{{ log.ticker }}</td>
+            <td>
               <XmBadge :variant="log.side === 'buy' ? 'success' : 'danger'">
                 {{ log.side.toUpperCase() }}
               </XmBadge>
+            </td>
+            <td class="text-right font-mono">{{ log.quantity }}</td>
+            <td class="text-right font-mono">{{ log.filled }}</td>
+            <td class="min-w-[100px]">
+              <div class="w-full h-1.5 bg-xm-bg-surface rounded-full overflow-hidden">
+                <div
+                  class="h-full rounded-full"
+                  style="background-color: #FF6700"
+                  :style="{ width: fillPct(log) + '%' }"
+                />
+              </div>
+            </td>
+            <td>
               <XmBadge :variant="statusBadge(log.status) as any">{{ log.status }}</XmBadge>
-              <span class="text-xs text-xm-text-tertiary font-mono ml-auto">{{ log.timestamp }}</span>
-            </div>
-            <div class="flex items-center gap-4 mt-1">
-              <span class="text-xs text-xm-text-secondary">
-                {{ log.quantity }} shares @ ${{ log.price.toFixed(2) }}
-              </span>
-              <span class="text-xs font-mono text-xm-text-secondary">
-                Value: ${{ log.value.toLocaleString() }}
-              </span>
-              <span class="text-xs text-xm-text-tertiary">{{ log.algo }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+            </td>
+            <td class="text-xs text-xm-text-tertiary">{{ log.timestamp }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </XmCard>
+
+    <XmCard v-if="selectedOrderId" title="Order Slice Progress">
+      <OrderSliceProgress :slices="selectedSlices" />
     </XmCard>
   </div>
 </template>

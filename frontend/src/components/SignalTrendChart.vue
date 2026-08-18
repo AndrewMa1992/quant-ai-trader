@@ -45,8 +45,8 @@ function renderChart() {
   const strengths = data.map((d) => d.strength || 0)
   const decisions = data.map((d) => d.decision || 'hold')
 
-  const lineColor = '#8b5cf6'
-  const areaColor = 'rgba(139, 92, 246, 0.1)'
+  const lineColor = '#FF6700'
+  const areaColor = 'rgba(255, 103, 0, 0.12)'
 
   // 标记 decision 变化点
   const markPoints = []

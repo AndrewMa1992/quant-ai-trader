@@ -224,6 +224,108 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Buttons / Inputs ───────────────────────────────────── */
+.xm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--xm-duration) var(--xm-easing),
+    border-color var(--xm-duration) var(--xm-easing),
+    color var(--xm-duration) var(--xm-easing),
+    opacity var(--xm-duration) var(--xm-easing);
+}
+.xm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.xm-btn-primary {
+  background: var(--xm-primary);
+  color: #fff;
+}
+.xm-btn-primary:hover:not(:disabled) {
+  background: var(--xm-primary-hover);
+}
+.xm-btn-secondary {
+  background: var(--xm-bg-card);
+  border-color: var(--xm-border);
+  color: var(--xm-text-primary);
+}
+.xm-btn-secondary:hover:not(:disabled) {
+  background: var(--xm-bg-surface);
+}
+.xm-btn-danger {
+  background: var(--xm-loss);
+  color: #fff;
+}
+.xm-btn-ghost {
+  background: transparent;
+  color: var(--xm-text-secondary);
+}
+.xm-btn-ghost:hover:not(:disabled) {
+  background: var(--xm-bg-surface);
+  color: var(--xm-text-primary);
+}
+
+.xm-input,
+.xm-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--xm-border);
+  border-radius: 8px;
+  background: var(--xm-bg-card);
+  color: var(--xm-text-primary);
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color var(--xm-duration) var(--xm-easing),
+    box-shadow var(--xm-duration) var(--xm-easing);
+}
+.xm-input:focus,
+.xm-select:focus {
+  border-color: var(--xm-primary);
+  box-shadow: 0 0 0 3px var(--xm-primary-light);
+}
+
+.xm-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--xm-text-secondary);
+  margin-bottom: 6px;
+}
+
+.xm-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--xm-text-tertiary);
+  font-size: 0.875rem;
+}
+
+.xm-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: xmSlideUp 300ms var(--xm-easing);
+}
+
+.xm-page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--xm-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.xm-page-sub {
+  font-size: 0.8125rem;
+  color: var(--xm-text-tertiary);
+}
+
 /* ── Animation Utilities ────────────────────────────────── */
 .xm-fade-in {
   animation: xmFadeIn var(--xm-duration) var(--xm-easing);

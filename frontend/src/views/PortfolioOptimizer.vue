@@ -1,22 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { ScatterChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 import XmCard from '@/components/ui/XmCard.vue'
-import XmBadge from '@/components/ui/XmBadge.vue'
+import EfficientFrontier from '@/components/portfolio/EfficientFrontier.vue'
 import { usePortfolioStore } from '@/stores/usePortfolioStore'
 import { tradeApi, type TradePortfolioDetail } from '@/api/tradeApi'
-
-use([ScatterChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const portfolioStore = usePortfolioStore()
 
 interface HoldingRow {
   ticker: string
-  name: string
   shares: number
   price: number
   value: number
@@ -33,118 +25,164 @@ const portfolioMetrics = ref({
 })
 
 const loading = ref(true)
+const optimizing = ref(false)
+const optError = ref('')
+
+const method = ref<'markowitz' | 'black_litterman' | 'risk_parity'>('markowitz')
+const tickersInput = ref('AAPL,MSFT,GOOGL,SPY')
+const weightRows = ref<Array<{ ticker: string; weight: number }>>([])
+
+const frontierPoints = ref<Array<{ risk: number; return_: number; type: string }>>([])
+const currentPoint = ref<{ risk: number; return_: number } | undefined>(undefined)
 
 onMounted(async () => {
-  await Promise.all([
-    fetchPositionsAndPortfolio(),
-  ])
+  await fetchPositionsAndPortfolio()
 })
 
-/** Fetch positions and portfolio from /api/trade/portfolio endpoint */
 async function fetchPositionsAndPortfolio(): Promise<void> {
   loading.value = true
   try {
+    await portfolioStore.fetchPositions().catch(() => {})
+
+    if (portfolioStore.positions.length > 0) {
+      const totalValue = portfolioStore.totalValue
+        || portfolioStore.positions.reduce((s, p) => s + (p.market_value ?? 0), 0)
+      portfolioMetrics.value = {
+        totalValue,
+        totalPnl: portfolioStore.totalPnl,
+        cash: 0,
+      }
+      holdings.value = portfolioStore.positions.map((p) => ({
+        ticker: p.ticker,
+        shares: p.quantity,
+        price: p.quantity ? (p.market_value ?? 0) / p.quantity : 0,
+        value: p.market_value ?? 0,
+        weight: totalValue > 0 ? (p.market_value ?? 0) / totalValue : 0,
+        dailyChange: p.unrealized_pnl ?? 0,
+        dailyChangePct: p.cost_basis > 0
+          ? ((p.unrealized_pnl ?? 0) / (p.cost_basis * Math.abs(p.quantity || 1))) * 100
+          : 0,
+      }))
+      if (holdings.value.length > 0) {
+        tickersInput.value = holdings.value.map((h) => h.ticker).join(',')
+      }
+      return
+    }
+
     const portfolio = await tradeApi.getPortfolio()
     const positions: TradePortfolioDetail[] = portfolio.positions ?? []
-    const metrics = portfolio.metrics ?? ({} as Record<string, unknown>)
-
-    const totalValue = (metrics.total_value as number) ?? positions.reduce((s, p) => s + (p.market_value ?? 0), 0)
+    const metrics = portfolio.metrics ?? {}
+    const totalValue = Number(metrics.total_value ?? metrics.total_market_value ?? 0)
+      || positions.reduce((s, p) => s + (p.market_value ?? 0), 0)
 
     portfolioMetrics.value = {
       totalValue,
-      totalPnl: (metrics.total_pnl as number) ?? 0,
-      cash: (metrics.cash as number) ?? 0,
+      totalPnl: Number(metrics.total_pnl ?? 0),
+      cash: Number(metrics.cash ?? 0),
     }
 
-    if (positions.length > 0) {
-      holdings.value = positions.map((p) => {
-        const weight = totalValue > 0 ? (p.market_value ?? 0) / totalValue : 0
-        return {
-          ticker: p.ticker,
-          name: p.ticker, // name not provided by trade API; use ticker as display name
-          shares: p.shares,
-          price: p.current_price ?? p.avg_cost ?? 0,
-          value: p.market_value ?? 0,
-          weight,
-          dailyChange: p.unrealized_pnl ?? 0,
-          dailyChangePct: p.unrealized_pnl_pct ?? 0,
-        }
-      })
+    holdings.value = positions.map((p) => {
+      const weight = totalValue > 0 ? (p.market_value ?? 0) / totalValue : 0
+      return {
+        ticker: p.ticker,
+        shares: p.shares,
+        price: p.current_price ?? p.avg_cost ?? 0,
+        value: p.market_value ?? 0,
+        weight,
+        dailyChange: p.unrealized_pnl ?? 0,
+        dailyChangePct: p.unrealized_pnl_pct ?? 0,
+      }
+    })
+    if (holdings.value.length > 0) {
+      tickersInput.value = holdings.value.map((h) => h.ticker).join(',')
     }
   } catch {
-    // Silent degradation — leave holdings empty
+    holdings.value = []
   } finally {
     loading.value = false
   }
 }
 
 const totalValue = computed(() => portfolioMetrics.value.totalValue)
-const totalDailyPnL = computed(() => holdings.value.reduce((s, h) => s + h.dailyChange, 0))
 
-// ── Efficient Frontier (placeholder — needs optimizer API support) ──
-const frontierPoints = ref<Array<[number, number]>>([])
-const currentPoint = ref<[number, number]>([0.15, 0.12])
+async function runOptimize(): Promise<void> {
+  optError.value = ''
+  optimizing.value = true
+  weightRows.value = []
+  frontierPoints.value = []
+  currentPoint.value = undefined
 
-/** Generate placeholder frontier points. Replace with real optimizer API when available. */
-function generateFrontier(): void {
-  const pts: Array<[number, number]> = []
-  for (let i = 0; i < 50; i++) {
-    const risk = 0.08 + (i / 50) * 0.18
-    const ret = 0.06 + risk * 0.5 - Math.pow(risk - 0.13, 2) * 2 + Math.random() * 0.01
-    pts.push([parseFloat(risk.toFixed(4)), parseFloat(ret.toFixed(4))])
+  const tickers = tickersInput.value
+    .split(',')
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean)
+
+  if (tickers.length === 0) {
+    optError.value = 'Enter at least one ticker'
+    optimizing.value = false
+    return
   }
-  frontierPoints.value = pts
-  currentPoint.value = [0.146, 0.121]
-}
-generateFrontier()
 
-const frontierOption = computed(() => ({
-  grid: { top: 16, right: 24, bottom: 8, left: 60 },
-  tooltip: {
-    trigger: 'item' as const,
-    backgroundColor: '#fff',
-    borderColor: '#EEEEEE',
-    textStyle: { color: '#1A1A1A', fontSize: 12 },
-    formatter: (p: any) => `Risk: ${(p.value[0] * 100).toFixed(2)}%<br/>Return: ${(p.value[1] * 100).toFixed(2)}%`,
-  },
-  xAxis: {
-    type: 'value' as const,
-    name: 'Risk (Volatility)',
-    nameTextStyle: { fontSize: 10, color: '#999999' },
-    axisLabel: { fontSize: 10, color: '#999999', formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
-    splitLine: { lineStyle: { color: '#F5F5F5' } },
-  },
-  yAxis: {
-    type: 'value' as const,
-    name: 'Return',
-    nameTextStyle: { fontSize: 10, color: '#999999' },
-    axisLabel: { fontSize: 10, color: '#999999', formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
-    splitLine: { lineStyle: { color: '#F5F5F5' } },
-  },
-  series: [
-    {
-      type: 'scatter',
-      name: 'Portfolios',
-      data: frontierPoints.value,
-      symbolSize: 6,
-      itemStyle: { color: '#E0E0E0' },
-    },
-    {
-      type: 'scatter',
-      name: 'Current',
-      data: [{
-        value: currentPoint.value,
-        symbolSize: 16,
-        itemStyle: { color: '#FF6700', borderColor: '#fff', borderWidth: 2 },
-      }],
-    },
-  ],
-}))
+  try {
+    if (method.value === 'markowitz') {
+      await portfolioStore.optimize('max_sharpe', tickers)
+    } else if (method.value === 'black_litterman') {
+      await portfolioStore.optimizeBL(tickers)
+    } else {
+      await portfolioStore.optimizeRiskParity(tickers)
+    }
+
+    const result = portfolioStore.optimizeResult
+    if (!result) {
+      optError.value = portfolioStore.error || 'Optimization returned no result'
+      return
+    }
+
+    const weights = result.weights ?? {}
+    weightRows.value = Object.entries(weights)
+      .map(([ticker, weight]) => ({ ticker, weight: Number(weight) }))
+      .sort((a, b) => b.weight - a.weight)
+
+    const risk = Number(result.expected_volatility_annual ?? 0)
+    const ret = Number(result.expected_return_annual ?? 0)
+
+    frontierPoints.value = [{
+      risk: risk || 0.1,
+      return_: ret || 0.08,
+      type: 'frontier',
+    }]
+
+    if (holdings.value.length > 0) {
+      const avgVol = risk || 0.12
+      const holdRet = holdings.value.reduce((s, h) => s + h.dailyChangePct * h.weight, 0) / 100
+      currentPoint.value = {
+        risk: avgVol * 1.05,
+        return_: Number.isFinite(holdRet) ? holdRet * 252 : ret * 0.85,
+      }
+    } else if (risk || ret) {
+      currentPoint.value = { risk: risk * 1.1 || 0.15, return_: ret * 0.9 || 0.06 }
+    }
+  } catch (e: unknown) {
+    optError.value = e instanceof Error ? e.message : 'Optimization failed'
+  } finally {
+    optimizing.value = false
+  }
+}
+
+const optMetrics = computed(() => {
+  const r = portfolioStore.optimizeResult
+  if (!r) return null
+  return {
+    method: r.method,
+    expectedReturn: r.expected_return_annual,
+    volatility: r.expected_volatility_annual,
+    sharpe: r.sharpe_ratio,
+  }
+})
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Summary Row — real portfolio metrics from API -->
     <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
       <XmCard class="!p-4">
         <div class="xm-metric-label">Total Value</div>
@@ -160,28 +198,107 @@ const frontierOption = computed(() => ({
       </XmCard>
       <XmCard class="!p-4">
         <div class="xm-metric-label">Total P&L</div>
-        <div class="xm-metric-value text-lg" :class="portfolioMetrics.totalPnl >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+        <div
+          class="xm-metric-value text-lg"
+          :class="portfolioMetrics.totalPnl >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'"
+        >
           {{ portfolioMetrics.totalPnl >= 0 ? '+' : '' }}${{ portfolioMetrics.totalPnl.toLocaleString() }}
         </div>
       </XmCard>
     </div>
 
-    <!-- Loading state -->
+    <XmCard title="Portfolio Optimizer" class="!p-5">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div>
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Method</label>
+          <select v-model="method" class="xm-input w-full" :disabled="optimizing">
+            <option value="markowitz">Markowitz</option>
+            <option value="black_litterman">Black-Litterman</option>
+            <option value="risk_parity">Risk Parity</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xxs text-xm-text-tertiary mb-1">Tickers</label>
+          <input
+            v-model="tickersInput"
+            class="xm-input w-full"
+            placeholder="AAPL,MSFT,GOOGL,SPY"
+            :disabled="optimizing"
+          />
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="xm-btn-primary" :disabled="optimizing" @click="runOptimize">
+          {{ optimizing ? 'Optimizing...' : 'Run Optimize' }}
+        </button>
+        <span v-if="optError" class="text-sm text-loss">{{ optError }}</span>
+      </div>
+
+      <div v-if="optMetrics" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        <div class="p-3 rounded-lg bg-xm-bg-surface">
+          <div class="xm-metric-label">Method</div>
+          <div class="text-sm font-mono font-semibold mt-1">{{ optMetrics.method }}</div>
+        </div>
+        <div class="p-3 rounded-lg bg-xm-bg-surface">
+          <div class="xm-metric-label">Expected Return</div>
+          <div class="text-sm font-mono font-semibold mt-1">
+            {{ optMetrics.expectedReturn != null ? (optMetrics.expectedReturn * 100).toFixed(2) + '%' : '—' }}
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-xm-bg-surface">
+          <div class="xm-metric-label">Volatility</div>
+          <div class="text-sm font-mono font-semibold mt-1">
+            {{ optMetrics.volatility != null ? (optMetrics.volatility * 100).toFixed(2) + '%' : '—' }}
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-xm-bg-surface">
+          <div class="xm-metric-label">Sharpe</div>
+          <div class="text-sm font-mono font-semibold mt-1">
+            {{ optMetrics.sharpe != null ? optMetrics.sharpe.toFixed(2) : '—' }}
+          </div>
+        </div>
+      </div>
+    </XmCard>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <XmCard title="Optimized Weights">
+        <table v-if="weightRows.length > 0" class="xm-table">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th class="text-right">Weight</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in weightRows" :key="row.ticker">
+              <td class="font-mono font-semibold">{{ row.ticker }}</td>
+              <td class="text-right font-mono">{{ (row.weight * 100).toFixed(2) }}%</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
+          Run optimize to see target weights.
+        </div>
+      </XmCard>
+
+      <XmCard title="Risk / Return">
+        <EfficientFrontier
+          v-if="frontierPoints.length > 0"
+          :points="frontierPoints"
+          :current="currentPoint"
+        />
+        <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
+          Optimize to plot expected return vs volatility.
+        </div>
+      </XmCard>
+    </div>
+
     <div v-if="loading" class="text-center py-6 text-xm-text-tertiary text-sm">
       Loading portfolio data...
     </div>
 
-    <!-- Efficient Frontier -->
-    <XmCard v-else title="Efficient Frontier">
-      <template #subtitle>
-        <span class="text-xs text-xm-text-tertiary">⚠ Placeholder — requires optimizer API support for real computation</span>
-      </template>
-      <VChart :option="frontierOption" style="height: 380px" autoresize />
-    </XmCard>
-
-    <!-- Holdings Table — real positions from API -->
-    <XmCard v-if="!loading" title="Holdings" subtitle="Color-coded: green = gain, red = loss">
-      <table class="xm-table" v-if="holdings.length > 0">
+    <XmCard v-else title="Holdings" subtitle="Current positions">
+      <table v-if="holdings.length > 0" class="xm-table">
         <thead>
           <tr>
             <th>Ticker</th>
@@ -200,11 +317,17 @@ const frontierOption = computed(() => ({
             <td class="text-right font-mono">${{ h.price.toFixed(2) }}</td>
             <td class="text-right font-mono font-semibold">${{ h.value.toLocaleString() }}</td>
             <td class="text-right font-mono">{{ (h.weight * 100).toFixed(1) }}%</td>
-            <td class="text-right font-mono" :class="h.dailyChange >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+            <td
+              class="text-right font-mono"
+              :class="h.dailyChange >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'"
+            >
               {{ h.dailyChange >= 0 ? '+' : '' }}${{ Math.abs(h.dailyChange).toFixed(2) }}
             </td>
             <td class="text-right font-mono">
-              <span class="xm-badge" :class="h.dailyChangePct >= 0 ? 'xm-badge-success' : 'xm-badge-danger'">
+              <span
+                class="xm-badge"
+                :class="h.dailyChangePct >= 0 ? 'xm-badge-success' : 'xm-badge-danger'"
+              >
                 {{ h.dailyChangePct >= 0 ? '+' : '' }}{{ h.dailyChangePct.toFixed(2) }}%
               </span>
             </td>

@@ -1,37 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { BarChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import XmStatusDot from '@/components/ui/XmStatusDot.vue'
+import ModelStatusCard from '@/components/model/ModelStatusCard.vue'
 import { useModelStore } from '@/stores/useModelStore'
 import type { RegisteredModel, ModelStatus } from '@/stores/useModelStore'
 
-use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
-
 const modelStore = useModelStore()
 
-const training = ref(false)
-const trainingProgress = ref(0)
-const trainingEpoch = ref(0)
-const totalEpochs = 30
+const DEFAULT_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'SPY']
 
-interface ModelEntry {
-  name: string
-  type: string
-  status: string
-  statusDot: 'green' | 'yellow' | 'red'
-  sharpe: number | null
-  pnl: number | null
-  winRate: number | null
-  lastTrained: string
-}
+const modelType = ref('xgboost')
+const tickersInput = ref(DEFAULT_TICKERS.join(','))
+const currentRunId = ref('')
+const trainError = ref('')
+const loading = ref(false)
 
-/** Derive a display-friendly type label from the model name. */
+let pollTimer: ReturnType<typeof setInterval> | undefined
+
 function inferType(name: string): string {
   const lower = name.toLowerCase()
   if (lower.includes('transformer') || lower.includes('patchtst')) return 'Transformer'
@@ -42,15 +29,13 @@ function inferType(name: string): string {
   return 'Model'
 }
 
-/** Derive a dot colour from status string. */
 function statusDotColor(status: string): 'green' | 'yellow' | 'red' {
   const s = status.toLowerCase()
-  if (s === 'ready' || s === 'active' || s === 'loaded') return 'green'
-  if (s === 'staging' || s === 'archived' || s === 'pending') return 'yellow'
+  if (s === 'ready' || s === 'active' || s === 'loaded' || s === 'completed') return 'green'
+  if (s === 'staging' || s === 'archived' || s === 'pending' || s === 'queued' || s === 'running') return 'yellow'
   return 'red'
 }
 
-/** Resolve model status from combined store data. */
 function resolveStatus(model: RegisteredModel, statusMap: Record<string, ModelStatus>): string {
   const explicit = statusMap[model.name]
   if (explicit?.loaded) return 'ready'
@@ -59,152 +44,199 @@ function resolveStatus(model: RegisteredModel, statusMap: Record<string, ModelSt
   return 'unknown'
 }
 
-/** Build display entries from store data. */
-const models = computed<ModelEntry[]>(() => {
+const models = computed(() => {
   const statusMap = modelStore.modelStatus ?? {}
   return modelStore.models.map((m) => {
     const status = resolveStatus(m, statusMap)
+    const loaded = statusMap[m.name]?.loaded ?? false
     return {
       name: m.name,
       type: inferType(m.name),
       status,
       statusDot: statusDotColor(status),
-      sharpe: null,
-      pnl: null,
-      winRate: null,
-      lastTrained: m.latest_versions?.[0] ? `v${m.latest_versions[0].version}` : '—',
+      description: m.description || '',
+      latest_versions: m.latest_versions ?? [],
+      loaded,
+      metrics: modelStore.trainingRuns[m.name]?.metrics,
     }
   })
 })
 
-const loading = ref(false)
-const noModels = computed(() => !loading.value && modelStore.models.length === 0)
+const statusCards = computed(() => {
+  const statusMap = modelStore.modelStatus ?? {}
+  const names = Object.keys(statusMap)
+  if (names.length === 0) {
+    return models.value.map((m) => ({
+      name: m.name,
+      latest_versions: m.latest_versions,
+      description: m.description,
+      loaded: m.loaded,
+      metrics: m.metrics,
+    }))
+  }
+  return names.map((name) => {
+    const registered = modelStore.models.find((m) => m.name === name)
+    return {
+      name,
+      latest_versions: registered?.latest_versions ?? [],
+      description: registered?.description ?? '',
+      loaded: statusMap[name]?.loaded ?? false,
+      metrics: modelStore.trainingRuns[name]?.metrics,
+    }
+  })
+})
 
-let progressTimer: ReturnType<typeof setInterval> | undefined
+const noModels = computed(() => !loading.value && models.value.length === 0 && statusCards.value.length === 0)
+const training = computed(() => modelStore.isTraining)
+const trainingProgress = computed(() => modelStore.trainingProgress)
+const trainingEpoch = computed(() => modelStore.trainingEpoch)
+const runStatus = computed(() => {
+  if (!currentRunId.value) return ''
+  return modelStore.trainingRuns[currentRunId.value]?.status ?? ''
+})
 
-onMounted(async () => {
+function clearPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+}
+
+async function refreshModels() {
   loading.value = true
   try {
-    await modelStore.fetchModels()
-    await modelStore.fetchModelStatus()
-  } catch {
-    // Silent degrade
+    await Promise.allSettled([
+      modelStore.fetchModels(),
+      modelStore.fetchModelStatus(),
+    ])
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  refreshModels()
 })
 
 onUnmounted(() => {
-  if (progressTimer) clearInterval(progressTimer)
+  clearPoll()
 })
 
-function startTraining() {
-  training.value = true
-  trainingProgress.value = 0
-  trainingEpoch.value = 0
-  progressTimer = setInterval(() => {
-    if (trainingProgress.value >= 100) {
-      training.value = false
-      if (progressTimer) clearInterval(progressTimer)
-      return
-    }
-    trainingProgress.value += Math.random() * 8
-    if (trainingProgress.value > 100) trainingProgress.value = 100
-    trainingEpoch.value = Math.floor((trainingProgress.value / 100) * totalEpochs)
-  }, 400)
-}
+async function startTraining() {
+  trainError.value = ''
+  const tickers = tickersInput.value
+    .split(',')
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean)
+  if (tickers.length === 0) {
+    trainError.value = 'Enter at least one ticker'
+    return
+  }
 
-const pnlChartOption = computed(() => ({
-  grid: { top: 8, right: 16, bottom: 4, left: 100 },
-  tooltip: {
-    trigger: 'axis' as const,
-    backgroundColor: '#fff',
-    borderColor: '#EEEEEE',
-    textStyle: { color: '#1A1A1A', fontSize: 12 },
-    axisPointer: { type: 'shadow' as const },
-  },
-  xAxis: {
-    type: 'value' as const,
-    splitLine: { lineStyle: { color: '#F5F5F5' } },
-    axisLabel: { fontSize: 10, color: '#999999', formatter: (v: number) => `$${(v / 1000).toFixed(0)}K` },
-  },
-  yAxis: {
-    type: 'category' as const,
-    data: models.value.map((m) => m.name),
-    axisLabel: { fontSize: 10, color: '#666666' },
-    inverse: true,
-  },
-  series: [
-    {
-      type: 'bar',
-      data: models.value.map((m) => ({
-        value: m.pnl ?? 0,
-        itemStyle: {
-          color: (m.pnl ?? 0) >= 0 ? '#16A34A' : '#DC2626',
-          borderRadius: [0, 4, 4, 0],
-        },
-      })),
-      barWidth: 16,
-    },
-  ],
-}))
+  clearPoll()
+  const runId = await modelStore.startTraining(modelType.value, tickers)
+  if (!runId) {
+    trainError.value = modelStore.error || 'Failed to start training'
+    return
+  }
+
+  currentRunId.value = runId
+  pollTimer = setInterval(async () => {
+    await modelStore.pollTrainingStatus(runId)
+    const status = modelStore.trainingRuns[runId]?.status
+    if (status === 'completed' || status === 'failed') {
+      clearPoll()
+      await refreshModels()
+    }
+  }, 2000)
+}
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Training Panel -->
     <XmCard title="Model Training" class="!p-5">
       <template #header>
         <XmBadge :variant="training ? 'warning' : 'success'">
           {{ training ? 'Training...' : 'Ready' }}
         </XmBadge>
       </template>
+
       <div class="space-y-4">
-        <div class="flex items-center gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xxs text-xm-text-tertiary mb-1">Model Type</label>
+            <select v-model="modelType" class="xm-input w-full" :disabled="training">
+              <option value="xgboost">XGBoost</option>
+              <option value="lightgbm">LightGBM</option>
+              <option value="lstm">LSTM</option>
+              <option value="transformer">Transformer</option>
+              <option value="ensemble">Ensemble</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xxs text-xm-text-tertiary mb-1">Tickers</label>
+            <input
+              v-model="tickersInput"
+              class="xm-input w-full"
+              placeholder="AAPL,MSFT,GOOGL,SPY"
+              :disabled="training"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4 flex-wrap">
           <button
             class="px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-xm ease-xm disabled:opacity-50"
             :class="training ? 'bg-xm-bg-surface text-xm-text-tertiary cursor-not-allowed' : 'bg-xm-primary hover:bg-xm-primary-hover'"
             :disabled="training"
             @click="startTraining"
           >
-            {{ training ? 'Training in Progress...' : 'Start Full Training' }}
+            {{ training ? 'Training in Progress...' : 'Start Training' }}
           </button>
+          <span v-if="currentRunId" class="text-xs text-xm-text-tertiary font-mono">
+            Run: {{ currentRunId }}
+            <template v-if="runStatus"> · {{ runStatus }}</template>
+          </span>
           <span v-if="training" class="text-sm text-xm-text-secondary">
-            Epoch {{ trainingEpoch }}/{{ totalEpochs }}
+            Epoch {{ trainingEpoch }}
           </span>
         </div>
-        <!-- Progress bar -->
-        <div v-if="training" class="space-y-1">
+
+        <div v-if="trainError" class="text-sm text-loss">{{ trainError }}</div>
+        <div v-if="modelStore.error && !trainError" class="text-sm text-loss">{{ modelStore.error }}</div>
+
+        <div v-if="training || trainingProgress > 0" class="space-y-1">
           <div class="w-full h-2.5 bg-xm-bg-surface rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
               style="background: linear-gradient(90deg, #FF6700, #E55A00)"
-              :style="{ width: trainingProgress + '%' }"
+              :style="{ width: Math.min(100, Math.max(0, trainingProgress)) + '%' }"
             />
           </div>
           <div class="text-right text-xxs text-xm-text-tertiary">
-            {{ trainingProgress.toFixed(0) }}%
+            {{ Math.min(100, Math.max(0, trainingProgress)).toFixed(0) }}%
           </div>
         </div>
       </div>
     </XmCard>
 
-    <!-- PnL Attribution -->
-    <XmCard title="Model PnL Attribution">
-      <div v-if="noModels" class="flex items-center justify-center h-[280px] text-xm-text-tertiary text-sm">
-        No model data
+    <XmCard title="Model Status" subtitle="Live status from inference service">
+      <div v-if="loading" class="text-center py-8 text-xm-text-tertiary text-sm">
+        Loading models...
       </div>
-      <VChart v-else :option="pnlChartOption" style="height: 280px" autoresize />
+      <div v-else-if="noModels" class="text-center py-8 text-xm-text-tertiary text-sm">
+        No models registered. Start a training run to populate status.
+      </div>
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ModelStatusCard
+          v-for="card in statusCards"
+          :key="card.name"
+          :model="card"
+        />
+      </div>
     </XmCard>
 
-    <!-- Model Status Cards -->
-    <div v-if="loading" class="text-center py-8 text-xm-text-tertiary text-sm">
-      Loading models...
-    </div>
-    <div v-else-if="noModels" class="text-center py-8 text-xm-text-tertiary text-sm">
-      暂无训练模型
-    </div>
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div v-if="models.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <XmCard v-for="model in models" :key="model.name" class="!p-5">
         <div class="flex items-start justify-between mb-3">
           <div>
@@ -218,26 +250,16 @@ const pnlChartOption = computed(() => ({
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <div class="xm-metric-label">Sharpe</div>
-            <div class="text-sm font-mono font-semibold mt-0.5" :class="(model.sharpe ?? 0) >= 1 ? 'text-profit' : 'text-xm-text-secondary'">
-              {{ model.sharpe !== null ? model.sharpe.toFixed(2) : '—' }}
-            </div>
-          </div>
-          <div>
-            <div class="xm-metric-label">PnL</div>
-            <div class="text-sm font-mono font-semibold mt-0.5" :class="(model.pnl ?? 0) >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
-              {{ model.pnl !== null ? '$' + model.pnl.toLocaleString() : '—' }}
-            </div>
-          </div>
-          <div>
-            <div class="xm-metric-label">Win Rate</div>
+            <div class="xm-metric-label">Loaded</div>
             <div class="text-sm font-mono font-semibold mt-0.5">
-              {{ model.winRate !== null ? (model.winRate * 100).toFixed(1) + '%' : '—' }}
+              {{ model.loaded ? 'Yes' : 'No' }}
             </div>
           </div>
           <div>
             <div class="xm-metric-label">Version</div>
-            <div class="text-sm font-mono mt-0.5 text-xm-text-secondary">{{ model.lastTrained }}</div>
+            <div class="text-sm font-mono mt-0.5 text-xm-text-secondary">
+              {{ model.latest_versions?.[0] ? `v${model.latest_versions[0].version}` : '—' }}
+            </div>
           </div>
         </div>
       </XmCard>

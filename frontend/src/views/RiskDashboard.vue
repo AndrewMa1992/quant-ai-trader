@@ -8,98 +8,83 @@ import { CanvasRenderer } from 'echarts/renderers'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmGauge from '@/components/ui/XmGauge.vue'
 import CircuitBreakerStatus from '@/components/risk/CircuitBreakerStatus.vue'
+import BarraRadar from '@/components/risk/BarraRadar.vue'
 import { useRiskStore } from '@/stores/useRiskStore'
-import { useExecutionStore } from '@/stores/useExecutionStore'
 import { riskApi } from '@/api/riskApi'
 import { tradeApi, type DashboardData, type TradePortfolio } from '@/api/tradeApi'
 
 use([LineChart, GaugeChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const riskStore = useRiskStore()
-const execStore = useExecutionStore()
 
-// ── Policy constants (risk limits, not live data) ────────────
-const DAILY_LOSS_LIMIT = 0.05   // 5% daily loss limit
-const MAX_DRAWDOWN_LIMIT = 0.25 // 25% max drawdown limit
+const DAILY_LOSS_LIMIT = 0.05
+const MAX_DRAWDOWN_LIMIT = 0.25
 
-// ── Reactive data fetched from APIs ──────────────────────────
 const drawdownHistory = ref<number[]>([0])
 const dashboardData = ref<DashboardData>({})
 const portfolioData = ref<TradePortfolio | null>(null)
+const barraTicker = ref('SPY')
 
-// ── Circuit breaker pass-through from riskStore (live after fetchBreakerStatus) ──
-const cbTriggered = computed(() => execStore.cbStatus.halted)
+const cbTriggered = computed(() => riskStore.circuitBreakerTriggered)
 const dailyPnlPct = computed(() => riskStore.dailyPnlPct)
 const currentDrawdown = computed(() => riskStore.currentDrawdown)
 
-// ── Derived metrics ──────────────────────────────────────────
-
-/** Portfolio total value from /api/trade/portfolio, fallback to dashboard, then $1M */
 const portfolioValue = computed<number>(() => {
   const fromPortfolio = portfolioData.value?.metrics?.total_value
-  if (fromPortfolio != null && (fromPortfolio as number) > 0) return fromPortfolio as number
+    ?? portfolioData.value?.metrics?.total_market_value
+  if (fromPortfolio != null && Number(fromPortfolio) > 0) return Number(fromPortfolio)
   const fromDashboard = dashboardData.value.total_value
   if (fromDashboard != null && fromDashboard > 0) return fromDashboard
   return 1_000_000
 })
 
-/** VaR 95% — absolute dollar amount from riskStore.varData × portfolio value */
 const var95 = computed<number>(() => {
   const vd = riskStore.varData as Record<string, number> | null
   if (!vd) return 0
-  // var_normal (parametric), var_student_t, or var (historical/montecarlo)
   const varReturn = vd.var_normal ?? vd.var_student_t ?? vd.var ?? 0
   return Math.abs(varReturn) * portfolioValue.value
 })
 
-/** Historical maximum drawdown from dashboard API (e.g. 0.08 = 8%), fallback to limit */
 const historicalMaxDrawdown = computed<number>(() => {
   const dd = dashboardData.value.max_drawdown_pct
   return dd != null ? Math.abs(dd) : MAX_DRAWDOWN_LIMIT
 })
 
-// ── P0-3: Breaker control loading states ────────────────────
 const resetLoading = ref(false)
 const toggleLoading = ref(false)
 
-// ── Data fetching ────────────────────────────────────────────
-
 async function fetchAllData(): Promise<void> {
-  // Fetch breaker status + dashboard + portfolio + drawdown history in parallel
   await Promise.allSettled([
     riskStore.fetchBreakerStatus(),
-    tradeApi.getDashboard().then((d) => { dashboardData.value = d }).catch(() => { /* keep last */ }),
-    tradeApi.getPortfolio().then((p) => { portfolioData.value = p }).catch(() => { /* keep last */ }),
+    tradeApi.getDashboard().then((d) => { dashboardData.value = d }).catch(() => {}),
+    tradeApi.getPortfolio().then((p) => { portfolioData.value = p }).catch(() => {}),
     riskApi.getDrawdownHistory().then((d) => {
       const history = d.drawdown_history ?? []
       if (history.length > 0) {
-        // API returns negative drawdowns; use abs for display
         drawdownHistory.value = history.map((h) => Math.abs(h.drawdown))
       }
-    }).catch(() => { /* keep last */ }),
+    }).catch(() => {}),
+    riskStore.fetchBarra(barraTicker.value).catch(() => {}),
   ])
 
-  // Fetch VaR using real portfolio tickers (or fallback)
   try {
     const positions = portfolioData.value?.positions ?? []
     if (positions.length > 0) {
       const tickers = positions.map((p) => p.ticker)
       const totalAlloc = positions.reduce((s, p) => s + (p.allocation || 0), 0) || 1
       const weights = positions.map((p) => (p.allocation || 0) / totalAlloc)
-      riskStore.fetchVaR(tickers, weights)
+      await riskStore.fetchVaR(tickers, weights)
     } else {
-      riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
+      await riskStore.fetchVaR(['AAPL', 'MSFT'], [0.5, 0.5])
     }
   } catch {
-    riskStore.fetchVaR(['AAPL', 'MSFT'], [0.3, 0.3])
+    await riskStore.fetchVaR(['AAPL', 'MSFT'], [0.5, 0.5])
   }
 }
 
 onMounted(() => {
   fetchAllData()
 })
-
-// ── P0-3: Breaker actions ────────────────────────────────────
 
 async function handleResetBreaker(): Promise<void> {
   resetLoading.value = true
@@ -120,7 +105,11 @@ async function handleToggleBreaker(): Promise<void> {
   }
 }
 
-// ── Charts ───────────────────────────────────────────────────
+async function loadBarra(): Promise<void> {
+  const t = barraTicker.value.trim().toUpperCase()
+  if (!t) return
+  await riskStore.fetchBarra(t)
+}
 
 const drawdownChartOption = computed(() => {
   const data = drawdownHistory.value.length > 0 ? drawdownHistory.value : [0]
@@ -167,8 +156,6 @@ const drawdownChartOption = computed(() => {
   }
 })
 
-// ── Risk metrics cards ───────────────────────────────────────
-
 const riskMetrics = computed(() => {
   const ddPct = Math.abs(currentDrawdown.value) * 100
   const peakDdPct = historicalMaxDrawdown.value * 100
@@ -204,13 +191,11 @@ const riskMetrics = computed(() => {
   ]
 })
 
-/** Cooldown remaining from riskStore (in seconds) */
 const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Circuit Breaker + Gauge Row -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <CircuitBreakerStatus
         :triggered="cbTriggered"
@@ -221,7 +206,6 @@ const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
         :cooldown-remaining="cooldownRemaining"
       />
 
-      <!-- Drawdown Gauge -->
       <XmCard title="Drawdown Gauge" class="!p-5 flex flex-col items-center justify-center">
         <XmGauge
           :value="Math.abs(currentDrawdown) * 100"
@@ -234,7 +218,6 @@ const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
         </p>
       </XmCard>
 
-      <!-- VaR Gauge -->
       <XmCard title="Value at Risk" class="!p-5 flex flex-col items-center justify-center">
         <XmGauge
           :value="Math.max(portfolioValue, 1) > 0 ? (var95 / Math.max(portfolioValue, 1)) * 100 : 0"
@@ -247,26 +230,23 @@ const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
       </XmCard>
     </div>
 
-    <!-- P0-3: Breaker Controls -->
-    <XmCard title="⚡ Circuit Breaker Controls" class="!p-5">
+    <XmCard title="Circuit Breaker Controls" class="!p-5">
       <div class="flex flex-wrap items-center gap-4">
-        <!-- Breaker Mode Display -->
         <div
           class="flex items-center gap-2 px-4 py-2 rounded-lg"
           :class="riskStore.breakerMode === 'hard'
             ? 'bg-risk-red/10 border border-risk-red/30'
             : 'bg-risk-yellow/10 border border-risk-yellow/30'"
         >
-          <span class="text-sm font-semibold">当前模式:</span>
+          <span class="text-sm font-semibold">Mode:</span>
           <span
             class="text-sm font-mono font-bold"
             :class="riskStore.breakerMode === 'hard' ? 'text-risk-red' : 'text-risk-yellow'"
           >
-            {{ riskStore.breakerMode === 'hard' ? '🔴 硬熔断' : '🟡 仅告警' }}
+            {{ riskStore.breakerMode === 'hard' ? 'HARD' : 'WARN' }}
           </span>
         </div>
 
-        <!-- Toggle Mode Button -->
         <button
           class="xm-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50"
           :class="riskStore.breakerMode === 'hard'
@@ -276,23 +256,21 @@ const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
           @click="handleToggleBreaker"
         >
           {{ toggleLoading
-            ? '⏳ 切换中...'
-            : (riskStore.breakerMode === 'hard' ? '🔧 切换至仅告警' : '🔧 切换至硬熔断') }}
+            ? 'Switching...'
+            : (riskStore.breakerMode === 'hard' ? 'Switch to WARN' : 'Switch to HARD') }}
         </button>
 
-        <!-- Reset Breaker Button -->
         <button
           class="xm-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50"
           style="background-color: #FF6700; color: white;"
           :disabled="resetLoading"
           @click="handleResetBreaker"
         >
-          {{ resetLoading ? '⏳ 重置中...' : '⚡ 重置断路器' }}
+          {{ resetLoading ? 'Resetting...' : 'Reset Breaker' }}
         </button>
       </div>
     </XmCard>
 
-    <!-- Risk Metrics Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <XmCard v-for="metric in riskMetrics" :key="metric.label" class="!p-4">
         <div class="xm-metric-label">{{ metric.label }}</div>
@@ -301,9 +279,25 @@ const cooldownRemaining = computed(() => riskStore.circuitBreakerCooldown)
       </XmCard>
     </div>
 
-    <!-- Drawdown History Chart -->
-    <XmCard title="Drawdown History">
-      <VChart :option="drawdownChartOption" style="height: 260px" autoresize />
-    </XmCard>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <XmCard title="Drawdown History">
+        <VChart :option="drawdownChartOption" style="height: 260px" autoresize />
+      </XmCard>
+
+      <XmCard title="Barra Factor Exposure">
+        <div class="flex items-end gap-3 mb-3">
+          <div class="flex-1 max-w-[180px]">
+            <label class="block text-xxs text-xm-text-tertiary mb-1">Ticker</label>
+            <input
+              v-model="barraTicker"
+              class="xm-input w-full"
+              @keyup.enter="loadBarra"
+            />
+          </div>
+          <button class="xm-btn-primary" @click="loadBarra">Load</button>
+        </div>
+        <BarraRadar :exposures="riskStore.barraExposures" />
+      </XmCard>
+    </div>
   </div>
 </template>
