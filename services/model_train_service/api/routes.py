@@ -234,7 +234,12 @@ async def train_model(
                 import os
                 save_dir = train_config.MODEL_SAVE_DIR
                 os.makedirs(save_dir, exist_ok=True)
-                ext = "pt" if model_type in ("transformer", "tcn", "tft") else "joblib"
+                if model_type == "rl":
+                    ext = "zip"
+                elif model_type in ("transformer", "tcn", "tft"):
+                    ext = "pt"
+                else:
+                    ext = "joblib"
                 save_path = os.path.join(save_dir, f"{model_type}_v2.{ext}")
                 trainer.save(save_path)
                 log.info(f"Model saved to {save_path}")
@@ -464,7 +469,12 @@ async def train_model_unified(
                 import os as _os
                 _save_dir = train_config.MODEL_SAVE_DIR
                 _os.makedirs(_save_dir, exist_ok=True)
-                _ext = "pt" if model_type in ("transformer", "tcn", "tft") else "joblib"
+                if model_type == "rl":
+                    _ext = "zip"
+                elif model_type in ("transformer", "tcn", "tft"):
+                    _ext = "pt"
+                else:
+                    _ext = "joblib"
                 _save_path = _os.path.join(_save_dir, f"{model_type}_v2.{_ext}")
                 trainer.save(_save_path)
                 log.info(f"Model saved to {_save_path}")

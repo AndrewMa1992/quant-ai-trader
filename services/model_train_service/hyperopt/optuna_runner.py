@@ -24,6 +24,7 @@ def run_hyperopt(
     n_trials: int = 100,
     start_date: str = "2023-01-01",
     end_date: str = "2024-12-31",
+    device: str | None = None,
 ) -> dict[str, Any]:
     """Run Optuna Bayesian hyperparameter search.
 
@@ -33,11 +34,14 @@ def run_hyperopt(
         n_trials: Number of Optuna trials.
         start_date: Start date for training data.
         end_date: End date for training data.
+        device: Optional compute device hint (cpu/cuda/mps).
 
     Returns:
         Dict with best_params and best_value.
     """
     tickers = tickers or ["AAPL"]
+    if device:
+        logger.info(f"Hyperopt device hint: {device}")
     df = create_dataset(tickers, start_date, end_date, include_factors=True)
 
     if df is None or len(df) < 200:

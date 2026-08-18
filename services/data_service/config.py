@@ -25,8 +25,8 @@ class DataServiceConfig(BaseSettings):
     PORT: int = Field(default=8011, description="Service listen port")
     DEBUG: bool = Field(default=False, description="Debug mode")
 
-    # Storage
-    DATA_DIR: str = Field(default="./cache/market_data", description="Root directory for market data files")
+    # Storage — unify with train scripts (data/daily/*.parquet)
+    DATA_DIR: str = Field(default="./data", description="Root directory for market data files")
     PARQUET_COMPRESSION: str = Field(default="zstd", description="Parquet compression codec")
 
     # Ingestion

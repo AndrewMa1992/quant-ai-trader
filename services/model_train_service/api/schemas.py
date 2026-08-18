@@ -4,35 +4,53 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from configs.settings import settings
+
+_ALLOWED_MODELS = {"gbdt", "transformer", "tcn", "tft", "rl", "rl_agent"}
 
 
 class TrainRequest(BaseModel):
-    """Unified training request body — no path parameter needed."""
+    """Unified training request body."""
 
     model_type: str = Field(
-        ...,
-        description="Model type: transformer | rl_agent",
-        examples=["transformer", "rl_agent"],
+        default="gbdt",
+        description="Model type: gbdt | transformer | tcn | tft | rl",
+        examples=["gbdt", "transformer", "tcn", "tft", "rl"],
     )
-    tickers: list[str] = Field(..., description="List of ticker symbols for training", min_length=1)
-    start_date: str = Field(..., description="Training start date (YYYY-MM-DD)")
-    end_date: str = Field(..., description="Training end date (YYYY-MM-DD)")
+    tickers: list[str] = Field(
+        default_factory=lambda: ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA"],
+        description="List of ticker symbols for training",
+        min_length=1,
+    )
+    start_date: str = Field(default="2023-01-01", description="Training start date (YYYY-MM-DD)")
+    end_date: str = Field(default="2024-12-31", description="Training end date (YYYY-MM-DD)")
     device: str = Field(
-        default="cpu",
-        description="Compute device: cpu / cuda / mps. Set to cuda to use GPU for this training job.",
+        default_factory=lambda: settings.TRAIN_DEVICE,
+        description="Compute device: cpu / cuda / mps. Defaults to QAT_TRAIN_DEVICE.",
         examples=["cpu", "cuda"],
     )
     hyperparams: Optional[dict] = Field(
         default=None, description="Optional hyperparameter overrides"
     )
 
+    @field_validator("model_type")
+    @classmethod
+    def normalize_model_type(cls, v: str) -> str:
+        name = (v or "gbdt").lower().strip()
+        if name == "rl_agent":
+            name = "rl"
+        if name not in _ALLOWED_MODELS - {"rl_agent"}:
+            raise ValueError(f"Unsupported model_type: {v}")
+        return name
+
 
 class TrainJob(BaseModel):
     """Training job status response model."""
 
     job_id: str = Field(..., description="Unique job identifier (UUID)")
-    model_type: str = Field(..., description="Model type: transformer | rl_agent")
+    model_type: str = Field(..., description="Model type: gbdt | transformer | tcn | tft | rl")
     status: str = Field(
         ..., description="Job status: queued | running | completed | failed"
     )

@@ -174,20 +174,24 @@ class RLTrainer(TrainerBase):
         data = np.column_stack([y.values, X.values])  # First column = returns
         env = TradingEnv(data=data, window=20)
 
-        total_timesteps = kwargs.get("rl_timesteps", train_config.RL_TIMESTEPS)
+        total_timesteps = kwargs.get(
+            "rl_timesteps",
+            kwargs.get("total_timesteps", train_config.RL_TIMESTEPS),
+        )
 
         if self.algo == "SAC":
-            self.model = SAC("MlpPolicy", env, verbose=0, device=self.device)
-        else:
-            self.model = PPO(
-                "MlpPolicy", env, verbose=0, device=self.device,
-                learning_rate=kwargs.get("lr", 3e-4),
-                n_steps=512,
-                batch_size=64,
-                clip_range=0.2,
-                max_grad_norm=0.5,
-                ent_coef=0.01,
-            )
+            # TradingEnv uses Discrete actions; SAC needs continuous — fall back to PPO
+            logger.warning("SAC incompatible with Discrete TradingEnv — using PPO")
+            self.algo = "PPO"
+        self.model = PPO(
+            "MlpPolicy", env, verbose=0, device=self.device,
+            learning_rate=kwargs.get("lr", 3e-4),
+            n_steps=int(kwargs.get("n_steps", 512)),
+            batch_size=64,
+            clip_range=0.2,
+            max_grad_norm=0.5,
+            ent_coef=0.01,
+        )
 
         self.model.learn(total_timesteps=total_timesteps)
 
@@ -267,12 +271,15 @@ class RLTrainer(TrainerBase):
     def save(self, path: str) -> None:
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        # SB3 always writes .zip; normalize extension for registry compatibility
         if HAS_SB3 and not isinstance(self.model, dict):
-            self.model.save(path)
+            save_path = path if path.endswith(".zip") else f"{os.path.splitext(path)[0]}.zip"
+            self.model.save(save_path)
+            logger.info(f"RL model saved to {save_path}")
         else:
             import joblib
             joblib.dump({"algo": self.algo, "mock": True}, path)
-        logger.info(f"RL model saved to {path}")
+            logger.info(f"RL mock model saved to {path}")
 
     def load(self, path: str) -> None:
         import os
