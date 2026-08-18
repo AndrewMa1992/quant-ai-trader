@@ -59,12 +59,12 @@ export interface YearlyReturn {
 
 export const analysisApi = {
   async getPortfolioHistory(): Promise<PortfolioHistoryPoint[]> {
-    const { data } = await apiClient.get('/v2/analysis/portfolio-history')
-    return data.data ?? []
+    const { data } = await apiClient.get('/v2/risk/portfolio-history')
+    return data.data ?? data?.history ?? []
   },
 
   async getYearlyReturns(): Promise<YearlyReturn[]> {
-    const { data } = await apiClient.get('/v2/analysis/yearly-returns')
+    const { data } = await apiClient.get('/v2/risk/yearly-returns')
     return data.data ?? []
   },
 }
@@ -114,9 +114,9 @@ export const executionApi = {
     return data.data
   },
 
-  // Trade logs for ExecutionMonitor
+  // Trade / order logs for ExecutionMonitor
   async getTradeLogs(date?: string) {
-    const { data } = await apiClient.get(`${BASE}/trades`, { params: { date } })
+    const { data } = await apiClient.get(`${BASE}/orders`, { params: { since: date } })
     return data.data
   },
 

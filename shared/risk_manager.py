@@ -201,8 +201,10 @@ class RiskManager:
         # ── Drawdown check ─────────────────────────────────────
         if not report.circuit_breaker and self.peak_value > self.portfolio_value > 0:
             current_dd: float = (self.peak_value - self.portfolio_value) / self.peak_value
-            # Skip obviously broken values (>90% is data noise).
-            if current_dd < 0.90 and current_dd >= self.MAX_DRAWDOWN:
+            # Extreme DD (>90%) is treated as data noise ONLY before Tiger sync.
+            # After sync, real wipeouts must still trip the breaker.
+            anomaly_skip = current_dd >= 0.90 and not self._tiger_synced
+            if (not anomaly_skip) and current_dd >= self.MAX_DRAWDOWN:
                 report.circuit_breaker = True
                 report.passed = is_warn  # warn: still pass; hard: block
                 msg2: str = (
@@ -214,9 +216,9 @@ class RiskManager:
                     self.circuit_breaker_triggered = True
                     self.circuit_breaker_time = datetime.now()
                 report.details["current_drawdown"] = round(current_dd, 4)
-            elif current_dd >= 0.90:
+            elif anomaly_skip:
                 logger.warning(
-                    f"⚠️ 检测到异常回撤 {current_dd:.2%}，疑似数据同步问题，"
+                    f"⚠️ 检测到异常回撤 {current_dd:.2%}，尚未完成 Tiger 同步，"
                     f"跳过熔断 (peak=${self.peak_value:,.0f}, pv=${self.portfolio_value:,.0f})"
                 )
 

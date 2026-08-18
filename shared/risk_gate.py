@@ -173,11 +173,51 @@ class RiskGate:
 
         except Exception as e:
             logger.warning(f"CircuitBreaker check error: {e}")
-            # Fail open on error (don't block trading due to breaker bug)
-            return {
-                "passed": True,
-                "warning": f"CircuitBreaker error (failing open): {e}",
-            }
+            return self._on_check_failure(f"CircuitBreaker error: {e}")
+
+    def _fail_closed(self) -> bool:
+        """Live trading must fail closed when risk checks are unavailable."""
+        return str(pipeline_config.EXECUTION_MODE).lower() == "live"
+
+    def _on_check_failure(self, reason: str) -> Dict:
+        """Fail closed in live mode; warn-and-pass in paper mode."""
+        if self._fail_closed():
+            return {"passed": False, "reason": f"{reason} (fail-closed live mode)"}
+        return {"passed": True, "warning": f"{reason} (failing open paper mode)"}
+
+    def _portfolio_tickers_weights(self, portfolio_state: Dict) -> tuple[str, str]:
+        """Build comma-separated tickers/weights for risk-service queries."""
+        positions = portfolio_state.get("positions") or {}
+        total_value = float(portfolio_state.get("total_value") or 0.0)
+        if not isinstance(positions, dict) or not positions:
+            return "SPY", "1.0"
+
+        tickers: List[str] = []
+        weights: List[float] = []
+        for ticker, shares in positions.items():
+            try:
+                qty = float(shares)
+            except (TypeError, ValueError):
+                continue
+            if qty == 0:
+                continue
+            # Prefer explicit market values when present
+            pos_values = portfolio_state.get("position_values") or {}
+            mv = float(pos_values.get(ticker, 0.0) or 0.0)
+            if mv <= 0 and total_value > 0:
+                # Fallback equal weight among held names
+                continue
+            tickers.append(str(ticker))
+            weights.append(max(mv, 0.0))
+
+        if not tickers:
+            tickers = [str(t) for t, s in positions.items() if float(s or 0) != 0][:20] or ["SPY"]
+            n = len(tickers)
+            return ",".join(tickers), ",".join(str(1.0 / n) for _ in tickers)
+
+        weight_sum = sum(weights) or 1.0
+        norm = [w / weight_sum for w in weights]
+        return ",".join(tickers), ",".join(f"{w:.6f}" for w in norm)
 
     async def _check_barra_exposure(self, portfolio_state: Dict) -> Dict:
         """Gate 2: Barra 因子暴露检查。
@@ -190,16 +230,21 @@ class RiskGate:
 
         try:
             client = await self._get_client()
-            resp = await client.get(f"{self.risk_url}/api/v2/risk/exposures")
+            tickers_csv, _weights = self._portfolio_tickers_weights(portfolio_state)
+            sample_ticker = tickers_csv.split(",")[0] if tickers_csv else "SPY"
+            resp = await client.get(
+                f"{self.risk_url}/api/v2/risk/barra/exposure",
+                params={"ticker": sample_ticker},
+            )
 
             if resp.status_code != 200:
-                return {
-                    "passed": True,
-                    "warning": f"Barra exposure fetch failed (HTTP {resp.status_code}) — skipping",
-                }
+                return self._on_check_failure(
+                    f"Barra exposure fetch failed (HTTP {resp.status_code})"
+                )
 
             data = resp.json()
-            exposures: Dict = data.get("data", data)
+            payload: Dict = data.get("data", data)
+            exposures: Dict = payload.get("exposures", payload)
 
             max_z: float = 0.0
             max_factor: str = ""
@@ -221,11 +266,11 @@ class RiskGate:
             return {"passed": True}
 
         except httpx.TimeoutException:
-            logger.warning("Barra exposure check timed out — skipping")
-            return {"passed": True, "warning": "Barra exposure check timed out"}
+            logger.warning("Barra exposure check timed out")
+            return self._on_check_failure("Barra exposure check timed out")
         except Exception as e:
             logger.warning(f"Barra exposure check error: {e}")
-            return {"passed": True, "warning": f"Barra exposure check error: {e}"}
+            return self._on_check_failure(f"Barra exposure check error: {e}")
 
     async def _check_var(
         self,
@@ -244,8 +289,11 @@ class RiskGate:
         try:
             client = await self._get_client()
             portfolio_value: float = portfolio_state.get("total_value", 0.0)
+            tickers_csv, weights_csv = self._portfolio_tickers_weights(portfolio_state)
             params: Dict = {
                 "confidence": pipeline_config.VAR_CONFIDENCE,
+                "tickers": tickers_csv,
+                "weights": weights_csv,
             }
             resp = await client.get(
                 f"{self.risk_url}/api/v2/risk/var",
@@ -253,10 +301,9 @@ class RiskGate:
             )
 
             if resp.status_code != 200:
-                return {
-                    "passed": True,
-                    "warning": f"VaR fetch failed (HTTP {resp.status_code}) — skipping",
-                }
+                return self._on_check_failure(
+                    f"VaR fetch failed (HTTP {resp.status_code})"
+                )
 
             data = resp.json()
             var_data: Dict = data.get("data", data)
@@ -276,11 +323,11 @@ class RiskGate:
             return {"passed": True}
 
         except httpx.TimeoutException:
-            logger.warning("VaR check timed out — skipping")
-            return {"passed": True, "warning": "VaR check timed out"}
+            logger.warning("VaR check timed out")
+            return self._on_check_failure("VaR check timed out")
         except Exception as e:
             logger.warning(f"VaR check error: {e}")
-            return {"passed": True, "warning": f"VaR check error: {e}"}
+            return self._on_check_failure(f"VaR check error: {e}")
 
     async def _check_cvar(
         self,
@@ -290,7 +337,7 @@ class RiskGate:
     ) -> Dict:
         """Gate 4: CVaR 检查。
 
-        GET risk-service:/api/v2/risk/var (same endpoint returns CVaR)
+        GET risk-service:/api/v2/risk/cvar
         校验 CVaR < CVAR_LIMIT_PCT × portfolio_value
         """
         if not pipeline_config.ENABLE_RISK_CHECKS:
@@ -299,19 +346,21 @@ class RiskGate:
         try:
             client = await self._get_client()
             portfolio_value: float = portfolio_state.get("total_value", 0.0)
+            tickers_csv, weights_csv = self._portfolio_tickers_weights(portfolio_state)
             params: Dict = {
                 "confidence": pipeline_config.VAR_CONFIDENCE,
+                "tickers": tickers_csv,
+                "weights": weights_csv,
             }
             resp = await client.get(
-                f"{self.risk_url}/api/v2/risk/var",
+                f"{self.risk_url}/api/v2/risk/cvar",
                 params=params,
             )
 
             if resp.status_code != 200:
-                return {
-                    "passed": True,
-                    "warning": f"CVaR fetch failed (HTTP {resp.status_code}) — skipping",
-                }
+                return self._on_check_failure(
+                    f"CVaR fetch failed (HTTP {resp.status_code})"
+                )
 
             data = resp.json()
             risk_data: Dict = data.get("data", data)
@@ -331,8 +380,8 @@ class RiskGate:
             return {"passed": True}
 
         except httpx.TimeoutException:
-            logger.warning("CVaR check timed out — skipping")
-            return {"passed": True, "warning": "CVaR check timed out"}
+            logger.warning("CVaR check timed out")
+            return self._on_check_failure("CVaR check timed out")
         except Exception as e:
             logger.warning(f"CVaR check error: {e}")
-            return {"passed": True, "warning": f"CVaR check error: {e}"}
+            return self._on_check_failure(f"CVaR check error: {e}")

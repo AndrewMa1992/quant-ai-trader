@@ -56,6 +56,9 @@ class RiskManager:
         # P0-3: 断路器模式 — "hard" = 熔断+平仓, "warn" = 仅日志告警
         self.breaker_mode: str = "hard"
 
+        # Skip extreme DD anomaly only before broker sync completes
+        self._tiger_synced: bool = False
+
     # ================================================================
     # P0-2: 组合级熔断
     # ================================================================
@@ -127,12 +130,11 @@ class RiskManager:
 
         # 检查最大回撤
         current_dd = self.get_current_drawdown()
-        # ★ 保护：跳过刚启动时的异常值
-        # 1) peak_value == portfolio_value 表示刚初始化，无历史峰值可参考
-        # 2) 回撤 > 90% 几乎肯定是数据同步问题（如 Tiger 断连后恢复导致峰值错位）
+        # Extreme DD (>90%) is treated as data noise ONLY before broker sync.
+        anomaly_skip = current_dd >= 0.90 and not self._tiger_synced
         if (self.peak_value > self.portfolio_value
                 and self.portfolio_value > 0
-                and current_dd < 0.90):
+                and not anomaly_skip):
             if current_dd >= settings.TRADING_MAX_DRAWDOWN:
                 report.circuit_breaker = True
                 report.passed = False
@@ -152,10 +154,9 @@ class RiskManager:
                     self.circuit_breaker_triggered = True
                     self.circuit_breaker_time = datetime.now()
                     logger.error(f"🚨 熔断触发! 回撤={current_dd:.2%}")
-        elif current_dd >= 0.90 and self.portfolio_value > 0:
-            # 回撤 ≥ 90% 是数据异常而非真实亏损 —— 输出警告但跳过熔断
+        elif anomaly_skip and self.portfolio_value > 0:
             logger.warning(
-                f"⚠️ 检测到异常回撤 {current_dd:.2%}，疑似数据同步问题，"
+                f"⚠️ 检测到异常回撤 {current_dd:.2%}，尚未完成数据同步，"
                 f"跳过熔断 (peak=${self.peak_value:,.0f}, pv=${self.portfolio_value:,.0f})"
             )
 

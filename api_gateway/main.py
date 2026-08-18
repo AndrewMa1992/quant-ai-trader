@@ -376,6 +376,7 @@ SERVICE_PORT_MAP: dict[str, int] = {
 SERVICE_ALIASES: dict[str, str] = {
     "trade": "execution",
     "model": "model_infer",
+    "analysis": "risk",  # portfolio-history / yearly-returns live under risk service
 }
 
 # Combined lookup: canonical names + aliases (for 404 validation)
