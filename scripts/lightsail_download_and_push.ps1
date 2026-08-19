@@ -27,9 +27,24 @@ function Resolve-Git {
     throw "git not found"
 }
 
+function Ensure-GitIdentity {
+    param([string]$GitExe)
+    $name = (& $GitExe config --get user.name 2>$null)
+    $email = (& $GitExe config --get user.email 2>$null)
+    if (-not $name) {
+        & $GitExe config user.name "QAT Lightsail"
+        Write-Host "[ok] set local git user.name = QAT Lightsail"
+    }
+    if (-not $email) {
+        & $GitExe config user.email "qat-lightsail@users.noreply.github.com"
+        Write-Host "[ok] set local git user.email = qat-lightsail@users.noreply.github.com"
+    }
+}
+
 $GitExe = Resolve-Git
 if (-not (Test-Path $RepoRoot)) { throw "Missing $RepoRoot" }
 Set-Location $RepoRoot
+Ensure-GitIdentity -GitExe $GitExe
 
 $PythonExe = "python"
 if (Test-Path "C:\Program Files\Python312\python.exe") {
@@ -72,10 +87,12 @@ if (-not $status) {
 
 $msg = "chore: refresh market data from Lightsail $(Get-Date -Format 'yyyy-MM-dd HH:mm') [skip ci]"
 & $GitExe commit -m $msg
+if ($LASTEXITCODE -ne 0) { throw "git commit failed (check git user.name / user.email)" }
+
 & $GitExe push origin $Branch
 if ($LASTEXITCODE -ne 0) { throw "git push failed" }
 
 Write-Host ""
 Write-Host "[ok] Pushed data/daily. On GPU PC run:"
 Write-Host "  git pull"
-Write-Host "  .\scripts\train_and_sync.ps1 -SkipDownload -Epochs 40 -SkipRl"
+Write-Host "  .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl"

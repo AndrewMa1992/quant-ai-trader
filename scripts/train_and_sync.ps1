@@ -37,7 +37,22 @@ function Resolve-Git {
     throw "git not found"
 }
 
+function Ensure-GitIdentity {
+    param([string]$GitExe)
+    $name = (& $GitExe config --get user.name 2>$null)
+    $email = (& $GitExe config --get user.email 2>$null)
+    if (-not $name) {
+        & $GitExe config user.name "QAT GPU Train"
+        Write-Host "[ok] set local git user.name = QAT GPU Train"
+    }
+    if (-not $email) {
+        & $GitExe config user.email "qat-gpu@users.noreply.github.com"
+        Write-Host "[ok] set local git user.email = qat-gpu@users.noreply.github.com"
+    }
+}
+
 $GitExe = Resolve-Git
+Ensure-GitIdentity -GitExe $GitExe
 $PythonExe = "python"
 if (Test-Path "C:\Program Files\Python312\python.exe") {
     $PythonExe = "C:\Program Files\Python312\python.exe"
