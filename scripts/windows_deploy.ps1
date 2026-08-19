@@ -1,5 +1,5 @@
 ﻿# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 5
+# DeployScriptVersion: 6
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\scripts\windows_deploy.ps1 -OpenFirewall
@@ -174,39 +174,46 @@ if (-not $SkipFrontend) {
     if (-not $SkipInstall) {
         & $NpmCmd install
     }
-    $frontStarted = $false
-    $frontLogOut = Join-Path $Root "logs\frontend.out.log"
-    $frontLogErr = Join-Path $Root "logs\frontend.err.log"
-    $frontBat = Join-Path $pidDir "start_frontend.bat"
-    # Do NOT use Start-Process -RedirectStandard* with npm.cmd - it often exits immediately.
-    # Log inside the .bat instead, and start minimized without PS redirects.
+    $distIndex = Join-Path $Root "frontend\dist\index.html"
+    $built = $false
     try {
         & $NpmCmd run build
-        if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
-        $mode = "preview"
+        if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
     } catch {
-        Write-Host "[warn] build failed, falling back to vite dev: $($_.Exception.Message)"
-        $mode = "dev"
+        Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
     }
-    $batBody = @"
+    if (-not $built) {
+        Write-Host "[..] retry with npx vite build (skip vue-tsc)..."
+        & $NpmCmd exec -- vite build
+        if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
+    }
+    if (-not $built) {
+        Write-Host "[ERR] frontend dist missing - UI will not start on :5180"
+        if (Test-Path (Join-Path $Root "logs\frontend.err.log")) {
+            Get-Content (Join-Path $Root "logs\frontend.err.log") -Tail 30
+        }
+    } else {
+        $frontLogOut = Join-Path $Root "logs\frontend.out.log"
+        $frontLogErr = Join-Path $Root "logs\frontend.err.log"
+        $frontBat = Join-Path $pidDir "start_frontend.bat"
+        # Reliable static server (Python) instead of vite preview
+        $batBody = @"
 @echo off
-cd /d "$Root\frontend"
-"$NpmCmd" run $mode -- --host 0.0.0.0 --port 5180 >> "$frontLogOut" 2>> "$frontLogErr"
+cd /d "$Root"
+"$PythonExe" scripts\windows_frontend_server.py --root "$Root" --port 5180 >> "$frontLogOut" 2>> "$frontLogErr"
 "@
-    Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
-    $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
-        -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Minimized
-    $frontStarted = $true
-    Start-Sleep -Seconds 5
-    if ($frontStarted) {
+        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
+        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
+            -WorkingDirectory $Root -PassThru -WindowStyle Minimized
         Set-Content (Join-Path $pidDir "frontend.pid") $front.Id
-        Write-Host "[ok] frontend        :5180  PID $($front.Id) mode=$mode"
+        Write-Host "[ok] frontend        :5180  PID $($front.Id) (python static+proxy)"
+        Start-Sleep -Seconds 3
         try {
             $fr = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
             Write-Host "[ok] frontend HTTP $($fr.StatusCode)"
         } catch {
             Write-Host "[warn] frontend not responding yet - see logs\frontend.err.log"
-            if (Test-Path $frontLogErr) { Get-Content $frontLogErr -Tail 20 }
+            if (Test-Path $frontLogErr) { Get-Content $frontLogErr -Tail 30 }
         }
     }
     Pop-Location
