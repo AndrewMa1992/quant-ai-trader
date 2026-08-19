@@ -75,10 +75,36 @@ Write-Log "[..] local=$local"
 Write-Log "[..] remote=$remote"
 Write-Log "[..] healthy=$healthy"
 
+$changedFiles = @(& $GitExe diff --name-only HEAD "origin/$Branch" 2>$null)
+$modelOnly = $false
+if ($changedFiles -and $changedFiles.Count -gt 0) {
+    $modelOnly = $true
+    foreach ($f in $changedFiles) {
+        if ($f -notmatch '^data/models/') { $modelOnly = $false; break }
+    }
+}
+Write-Log ("[..] changed={0} modelOnly={1}" -f $changedFiles.Count, $modelOnly)
+
 if ($Smart -and -not $Force) {
     if ($local -eq $remote -and $healthy) {
         Write-Log "[ok] Smart skip: already current and gateway healthy"
         exit 0
+    }
+}
+
+# Fast path: only model checkpoints changed and stack is healthy -> pull + hot reload
+if ($Smart -and -not $Force -and $healthy -and $modelOnly -and $local -ne $remote) {
+    Write-Log "[..] model-only update: reset + infer hot-reload"
+    & $GitExe checkout $Branch
+    & $GitExe reset --hard "origin/$Branch"
+    if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
+    try {
+        $headers = @{ "X-API-Key" = "dev-api-key-change-in-production" }
+        $r = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:8001/api/v2/infer/predict/hot-reload" -Headers $headers -TimeoutSec 60
+        Write-Log ("[ok] hot-reload: {0}" -f ($r | ConvertTo-Json -Compress))
+        exit 0
+    } catch {
+        Write-Log "[warn] hot-reload failed, falling back to full redeploy: $($_.Exception.Message)"
     }
 }
 

@@ -1,6 +1,27 @@
 # Local GPU train → automatic sync to Lightsail
 
-## Recommended path (already matches your AutoCD)
+## Fully automated loop
+
+1. **GPU PC (one-time):**
+   ```powershell
+   .\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -RunNow
+   ```
+   Registers `QAT-Local-TrainSync` (daily train + git push).
+
+2. **Lightsail (already done if you ran):**
+   ```powershell
+   .\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f
+   ```
+   `QAT-Paper-AutoCD` pulls every ~10 min; model-only commits hot-reload without full restart.
+
+```
+GPU PC nightly train_and_sync
+        ↓ push data/models
+GitHub
+        ↓ AutoCD ~10 min
+Lightsail hot-reload / redeploy
+```
+
 
 ```
 GPU PC train  →  git push models  →  Lightsail QAT-Paper-AutoCD (≈10 min) pulls + restarts
