@@ -120,6 +120,15 @@ async def portfolio_history(
             },
         )
     except Exception as e:
+        # Fresh Windows/SQLite paper deploys may not have tables yet.
+        msg = str(e).lower()
+        if "no such table" in msg or "does not exist" in msg:
+            log.warning(f"portfolio history unavailable (empty schema): {e}")
+            return APIResponse(
+                success=True,
+                message="No portfolio history available",
+                data={"nav_history": [], "cumulative_returns": [], "count": 0},
+            )
         log.exception(f"Failed to retrieve portfolio history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
