@@ -20,10 +20,11 @@ PUBLIC_PATHS: set[str] = {
     "/redoc",
     "/openapi.json",
     "/api/v2/status",
+    "/favicon.ico",
 }
 
 # Path prefixes that are public
-PUBLIC_PREFIXES: tuple[str, ...] = ("/docs", "/redoc", "/openapi")
+PUBLIC_PREFIXES: tuple[str, ...] = ("/docs", "/redoc", "/openapi", "/assets")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

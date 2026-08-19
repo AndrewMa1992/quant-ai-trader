@@ -4,18 +4,28 @@
 Serves frontend/dist on 0.0.0.0:5180 and proxies /api, /health, /ws
 to the local API gateway (127.0.0.1:8001).
 
-Why: vite preview/dev under Start-Process is unreliable on Windows Server.
+Critical: never return index.html for /assets/* (browsers reject JS modules
+served as text/html).
 """
 
 from __future__ import annotations
 
 import argparse
+import mimetypes
 import os
 import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
+
+# Ensure correct types even on Windows registries that map .js oddly
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/wasm", ".wasm")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 
 def main() -> int:
@@ -26,16 +36,15 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    dist = root / "frontend" / "dist"
+    dist = (root / "frontend" / "dist").resolve()
     index = dist / "index.html"
     if not index.exists():
         print(f"[ERR] Missing {index}. Run: cd frontend && npm run build", file=sys.stderr)
         return 1
 
     gateway = args.gateway.rstrip("/")
-    os.chdir(dist)
 
-    class Handler(SimpleHTTPRequestHandler):
+    class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, fmt: str, *fmt_args) -> None:
@@ -69,61 +78,107 @@ def main() -> int:
                 self.send_header("Content-Type", exc.headers.get("Content-Type", "application/json"))
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
-                self.wfile.write(payload)
+                if self.command != "HEAD":
+                    self.wfile.write(payload)
             except URLError as exc:
                 msg = f'{{"detail":"gateway proxy failed: {exc}"}}'.encode("utf-8")
                 self.send_response(502)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(msg)))
                 self.end_headers()
-                self.wfile.write(msg)
+                if self.command != "HEAD":
+                    self.wfile.write(msg)
 
-        def _is_proxy_path(self) -> bool:
-            p = self.path.split("?", 1)[0]
-            return p == "/health" or p.startswith("/api") or p.startswith("/ws")
+        def _is_proxy_path(self, path: str) -> bool:
+            return path == "/health" or path.startswith("/api") or path.startswith("/ws")
+
+        def _send_bytes(self, status: int, payload: bytes, content_type: str) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-cache" if content_type.startswith("text/html") else "public, max-age=3600")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(payload)
+
+        def _serve_file(self, file_path: Path) -> None:
+            ctype = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            if file_path.suffix.lower() in (".js", ".mjs"):
+                ctype = "application/javascript"
+            elif file_path.suffix.lower() == ".css":
+                ctype = "text/css"
+            payload = file_path.read_bytes()
+            self._send_bytes(200, payload, ctype)
+
+        def _handle(self) -> None:
+            parsed = urlparse(self.path)
+            path = unquote(parsed.path or "/")
+            if self._is_proxy_path(path):
+                self._proxy()
+                return
+
+            # Normalize and block path escape
+            rel = path.lstrip("/")
+            candidate = (dist / rel).resolve() if rel else index
+            try:
+                candidate.relative_to(dist)
+            except ValueError:
+                self._send_bytes(403, b"forbidden", "text/plain; charset=utf-8")
+                return
+
+            if path.startswith("/assets/") or path == "/favicon.ico":
+                if candidate.is_file():
+                    self._serve_file(candidate)
+                    return
+                # NEVER return HTML for asset URLs (causes MIME module errors)
+                msg = f"asset not found: {path}".encode("utf-8")
+                self._send_bytes(404, msg, "text/plain; charset=utf-8")
+                return
+
+            if candidate.is_file():
+                self._serve_file(candidate)
+                return
+
+            # SPA fallback only for non-asset routes
+            self._serve_file(index)
 
         def do_GET(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
-                self._proxy()
-                return
-            path = self.path.split("?", 1)[0]
-            file_path = dist / path.lstrip("/")
-            if path != "/" and not file_path.exists() and not path.startswith("/assets"):
-                self.path = "/index.html"
-            return SimpleHTTPRequestHandler.do_GET(self)
+            self._handle()
 
         def do_HEAD(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
-                self._proxy()
-                return
-            return SimpleHTTPRequestHandler.do_HEAD(self)
+            self._handle()
 
         def do_POST(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
+            path = urlparse(self.path).path or "/"
+            if self._is_proxy_path(path):
                 self._proxy()
                 return
             self.send_error(405)
 
         def do_PUT(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
+            path = urlparse(self.path).path or "/"
+            if self._is_proxy_path(path):
                 self._proxy()
                 return
             self.send_error(405)
 
         def do_PATCH(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
+            path = urlparse(self.path).path or "/"
+            if self._is_proxy_path(path):
                 self._proxy()
                 return
             self.send_error(405)
 
         def do_DELETE(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
+            path = urlparse(self.path).path or "/"
+            if self._is_proxy_path(path):
                 self._proxy()
                 return
             self.send_error(405)
 
         def do_OPTIONS(self) -> None:  # noqa: N802
-            if self._is_proxy_path():
+            path = urlparse(self.path).path or "/"
+            if self._is_proxy_path(path):
                 self._proxy()
                 return
             self.send_response(204)
