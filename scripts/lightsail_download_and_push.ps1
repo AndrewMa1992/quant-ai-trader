@@ -1,11 +1,10 @@
 ﻿# Run ON Lightsail (Sydney): download market data there, push to GitHub.
+# DeployScriptVersion: 2
 # Local GPU PC then pulls data and trains (avoids Yahoo rate-limit on home IP).
 #
 # Usage (Admin PowerShell on Lightsail):
-#   cd C:\quant-ai-trader
-#   git fetch origin; git reset --hard origin/cursor/quant-upgrade-a75f
-#   .\scripts\lightsail_download_and_push.ps1
-#   .\scripts\lightsail_download_and_push.ps1 -Tickers "AAPL,MSFT,GOOGL,NVDA,SPY" -ForceDownload
+#   .\scripts\lightsail_download_and_push.ps1 -ForceDownload
+# Scheduled via: .\scripts\install_lightsail_data_autostart.ps1
 
 param(
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
@@ -41,6 +40,15 @@ function Ensure-GitIdentity {
     }
 }
 
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+    & $GitExe @GitArgs 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.ToString() }
+        else { Write-Host $_ }
+    }
+    return $LASTEXITCODE
+}
+
 $GitExe = Resolve-Git
 if (-not (Test-Path $RepoRoot)) { throw "Missing $RepoRoot" }
 Set-Location $RepoRoot
@@ -56,9 +64,11 @@ Write-Host "  Lightsail (Sydney) market data download"
 Write-Host "  Root: $RepoRoot"
 Write-Host "============================================"
 
-& $GitExe fetch origin 2>&1 | Out-Host
-& $GitExe checkout $Branch 2>&1 | Out-Host
-& $GitExe reset --hard "origin/$Branch" 2>&1 | Out-Host
+$code = Invoke-Git fetch origin
+if ($code -ne 0) { throw "git fetch failed" }
+Invoke-Git checkout $Branch | Out-Null
+$code = Invoke-Git reset --hard "origin/$Branch"
+if ($code -ne 0) { throw "git reset failed" }
 
 $dlArgs = @("scripts\train_gpu_local.py", "--download-only", "--tickers", $Tickers)
 if ($ForceDownload) { $dlArgs += "--force-download" }
@@ -77,8 +87,7 @@ if ($NoPush) {
     exit 0
 }
 
-$ErrorActionPreference = "Stop"
-& $GitExe add -f "data/daily/*.parquet"
+Invoke-Git add -f -- "data/daily/" | Out-Null
 $status = & $GitExe status --porcelain "data/daily"
 if (-not $status) {
     Write-Host "[ok] No data changes to push"
@@ -86,13 +95,15 @@ if (-not $status) {
 }
 
 $msg = "chore: refresh market data from Lightsail $(Get-Date -Format 'yyyy-MM-dd HH:mm') [skip ci]"
-& $GitExe commit -m $msg
-if ($LASTEXITCODE -ne 0) { throw "git commit failed (check git user.name / user.email)" }
+$code = Invoke-Git commit -m $msg
+if ($code -ne 0) { throw "git commit failed (check git user.name / user.email)" }
 
-& $GitExe push origin $Branch
-if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+Write-Host "[..] rebase onto origin then push"
+$code = Invoke-Git pull --rebase origin $Branch
+if ($code -ne 0) { throw "git pull --rebase failed" }
+$code = Invoke-Git push origin $Branch
+if ($code -ne 0) { throw "git push failed" }
 
 Write-Host ""
-Write-Host "[ok] Pushed data/daily. On GPU PC run:"
-Write-Host "  git pull"
-Write-Host "  .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl"
+Write-Host "[ok] Pushed data/daily. GPU scheduled task will train automatically."
+Write-Host "  Manual: .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl"

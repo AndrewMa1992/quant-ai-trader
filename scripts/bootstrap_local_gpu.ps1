@@ -1,15 +1,16 @@
 ﻿# Bootstrap local GPU PC: find git, sync repo, install daily train+sync.
-# DeployScriptVersion: 2
+# DeployScriptVersion: 3
 # Run as Administrator on the RTX 3060 machine:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "02:30" -Epochs 40 -RunNow
+#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -SkipRl -RunNow
 
 param(
     [string]$RepoRoot = "",
     [string]$Branch = "cursor/quant-upgrade-a75f",
     [string]$RepoUrl = "https://github.com/AndrewMa1992/quant-ai-trader.git",
-    [string]$DailyAt = "02:30",
+    [string]$DailyAt = "03:00",
     [int]$Epochs = 40,
+    [int]$WaitForDataMinutes = 90,
     [switch]$SkipRl,
     [switch]$RunNow
 )
@@ -117,7 +118,8 @@ $argsList = @(
     "-RepoRoot", $RepoRoot,
     "-Branch", $Branch,
     "-DailyAt", $DailyAt,
-    "-Epochs", "$Epochs"
+    "-Epochs", "$Epochs",
+    "-WaitForDataMinutes", "$WaitForDataMinutes"
 )
 if ($SkipRl) { $argsList += "-SkipRl" }
 if ($RunNow) { $argsList += "-RunNow" }
@@ -127,5 +129,6 @@ if ($LASTEXITCODE -ne 0) { throw "install_local_train_autostart failed" }
 
 Write-Host ""
 Write-Host "[ok] Bootstrap done."
-Write-Host "  Daily task: QAT-Local-TrainSync at $DailyAt"
+Write-Host "  Daily task: QAT-Local-TrainSync at $DailyAt (from Lightsail data)"
+Write-Host "  Lightsail should run: install_lightsail_data_autostart.ps1 (~01:00)"
 Write-Host "  Lightsail AutoCD will pull models within ~10 minutes after push."

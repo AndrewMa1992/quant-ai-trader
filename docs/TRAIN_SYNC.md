@@ -1,95 +1,80 @@
 # Local GPU train → automatic sync to Lightsail
 
-## Fully automated loop
+## Fully automated daily loop (recommended)
 
-### Option A — Lightsail (Sydney) downloads data, GPU PC trains
+```
+01:00  Lightsail  QAT-Data-Download   → download Yahoo via Sydney → push data/daily
+03:00  GPU PC     QAT-Local-TrainSync → pull data → CUDA train → push data/models
+~10m   Lightsail  QAT-Paper-AutoCD    → pull models → hot-reload paper stack
+```
 
-Yahoo often rate-limits home IPs. Use Sydney Lightsail egress to download bars, then train locally.
+### One-time setup
 
-**1) On Lightsail (once / whenever you need fresh data):**
+**1) Lightsail (Admin PowerShell)**
+
 ```powershell
 cd C:\quant-ai-trader
 git fetch origin
-& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
-.\scripts\lightsail_download_and_push.ps1 -ForceDownload
+git reset --hard origin/cursor/quant-upgrade-a75f
+
+# Paper boot + AutoCD every 10 min + daily data download at 01:00
+.\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f -EnableDataDownload -DataDailyAt "01:00"
+
+# Or data task only:
+# .\scripts\install_lightsail_data_autostart.ps1 -DailyAt "01:00" -ForceDownload
 ```
 
-**2) On RTX 3060 PC:**
+**2) RTX 3060 PC (Admin PowerShell)**
+
 ```powershell
 cd C:\Quant_Trader
 git fetch origin
 git reset --hard origin/cursor/quant-upgrade-a75f
+
+.\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -SkipRl
+# or:
+# .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -WaitForDataMinutes 90
+```
+
+Keep the GPU PC **on and logged in** around 03:00 (task is Interactive). `StartWhenAvailable` will catch up after wake.
+
+### Verify tasks
+
+```powershell
+Get-ScheduledTask -TaskName QAT-* | Format-Table TaskName, State
+```
+
+Logs:
+
+- Lightsail: `C:\quant-ai-trader\logs\data-download-*.log`, `logs\cd-deploy.log`
+- GPU: `C:\Quant_Trader\logs\gpu-train-*.log`
+
+### Manual run (same scripts the tasks call)
+
+```powershell
+# Lightsail
+.\scripts\lightsail_download_and_push.ps1 -ForceDownload
+
+# GPU
 .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl
 ```
 
-```
-Lightsail Sydney download → git push data/daily
-        ↓
-GPU PC pull + train (SkipDownload) → git push data/models
-        ↓
-Lightsail AutoCD hot-reload models
-```
+---
 
-### Option B — GPU PC trains everything (when Yahoo works)
-
-1. **GPU PC (one-time):**
-   ```powershell
-   .\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -RunNow
-   ```
-   Registers `QAT-Local-TrainSync` (daily train + git push).
-
-2. **Lightsail (already done if you ran):**
-   ```powershell
-   .\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f
-   ```
-   `QAT-Paper-AutoCD` pulls every ~10 min; model-only commits hot-reload without full restart.
-
-```
-GPU PC nightly train_and_sync
-        ↓ push data/models
-GitHub
-        ↓ AutoCD ~10 min
-Lightsail hot-reload / redeploy
-```
-
-
-```
-GPU PC train  →  git push models  →  Lightsail QAT-Paper-AutoCD (≈10 min) pulls + restarts
-```
-
-### On your RTX 3060 PC
+## Option B — GPU downloads itself (when Yahoo works at home)
 
 ```powershell
-cd <repo>
-git fetch origin
-git checkout cursor/quant-upgrade-a75f
-git reset --hard origin/cursor/quant-upgrade-a75f
-
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-pip install yfinance lightgbm xgboost stable-baselines3 gymnasium scikit-learn pandas pyarrow
-
-# Train + push checkpoints to GitHub (Lightsail will auto-pull)
-.\scripts\train_and_sync.ps1 -Epochs 40
-# faster smoke: .\scripts\train_and_sync.ps1 -Epochs 20 -SkipRl
+.\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -SkipRl -UseLocalDownload
 ```
 
-Lightsail must already have:
+---
 
-```powershell
-.\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f
-```
+## Notes
 
-Force update immediately on the server (optional):
-
-```powershell
-.\scripts\windows_cd_deploy.ps1 -Branch cursor/quant-upgrade-a75f -Force
-```
-
-### Notes
-
-- Checkpoints live under `data/models/` and are now allowed in git for AutoCD.
+- Checkpoints live under `data/models/` and are tracked for AutoCD.
 - Single file **>100MB** may fail GitHub push — use SCP path below or Git LFS.
-- `[skip ci]` in the commit message avoids unnecessary CI noise.
+- `[skip ci]` in commit messages avoids unnecessary CI noise.
+- Scripts auto-set local `git user.name` / `user.email` if missing (not GitHub login).
 
 ---
 
@@ -101,8 +86,6 @@ Force update immediately on the server (optional):
 ```powershell
 .\scripts\sync_models_scp.ps1 -HostIp 3.106.139.233 -User Administrator -RestartRemote
 ```
-
-First `scp`/`ssh` will ask for the Administrator password (or use an SSH key).
 
 ---
 

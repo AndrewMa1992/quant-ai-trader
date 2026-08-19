@@ -1,5 +1,5 @@
 ﻿# Train on local CUDA GPU, then push checkpoints so Lightsail AutoCD picks them up.
-# DeployScriptVersion: 1
+# DeployScriptVersion: 2
 #
 # Prerequisites:
 #   - This repo cloned on the GPU PC
@@ -22,7 +22,7 @@ param(
     [switch]$NoPush
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
@@ -49,6 +49,15 @@ function Ensure-GitIdentity {
         & $GitExe config user.email "qat-gpu@users.noreply.github.com"
         Write-Host "[ok] set local git user.email = qat-gpu@users.noreply.github.com"
     }
+}
+
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+    & $GitExe @GitArgs 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.ToString() }
+        else { Write-Host $_ }
+    }
+    return $LASTEXITCODE
 }
 
 $GitExe = Resolve-Git
@@ -90,20 +99,10 @@ if ($NoPush) {
     exit 0
 }
 
-Write-Host "[..] git checkout $Branch + pull"
-$prevEap = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-& $GitExe fetch origin 2>&1 | ForEach-Object { Write-Host $_ }
-& $GitExe checkout $Branch 2>&1 | ForEach-Object { Write-Host $_ }
-& $GitExe pull origin $Branch 2>&1 | ForEach-Object { Write-Host $_ }
-$ErrorActionPreference = $prevEap
-
-Write-Host "[..] stage data/models checkpoints"
-$prevEap = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-# Add the directory only — avoid pathspec errors for missing globs (*.zip etc.)
-& $GitExe add -f -- "data/models/" 2>&1 | ForEach-Object { Write-Host $_ }
-$ErrorActionPreference = $prevEap
+# Commit local models FIRST (do not pull before commit — that can wipe trained weights).
+Write-Host "[..] stage + commit data/models"
+Invoke-Git checkout $Branch | Out-Null
+Invoke-Git add -f -- "data/models/" | Out-Null
 
 $status = & $GitExe status --porcelain "data/models"
 if (-not $status) {
@@ -112,20 +111,16 @@ if (-not $status) {
 }
 
 $msg = "chore: update trained models $(Get-Date -Format 'yyyy-MM-dd HH:mm') [skip ci]"
-$prevEap = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-& $GitExe commit -m $msg 2>&1 | ForEach-Object { Write-Host $_ }
-$commitCode = $LASTEXITCODE
-$ErrorActionPreference = $prevEap
-if ($commitCode -ne 0) { throw "git commit failed" }
+$code = Invoke-Git commit -m $msg
+if ($code -ne 0) { throw "git commit failed" }
 
-Write-Host "[..] push origin $Branch"
-$prevEap = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-& $GitExe push origin $Branch 2>&1 | ForEach-Object { Write-Host $_ }
-$pushCode = $LASTEXITCODE
-$ErrorActionPreference = $prevEap
-if ($pushCode -ne 0) { throw "git push failed" }
+Write-Host "[..] pull --rebase then push origin/$Branch"
+$code = Invoke-Git fetch origin
+if ($code -ne 0) { throw "git fetch failed" }
+$code = Invoke-Git pull --rebase origin $Branch
+if ($code -ne 0) { throw "git pull --rebase failed" }
+$code = Invoke-Git push origin $Branch
+if ($code -ne 0) { throw "git push failed" }
 
 Write-Host ""
 Write-Host "[ok] Pushed. Lightsail QAT-Paper-AutoCD will pull within ~10 minutes"

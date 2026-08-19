@@ -1,18 +1,21 @@
 ﻿# Run ON local GPU PC: pull market data pushed by Lightsail, then train + push models.
-# DeployScriptVersion: 2
+# DeployScriptVersion: 3
 #
 # Usage:
 #   .\scripts\train_from_lightsail_data.ps1
-#   .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl
+#   .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl -WaitForDataMinutes 90
+# Scheduled via: .\scripts\install_local_train_autostart.ps1
 
 param(
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
     [int]$Epochs = 40,
     [string]$Branch = "cursor/quant-upgrade-a75f",
+    [int]$WaitForDataMinutes = 90,
+    [int]$PollSeconds = 120,
+    [int]$MinParquetFiles = 5,
     [switch]$SkipRl
 )
 
-# Do not Stop on git stderr noise like "Already on 'branch'"
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
@@ -30,37 +33,48 @@ function Resolve-Git {
 
 function Invoke-Git {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
     & $GitExe @GitArgs 2>&1 | ForEach-Object {
-        if ($_ -is [System.Management.Automation.ErrorRecord]) {
-            Write-Host $_.ToString()
-        } else {
-            Write-Host $_
-        }
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.ToString() }
+        else { Write-Host $_ }
     }
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $prev
-    return $code
+    return $LASTEXITCODE
+}
+
+function Get-ParquetCount {
+    return @(Get-ChildItem "data\daily\*.parquet" -ErrorAction SilentlyContinue).Count
 }
 
 $GitExe = Resolve-Git
-Write-Host "[..] pull latest (includes data/daily from Lightsail if pushed)"
-$code = Invoke-Git fetch origin
-if ($code -ne 0) { throw "git fetch failed" }
-$code = Invoke-Git checkout $Branch
-# exit 0 even when "Already on branch"
-$code = Invoke-Git reset --hard "origin/$Branch"
-if ($code -ne 0) { throw "git reset failed" }
+$deadline = (Get-Date).AddMinutes([Math]::Max(0, $WaitForDataMinutes))
+$attempt = 0
 
-$n = (Get-ChildItem "data\daily\*.parquet" -ErrorAction SilentlyContinue | Measure-Object).Count
-Write-Host "[ok] local parquet count: $n"
-if ($n -lt 1) {
-    throw "No data/daily/*.parquet after pull. First run lightsail_download_and_push.ps1 on the Sydney instance."
+Write-Host "[..] waiting for Lightsail data/daily on origin/$Branch (up to $WaitForDataMinutes min)"
+while ($true) {
+    $attempt++
+    Write-Host "[..] attempt $attempt — fetch + hard reset origin/$Branch"
+    $code = Invoke-Git fetch origin
+    if ($code -ne 0) { Write-Host "[warn] git fetch failed; will retry" }
+    else {
+        Invoke-Git checkout $Branch | Out-Null
+        $code = Invoke-Git reset --hard "origin/$Branch"
+        if ($code -ne 0) { throw "git reset failed" }
+    }
+
+    $n = Get-ParquetCount
+    Write-Host "[ok] local parquet count: $n (need >= $MinParquetFiles)"
+    if ($n -ge $MinParquetFiles) { break }
+
+    if ((Get-Date) -ge $deadline) {
+        throw "No data/daily/*.parquet after waiting $WaitForDataMinutes min. Check Lightsail QAT-Data-Download."
+    }
+    Write-Host "[..] sleep $PollSeconds s then retry..."
+    Start-Sleep -Seconds $PollSeconds
 }
 
 $ErrorActionPreference = "Stop"
 $argsList = @("-Epochs", "$Epochs", "-Tickers", $Tickers, "-Branch", $Branch, "-SkipDownload")
 if ($SkipRl) { $argsList += "-SkipRl" }
-& powershell -ExecutionPolicy Bypass -File "scripts\train_and_sync.ps1" @argsList
+& powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\train_and_sync.ps1" @argsList
 if ($LASTEXITCODE -ne 0) { throw "train_and_sync failed" }
+
+Write-Host "[ok] GPU train-from-Lightsail pipeline finished"

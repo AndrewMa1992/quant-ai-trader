@@ -55,6 +55,7 @@ htmlcov/
 # Logs
 logs/
 *.log
+scripts/_run_*_logged.ps1
 
 # MLflow
 mlruns/
