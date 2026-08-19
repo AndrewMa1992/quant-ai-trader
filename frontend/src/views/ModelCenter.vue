@@ -11,7 +11,7 @@ const modelStore = useModelStore()
 
 const DEFAULT_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'SPY']
 
-const modelType = ref('xgboost')
+const modelType = ref('transformer')
 const tickersInput = ref(DEFAULT_TICKERS.join(','))
 const currentRunId = ref('')
 const trainError = ref('')
@@ -166,11 +166,11 @@ async function startTraining() {
           <div>
             <label class="block text-xxs text-xm-text-tertiary mb-1">Model Type</label>
             <select v-model="modelType" class="xm-input w-full" :disabled="training">
-              <option value="xgboost">XGBoost</option>
-              <option value="lightgbm">LightGBM</option>
-              <option value="lstm">LSTM</option>
-              <option value="transformer">Transformer</option>
-              <option value="ensemble">Ensemble</option>
+              <option value="transformer">Transformer (PatchTST)</option>
+              <option value="gbdt">GBDT (LightGBM)</option>
+              <option value="tcn">TCN</option>
+              <option value="tft">TFT</option>
+              <option value="rl">RL (PPO)</option>
             </select>
           </div>
           <div class="sm:col-span-2">
