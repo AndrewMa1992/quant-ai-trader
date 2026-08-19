@@ -151,6 +151,50 @@ PID 文件：`cache\windows_pids\`
 
 ---
 
+## 6. CI/CD 自动部署（GitHub Actions → Lightsail）
+
+目标流程：
+
+**改代码 → PR → CI 通过 → 合并进 `main` → Lightsail 自动 stop/start（paper）**
+
+### 6.1 一次性：在 Lightsail 上安装 Runner（管理员 PowerShell）
+
+1. 打开：https://github.com/AndrewMa1992/quant-ai-trader/settings/actions/runners/new  
+2. 复制页面上的 **Registration token**（约 1 小时过期）  
+3. 先保证仓库已在 `C:\quant-ai-trader` 且能手动部署成功  
+4. 同步本仓库最新脚本后执行：
+
+```powershell
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+cd C:\quant-ai-trader
+& "C:\Program Files\Git\cmd\git.exe" fetch origin
+& "C:\Program Files\Git\cmd\git.exe" checkout cursor/quant-upgrade-a75f
+& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
+
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\windows_install_runner.ps1 -Token "粘贴刚才的TOKEN"
+```
+
+成功后：GitHub → Settings → Actions → Runners 应显示 `lightsail-qat` 为 **Idle**。
+
+### 6.2 日常开发
+
+1. 在旁支改代码、开 PR（CI 会自动跑 lint/build）  
+2. Review 后 **合并到 `main`**  
+3. Workflow `CD - Lightsail Windows Paper Deploy` 自动在服务器执行 `windows_cd_deploy.ps1`  
+4. 浏览器验证：http://3.106.139.233:5180 与 http://3.106.139.233:8001/health  
+
+也可在 Actions 页手动 **Run workflow**（可选手动选 branch / FullInstall）。
+
+### 6.3 注意
+
+- Runner 与业务目录分离：`C:\actions-runner` vs `C:\quant-ai-trader`  
+- CD 默认 `-SkipInstall`（快）；依赖变更时在 Actions 里把 `full_install=true`  
+- 现有 `cd-train.yml` 面向另一台 GPU 机器，与 Lightsail 标签不同，互不影响  
+- 合并进 `main` 前请确认 paper 模式：`QAT_EXECUTION_MODE=paper`
+
+---
+
 ## 故障排查
 
 | 现象 | 处理 |

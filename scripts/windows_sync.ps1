@@ -1,6 +1,13 @@
-﻿# Sync repo to origin/cursor/quant-upgrade-a75f (ASCII-only for PS 5.1)
+﻿# Sync repo to a remote branch (ASCII-only for PS 5.1)
 # DeployScriptVersion: 4
-# Usage:  .\scripts\windows_sync.ps1
+# Usage:
+#   .\scripts\windows_sync.ps1
+#   .\scripts\windows_sync.ps1 -Branch main
+
+[CmdletBinding()]
+param(
+    [string]$Branch = "cursor/quant-upgrade-a75f"
+)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -31,13 +38,13 @@ if (-not $GitExe) {
 }
 
 Write-Host "[ok] git: $GitExe"
-Write-Host "[..] fetch + hard reset to origin/cursor/quant-upgrade-a75f"
+Write-Host "[..] fetch + hard reset to origin/$Branch"
 
 & $GitExe fetch origin
 if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
 
-& $GitExe checkout cursor/quant-upgrade-a75f
-& $GitExe reset --hard origin/cursor/quant-upgrade-a75f
+& $GitExe checkout $Branch
+& $GitExe reset --hard "origin/$Branch"
 if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
 
 Write-Host "[ok] HEAD:"

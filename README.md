@@ -22,7 +22,8 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 # 外网: http://<公网IP>:5180
 ```
 
-详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP 登录、放行端口、一键启停）。
+详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP、端口、启停、**CI/CD 自动部署**）。  
+合并进 `main` 后可由 GitHub Actions self-hosted runner 自动 `windows_cd_deploy.ps1`。
 
 ## 🚀 核心功能
 
