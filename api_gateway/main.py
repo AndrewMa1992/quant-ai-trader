@@ -129,6 +129,16 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 # ── Health Check ─────────────────────────────────────────────
+@app.get("/health/live", tags=["System"])
+async def health_live() -> dict:
+    """Liveness only — always fast. Use for CD / load balancers / UI probes."""
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        "uptime_seconds": round(time.time() - _START_TIME, 2),
+    }
+
+
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check(request: Request) -> HealthResponse:
     """Health check endpoint for load balancers and monitoring.
@@ -179,13 +189,14 @@ async def health_check(request: Request) -> HealthResponse:
         logger.warning(f"Health check: redis error: {exc}")
 
     # ── Downstream service health probes ─────────────────────
-    # Probe each canonical service (no aliases) via HTTP GET /health
+    # Probe each microservice (exclude "api" — that is THIS gateway; probing
+    # ourselves recursively deadlocks /health and makes the UI look "down").
 
     async def _probe_service(name: str, port: int) -> tuple[str, str]:
         """Probe a single downstream service via HTTP GET /health."""
         client: httpx.AsyncClient = request.app.state.http_client
         try:
-            resp = await client.get(service_health_url(name), timeout=2.0)
+            resp = await client.get(service_health_url(name), timeout=1.5)
             if resp.status_code == 200:
                 return (name, "healthy")
             return (name, f"degraded (HTTP {resp.status_code})")
@@ -197,10 +208,19 @@ async def health_check(request: Request) -> HealthResponse:
             return (name, f"error: {exc}")
 
     probe_tasks = [
-        _probe_service(name, port) for name, port in SERVICE_PORT_MAP.items()
+        _probe_service(name, port)
+        for name, port in SERVICE_PORT_MAP.items()
+        if name != "api"
     ]
-    probe_results = await asyncio.gather(*probe_tasks)
-    services_status = dict(probe_results)
+    probe_results = await asyncio.gather(*probe_tasks, return_exceptions=True)
+    services_status = {}
+    for item in probe_results:
+        if isinstance(item, Exception):
+            continue
+        name, status = item
+        services_status[name] = status
+    services_status["api"] = "healthy"  # this process responded
+
 
     # ── Determine overall status ──────────────────────────────
     infra_healthy = db_status == "healthy"

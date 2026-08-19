@@ -50,10 +50,15 @@ function Resolve-Git {
 
 function Test-GatewayHealthy {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 3
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health/live" -UseBasicParsing -TimeoutSec 3
         return ($r.StatusCode -eq 200)
     } catch {
-        return $false
+        try {
+            $r2 = Invoke-WebRequest -Uri "http://127.0.0.1:8001/api/v2/status" -UseBasicParsing -TimeoutSec 3
+            return ($r2.StatusCode -eq 200)
+        } catch {
+            return $false
+        }
     }
 }
 
@@ -155,6 +160,18 @@ if (Test-Path $watchdog) {
     }
 } else {
     Write-Log "[warn] missing windows_pipeline_watchdog.ps1"
+}
+
+# Frontend / gateway SPA watchdog
+$fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
+if (Test-Path $fw) {
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -Once
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+        Write-Log "[ok] frontend watchdog armed"
+    } catch {
+        Write-Log ("[warn] frontend watchdog: {0}" -f $_.Exception.Message)
+    }
 }
 
 # Frontend: prefer gateway SPA on :8001; also verify :5180
