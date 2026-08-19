@@ -99,8 +99,11 @@ $ErrorActionPreference = "Continue"
 $ErrorActionPreference = $prevEap
 
 Write-Host "[..] stage data/models checkpoints"
-& $GitExe add -f "data/models/*.pt" "data/models/*.joblib" "data/models/*.zip" "data/models/*.json" "data/models/*.meta.json" 2>$null
-& $GitExe add -f "data/models/"
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+# Add the directory only — avoid pathspec errors for missing globs (*.zip etc.)
+& $GitExe add -f -- "data/models/" 2>&1 | ForEach-Object { Write-Host $_ }
+$ErrorActionPreference = $prevEap
 
 $status = & $GitExe status --porcelain "data/models"
 if (-not $status) {
@@ -109,12 +112,20 @@ if (-not $status) {
 }
 
 $msg = "chore: update trained models $(Get-Date -Format 'yyyy-MM-dd HH:mm') [skip ci]"
-& $GitExe commit -m $msg
-if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $GitExe commit -m $msg 2>&1 | ForEach-Object { Write-Host $_ }
+$commitCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($commitCode -ne 0) { throw "git commit failed" }
 
 Write-Host "[..] push origin $Branch"
-& $GitExe push origin $Branch
-if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $GitExe push origin $Branch 2>&1 | ForEach-Object { Write-Host $_ }
+$pushCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($pushCode -ne 0) { throw "git push failed" }
 
 Write-Host ""
 Write-Host "[ok] Pushed. Lightsail QAT-Paper-AutoCD will pull within ~10 minutes"
