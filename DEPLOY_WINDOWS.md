@@ -175,6 +175,16 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\windows_install_runner.ps1 -Token "粘贴刚才的TOKEN"
 ```
 
+若出现 `Settings Saved` 但报 `svc.cmd` 找不到，配置其实已成功，补跑：
+
+```powershell
+cd C:\actions-runner
+cmd /c "svc.cmd install"
+cmd /c "svc.cmd start"
+# 或拉最新脚本后:
+# .\scripts\windows_install_runner.ps1 -ServiceOnly
+```
+
 成功后：GitHub → Settings → Actions → Runners 应显示 `lightsail-qat` 为 **Idle**。
 
 ### 6.2 日常开发
