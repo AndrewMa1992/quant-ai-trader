@@ -1,89 +1,86 @@
 """
-MarketSession — simple market-hours checker
-============================================
-Determines whether any major market is currently open for
-live trading.  Used by the pipeline to skip trading cycles
-outside market hours (P0-3).
-
-Zero ``import backend.`` — uses a lightweight internal schedule.
+MarketSession — exchange-aware hours (DST via zoneinfo)
+=======================================================
+US can run 24h when QAT_US_24H_TRADING=true (default for paper).
+HK/SG/AU/NZ use local exchange calendars (weekdays; lunch ignored for simplicity).
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, time, timezone
-from typing import Dict
+from typing import Dict, Optional
+from zoneinfo import ZoneInfo
 
-from loguru import logger
-
-# ── Market schedules (UTC) ───────────────────────────────────
-# Times are in UTC.  These are the core sessions; pre/post-market
-# is NOT considered "open" for the main trading pipeline.
-_MARKETS: Dict[str, Dict[str, time]] = {
+# Local open/close (exchange local time). Lunch breaks ignored.
+_MARKETS: Dict[str, Dict[str, object]] = {
     "US": {
-        "open": time(14, 30),  # 09:30 EST → 14:30 UTC (winter)
-        "close": time(21, 0),  # 16:00 EST → 21:00 UTC (winter)
+        "tz": ZoneInfo("America/New_York"),
+        "open": time(9, 30),
+        "close": time(16, 0),
     },
     "HK": {
-        "open": time(1, 30),   # 09:30 HKT → 01:30 UTC
-        "close": time(8, 0),   # 16:00 HKT → 08:00 UTC
+        "tz": ZoneInfo("Asia/Hong_Kong"),
+        "open": time(9, 30),
+        "close": time(16, 0),
     },
-    "CN": {
-        "open": time(1, 30),   # 09:30 CST → 01:30 UTC
-        "close": time(7, 0),   # 15:00 CST → 07:00 UTC
+    "SG": {
+        "tz": ZoneInfo("Asia/Singapore"),
+        "open": time(9, 0),
+        "close": time(17, 0),
+    },
+    "AU": {
+        "tz": ZoneInfo("Australia/Sydney"),
+        "open": time(10, 0),
+        "close": time(16, 0),
+    },
+    "NZ": {
+        "tz": ZoneInfo("Pacific/Auckland"),
+        "open": time(10, 0),
+        "close": time(16, 45),
     },
 }
 
 
-def _is_weekday() -> bool:
-    """Check if today is a weekday (Mon-Fri)."""
-    return datetime.now(timezone.utc).weekday() < 5
+def _us_24h_enabled() -> bool:
+    raw = os.getenv("QAT_US_24H_TRADING", "true").strip().lower()
+    return raw in ("1", "true", "yes", "on", "")
 
 
-def _is_market_open(market: str, now_utc: time) -> bool:
-    """Check whether *market* is open at *now_utc*."""
-    if not _is_weekday():
-        return False
-    sched = _MARKETS.get(market)
+def _is_weekday_local(now_local: datetime) -> bool:
+    return now_local.weekday() < 5
+
+
+def _is_market_open(market: str, now_utc: Optional[datetime] = None) -> bool:
+    mkt = market.upper()
+    if mkt == "US" and _us_24h_enabled():
+        return True
+    sched = _MARKETS.get(mkt)
     if sched is None:
         return False
-    open_t = sched["open"]
-    close_t = sched["close"]
-    if open_t <= close_t:
-        return open_t <= now_utc < close_t
-    # Overnight session (e.g. spanning midnight).
-    return now_utc >= open_t or now_utc < close_t
+    now_utc = now_utc or datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(sched["tz"])  # type: ignore[arg-type]
+    if not _is_weekday_local(now_local):
+        return False
+    open_t: time = sched["open"]  # type: ignore[assignment]
+    close_t: time = sched["close"]  # type: ignore[assignment]
+    t = now_local.time()
+    return open_t <= t < close_t
 
 
 def get_market_status() -> Dict[str, bool]:
-    """Return open/closed status for all tracked markets.
-
-    Returns:
-        Dict like ``{"US": True, "HK": False, "CN": False}``.
-    """
-    now_utc = datetime.now(timezone.utc).time()
-    status: Dict[str, bool] = {}
-    for market in _MARKETS:
-        status[market] = _is_market_open(market, now_utc)
-    return status
+    now_utc = datetime.now(timezone.utc)
+    return {market: _is_market_open(market, now_utc) for market in _MARKETS}
 
 
 def is_any_market_open() -> bool:
-    """Check whether **any** major market is currently open.
-
-    Returns:
-        True if at least one tracked market is in session.
-    """
     return any(get_market_status().values())
 
 
 def is_market_open(market: str) -> bool:
-    """Check whether a specific market is open.
+    return _is_market_open(market)
 
-    Args:
-        market: Market code (``"US"``, ``"HK"``, ``"CN"``).
 
-    Returns:
-        True if the named market is in session.
-    """
-    now_utc = datetime.now(timezone.utc).time()
-    return _is_market_open(market, now_utc)
+def next_open_markets(rotation: list[str]) -> list[str]:
+    """Return markets from rotation that are currently open (US 24h always)."""
+    return [m for m in rotation if is_market_open(m)]

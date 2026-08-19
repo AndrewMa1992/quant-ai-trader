@@ -117,6 +117,18 @@ async def list_models() -> APIResponse:
         )
 
 
+def _normalize_model_type(model_type: str, hyperparams: dict | None) -> tuple[str, dict]:
+    """Map UI aliases to trainer keys."""
+    hp = dict(hyperparams or {})
+    if model_type in ("xgboost", "lightgbm", "catboost", "ensemble"):
+        if model_type in ("xgboost", "lightgbm", "catboost"):
+            hp.setdefault("gbdt_type", "lightgbm" if model_type == "lightgbm" else model_type)
+        model_type = "gbdt"
+    elif model_type == "lstm":
+        model_type = "transformer"
+    return model_type, hp
+
+
 @router.post("/train/{model_type}")
 async def train_model(
     model_type: str,
@@ -129,6 +141,9 @@ async def train_model(
     """
     global _training_counter
     log = get_logger(__name__)
+
+    model_type, hp = _normalize_model_type(model_type, req.hyperparams)
+    req.hyperparams = hp
 
     if model_type not in ("gbdt", "transformer", "tcn", "tft", "rl"):
         raise HTTPException(status_code=400, detail=f"Unsupported model type: {model_type}")
@@ -365,6 +380,8 @@ async def train_model_unified(
     log = get_logger(__name__)
 
     model_type = req.model_type
+    model_type, hp = _normalize_model_type(model_type, req.hyperparams)
+    req.hyperparams = hp
     if model_type not in ("gbdt", "transformer", "tcn", "tft", "rl"):
         raise HTTPException(status_code=400, detail=f"Unsupported model type: {model_type}")
 

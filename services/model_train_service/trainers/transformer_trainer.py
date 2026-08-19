@@ -1,7 +1,7 @@
 """services/model_train_service/trainers/transformer_trainer.py – PatchTST-style Transformer.
 
-d_model=128(CPU)/512(GPU), n_heads=8, n_layers=4/6, dropout=0.1.
-Positional encoding, gradient clipping=1.0, warmup LR schedule.
+d_model=128(CPU)/384(GPU), n_heads=8, n_layers=4/6, dropout=0.1.
+Positional encoding, gradient clipping, warmup LR schedule.
 """
 
 from __future__ import annotations
@@ -107,9 +107,7 @@ class TransformerTrainer(TrainerBase):
 
     Auto-selects d_model based on device:
     - CPU: d_model=128, n_layers=4
-    - GPU: d_model=512, n_layers=6
-
-    Supports gradient clipping and warmup cosine LR schedule.
+    - GPU: d_model=384, n_layers=6 (~12–18M params for ~68 features)
     """
 
     model_name = "transformer"
@@ -131,7 +129,9 @@ class TransformerTrainer(TrainerBase):
             else train_config.TRANSFORMER_D_MODEL_CPU
         )
         self.n_heads = n_heads
-        self.n_layers = n_layers or (6 if self.device == "cuda" else 4)
+        self.n_layers = n_layers or (
+            train_config.TRANSFORMER_N_LAYERS if self.device == "cuda" else 4
+        )
         self.dropout = dropout
         self.seq_len = seq_len
         self.forecast_horizon = forecast_horizon
@@ -166,7 +166,10 @@ class TransformerTrainer(TrainerBase):
             self._feature_names = [f"f{i}" for i in range(n)]
 
         epochs = kwargs.get("epochs", train_config.EPOCHS)
-        batch_size = kwargs.get("batch_size", train_config.BATCH_SIZE)
+        batch_size = kwargs.get(
+            "batch_size",
+            train_config.BATCH_SIZE_GPU if self.device == "cuda" else train_config.BATCH_SIZE,
+        )
         lr = kwargs.get("lr", self._lr)
 
         # ---- Feature normalization (fix NaN/inf) ----
@@ -195,10 +198,17 @@ class TransformerTrainer(TrainerBase):
             seq_len=self.seq_len,
             forecast_horizon=self.forecast_horizon,
         ).to(self.device)
+        n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        logger.info(
+            f"PatchTST params={n_params/1e6:.2f}M | d_model={self.d_model} "
+            f"layers={self.n_layers} heads={self.n_heads} device={self.device}"
+        )
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
         criterion = nn.MSELoss()
+        use_amp = bool(train_config.USE_AMP and self.device == "cuda")
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         train_ds = TensorDataset(
             torch.tensor(X_train, dtype=torch.float32),
@@ -208,8 +218,9 @@ class TransformerTrainer(TrainerBase):
             torch.tensor(X_val, dtype=torch.float32),
             torch.tensor(y_val, dtype=torch.float32).unsqueeze(1),
         )
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=batch_size * 2)
+        pin = self.device == "cuda"
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, pin_memory=pin)
+        val_loader = DataLoader(val_ds, batch_size=batch_size * 2, pin_memory=pin)
 
         best_val_loss = float("inf")
         patience_counter = 0
@@ -224,16 +235,20 @@ class TransformerTrainer(TrainerBase):
             epoch_loss = 0.0
 
             for batch_X, batch_y in train_loader:
-                batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
-                optimizer.zero_grad()
-                pred = self.model(batch_X)
-                loss = criterion(pred, batch_y)
-                loss.backward()
+                batch_X = batch_X.to(self.device, non_blocking=pin)
+                batch_y = batch_y.to(self.device, non_blocking=pin)
+                optimizer.zero_grad(set_to_none=True)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    pred = self.model(batch_X)
+                    loss = criterion(pred, batch_y)
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self._grad_clip)
-                optimizer.step()
-                epoch_loss += loss.item()
+                scaler.step(optimizer)
+                scaler.update()
+                epoch_loss += float(loss.item())
 
-            avg_train_loss = epoch_loss / len(train_loader)
+            avg_train_loss = epoch_loss / max(len(train_loader), 1)
             train_losses.append(avg_train_loss)
 
             # NaN guard: skip epoch if loss is NaN/Inf
@@ -248,9 +263,11 @@ class TransformerTrainer(TrainerBase):
             val_loss = 0.0
             with torch.no_grad():
                 for batch_X, batch_y in val_loader:
-                    batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
-                    pred = self.model(batch_X)
-                    val_loss += criterion(pred, batch_y).item()
+                    batch_X = batch_X.to(self.device, non_blocking=pin)
+                    batch_y = batch_y.to(self.device, non_blocking=pin)
+                    with torch.cuda.amp.autocast(enabled=use_amp):
+                        pred = self.model(batch_X)
+                        val_loss += float(criterion(pred, batch_y).item())
 
             avg_val_loss = val_loss / len(val_loader)
             val_losses.append(avg_val_loss)

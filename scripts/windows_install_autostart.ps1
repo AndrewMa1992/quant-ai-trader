@@ -1,13 +1,14 @@
 ﻿# One-shot: enable auto-run + auto-deploy on Lightsail Windows
-# DeployScriptVersion: 5
+# DeployScriptVersion: 6
 # Run as Administrator:
 #   .\scripts\windows_install_autostart.ps1
-#   .\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f
+#   .\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f -EnableDataDownload
 #   .\scripts\windows_install_autostart.ps1 -Branch main -IntervalMinutes 10
 #
 # Creates Scheduled Tasks:
 #   QAT-Paper-Boot     - at startup: pull + deploy (Smart)
 #   QAT-Paper-AutoCD   - every N minutes: Smart pull + deploy if changed/unhealthy
+#   QAT-Data-Download  - daily Sydney market data push (when -EnableDataDownload)
 #   QAT-Actions-Runner - at logon: start run.cmd if C:\actions-runner exists (optional CD via Actions)
 
 [CmdletBinding()]
@@ -16,6 +17,8 @@ param(
     [string]$RepoRoot = "C:\quant-ai-trader",
     [int]$IntervalMinutes = 10,
     [string]$RunnerDir = "C:\actions-runner",
+    [string]$DataDailyAt = "01:00",
+    [switch]$EnableDataDownload,
     [switch]$SkipRunnerTask,
     [switch]$RunNow
 )
@@ -101,16 +104,29 @@ if (-not $SkipRunnerTask) {
     }
 }
 
+if ($EnableDataDownload) {
+    $dataInstaller = Join-Path $RepoRoot "scripts\install_lightsail_data_autostart.ps1"
+    if (-not (Test-Path $dataInstaller)) {
+        throw "Missing $dataInstaller - git pull latest first"
+    }
+    Write-Host "[..] enabling QAT-Data-Download at $DataDailyAt..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dataInstaller `
+        -RepoRoot $RepoRoot -Branch $Branch -DailyAt $DataDailyAt -ForceDownload
+    if ($LASTEXITCODE -ne 0) { throw "install_lightsail_data_autostart failed" }
+}
+
 Write-Host ""
 Write-Host "Tasks registered. View: taskschd.msc"
 Write-Host "  QAT-Paper-Boot"
 Write-Host "  QAT-Paper-AutoCD"
+if ($EnableDataDownload) { Write-Host "  QAT-Data-Download ($DataDailyAt)" }
 if (-not $SkipRunnerTask) { Write-Host "  QAT-Actions-Runner (if runner present)" }
 Write-Host ""
 Write-Host "Flow:"
-Write-Host "  1) Push/merge to branch: $Branch"
-Write-Host "  2) Within ~$IntervalMinutes min server pulls and redeploys"
-Write-Host "  3) Reboot also auto-starts paper mode"
+Write-Host "  1) QAT-Data-Download pushes data/daily (if enabled)"
+Write-Host "  2) Home GPU QAT-Local-TrainSync trains + pushes models"
+Write-Host "  3) Within ~$IntervalMinutes min AutoCD pulls models / redeploys"
+Write-Host "  4) Reboot also auto-starts paper mode"
 Write-Host "Logs: $RepoRoot\logs\cd-deploy.log"
 
 if ($RunNow) {

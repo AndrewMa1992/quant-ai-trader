@@ -132,14 +132,21 @@ class TradingPipeline:
 
         # ── 组合管理 ─────────────────────────────────────────
         logger.info("初始化组合管理器...")
+        try:
+            from configs.settings import settings as _settings
+
+            _init_cap = float(_settings.TRADING_INITIAL_CAPITAL)
+        except Exception:
+            _init_cap = 1700.0
         self.portfolio: PortfolioManager = PortfolioManager(
-            initial_capital=100000.0,
+            initial_capital=_init_cap,
         )
         # 尝试加载已有状态
         self.portfolio.load_state("data/portfolio_state.json")
         logger.info(
             f"  ✅ PortfolioManager 已就绪 "
-            f"(现金 ${self.portfolio.cash:,.2f}, "
+            f"(初始 ${_init_cap:,.2f}, "
+            f"现金 ${self.portfolio.cash:,.2f}, "
             f"持仓 {len(self.portfolio.positions)} 只)"
         )
 
@@ -150,6 +157,7 @@ class TradingPipeline:
             breaker_mode="hard",
             max_daily_trades=config.MAX_DAILY_TRADES,
         )
+        self.risk_manager.load_state("data/risk_state.json")
         self.risk_manager.sync_portfolio_value(
             self.portfolio.total_value,
             self.portfolio.cash,
@@ -200,6 +208,25 @@ class TradingPipeline:
         # ── 数据目录 ─────────────────────────────────────────
         self.data_dir: Path = Path("data/daily")
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+        # ── SQLite / Redis warm-up ──────────────────────────
+        try:
+            from shared.database.engine import optimize_sqlite_file
+
+            optimize_sqlite_file("data/quant_trader.db")
+        except Exception as e:
+            logger.debug(f"SQLite optimize skipped: {e}")
+        try:
+            from shared.market_cache import sync_cache_portfolio
+
+            sync_cache_portfolio({
+                "cash": self.portfolio.cash,
+                "total_value": self.portfolio.total_value,
+                "positions": len(self.portfolio.positions),
+            })
+            logger.info("  ✅ Redis market cache warmed (or in-memory degrade)")
+        except Exception as e:
+            logger.info(f"  ⚠️ Redis cache warm skipped: {e}")
 
         # ── HTTP 客户端 ──────────────────────────────────────
         self._http: Optional[httpx.AsyncClient] = None
@@ -515,8 +542,34 @@ class TradingPipeline:
         # ── 8. 状态保存 ──────────────────────────────────────
         try:
             self.portfolio.save_state()
+            self.risk_manager.save_state("data/risk_state.json")
         except Exception as e:
             logger.warning(f"状态保存异常: {e}")
+
+        # ── Redis: cycle + portfolio + signals ───────────────
+        try:
+            from shared.market_cache import (
+                sync_cache_cycle,
+                sync_cache_portfolio,
+                sync_cache_signals,
+            )
+
+            sync_cache_signals(signals if isinstance(signals, list) else [])
+            sync_cache_portfolio({
+                "cash": self.portfolio.cash,
+                "total_value": self.portfolio.total_value,
+                "n_positions": len(self.portfolio.positions),
+                "cycle": self.cycle_count,
+            })
+            sync_cache_cycle({
+                "cycle": self.cycle_count,
+                "orders": len(orders),
+                "signals": len(signals) if isinstance(signals, list) else 0,
+                "nav": self.portfolio.total_value,
+                "mode": getattr(self.executor, "mode", "paper"),
+            })
+        except Exception as e:
+            logger.debug(f"Redis cycle publish skipped: {e}")
 
         # ── P2-2: Tiger 全量同步到本地 DB (每10轮) ──────────
         if self.tiger_ready and self.cycle_count % 10 == 0:
@@ -588,11 +641,32 @@ class TradingPipeline:
         # 过滤并限制数量
         tickers = [t for t in tickers if isinstance(t, str) and t]
 
-        # ── 市场轮询：每轮只分析一个市场 ──
+        # ── 市场轮询：优先当前开市市场，再 round-robin ──
         if self.config.MARKET_ROUND_ROBIN and self.config.MARKET_ROTATION:
-            target_market = self.config.MARKET_ROTATION[
-                self._market_round_index % len(self.config.MARKET_ROTATION)
-            ]
+            from shared.market_session import is_market_open, next_open_markets
+
+            rotation = list(self.config.MARKET_ROTATION)
+            prefer_open = bool(getattr(self.config, "PREFER_OPEN_MARKETS", True))
+            open_now = next_open_markets(rotation) if prefer_open else []
+            if open_now:
+                # Pick next open market in rotation order
+                start = self._market_round_index % len(rotation)
+                target_market = None
+                for i in range(len(rotation)):
+                    cand = rotation[(start + i) % len(rotation)]
+                    if cand in open_now:
+                        target_market = cand
+                        self._market_round_index = (start + i + 1) % len(rotation)
+                        break
+                if target_market is None:
+                    target_market = open_now[0]
+                    self._market_round_index += 1
+            else:
+                target_market = rotation[self._market_round_index % len(rotation)]
+                self._market_round_index += 1
+                # When nothing open (rare with US 24h), still cycle for data refresh
+                logger.info(f"  📴 无开市市场命中，仍分析 {target_market}")
+
             if target_market == "HK":
                 tickers = [t for t in tickers if ".HK" in t]
             elif target_market == "US":
@@ -606,8 +680,10 @@ class TradingPipeline:
             elif target_market == "CN":
                 tickers = [t for t in tickers if ".SH" in t or ".SZ" in t]
             tickers = tickers[: self.config.MAX_STOCKS_PER_MARKET]
-            logger.info(f"  🎯 市场轮询: {target_market}, {len(tickers)} 只")
-            self._market_round_index += 1
+            open_flag = is_market_open(target_market)
+            logger.info(
+                f"  🎯 市场轮询: {target_market} open={open_flag}, {len(tickers)} 只"
+            )
 
         tickers = tickers[: self.config.MAX_TICKERS_PER_CYCLE]
 
@@ -624,6 +700,28 @@ class TradingPipeline:
             pass
         # Hardcoded minimal fallback
         return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
+
+    def _models_are_stale(self, max_age_days: int = 14) -> bool:
+        """True if any core checkpoint is older than max_age_days."""
+        from pathlib import Path
+        import time as _time
+
+        root = Path("data/models")
+        names = ("gbdt_v2.joblib", "transformer_v2.pt", "tcn_v2.pt", "tft_v2.pt")
+        now = _time.time()
+        found = 0
+        stale = 0
+        for name in names:
+            p = root / name
+            if not p.exists():
+                continue
+            found += 1
+            age_days = (now - p.stat().st_mtime) / 86400.0
+            if age_days > max_age_days:
+                stale += 1
+        if found == 0:
+            return True
+        return stale >= max(1, found // 2)
 
     # ═══════════════════════════════════════════════════════════════
     # Step 1: Fetch Market Data
@@ -778,6 +876,20 @@ class TradingPipeline:
             logger.warning("  Step 3: InferenceEngine stub — returning HOLD for all tickers")
             return []
 
+        # Hot-reload models every ~50 cycles; fail-soft if checkpoints are stale
+        try:
+            max_age = int(getattr(self.config, "MODEL_MAX_AGE_DAYS", 14))
+            if self.cycle_count > 0 and self.cycle_count % 50 == 0:
+                self.inference_engine.load_models()
+            stale = self._models_are_stale(max_age_days=max_age)
+            if stale:
+                logger.warning(
+                    f"  Step 3: models older than {max_age}d — size/threshold de-risk"
+                )
+        except Exception as e:
+            logger.debug(f"model freshness check skipped: {e}")
+            stale = False
+
         try:
             # Filter to tickers with available data in ParquetStore
             try:
@@ -817,9 +929,21 @@ class TradingPipeline:
             signals: List[Dict] = self.inference_engine.generate_signals_batch(
                 factor_df,
                 top_n=self.config.TOP_N_SIGNALS,
-                min_threshold=self.config.SIGNAL_THRESHOLD_MIN,
-                min_confidence=self.config.MIN_CONFIDENCE,
+                min_threshold=(
+                    self.config.SIGNAL_THRESHOLD_MIN * (1.5 if stale else 1.0)
+                ),
+                min_confidence=self.config.MIN_CONFIDENCE + (0.1 if stale else 0.0),
             )
+
+            if stale and signals:
+                # Halve conviction when models are stale
+                for s in signals:
+                    if "signal" in s:
+                        s["signal"] = float(s["signal"]) * 0.5
+                    if "strength" in s:
+                        s["strength"] = float(s["strength"]) * 0.5
+                    if "confidence" in s:
+                        s["confidence"] = float(s["confidence"]) * 0.8
 
             # Feed ensemble Bayesian weights with this cycle's components
             try:
@@ -956,9 +1080,11 @@ class TradingPipeline:
                 "views": views,
                 "tickers": [v["ticker"] for v in views],
                 "constraints": {
-                    "max_position_size": 0.20,
+                    "max_position_size": float(
+                        getattr(self.risk_manager, "MAX_POSITION_SIZE", 0.35)
+                    ),
                     "min_position_size": 0.0,
-                    "max_turnover": 0.30,
+                    "max_turnover": 0.40,
                 },
             }
             resp = await http.post(
@@ -1003,11 +1129,24 @@ class TradingPipeline:
             return self._equal_weight_fallback(signals)
 
     def _equal_weight_fallback(self, signals: List[Dict]) -> Dict[str, float]:
-        """等权分配 fallback — 当组合优化不可用时。"""
+        """等权分配 fallback — NAV-aware deploy fraction (not 20% cash park)."""
         if not signals:
             return {}
+        try:
+            from shared.capital_policy import build_capital_policy
+
+            pol = build_capital_policy(self.portfolio.total_value)
+            deploy = pol.deploy_frac
+        except Exception:
+            deploy = 0.80
         n: int = len(signals)
-        weight: float = round(0.20 / max(n, 1), 6)  # cap total at 20%
+        weight: float = round(deploy / max(n, 1), 6)
+        # Cap single name by max position
+        try:
+            max_pos = float(self.risk_manager.MAX_POSITION_SIZE)
+        except Exception:
+            max_pos = 0.35
+        weight = min(weight, max_pos)
         return {s.get("ticker", ""): weight for s in signals if s.get("ticker")}
 
     # ═══════════════════════════════════════════════════════════════
@@ -1035,6 +1174,16 @@ class TradingPipeline:
             # 获取实时价格（优先HTTP，失败则用信号自带price）
             prices: Dict[str, float] = {}
             for ticker in target_weights:
+                # Redis quote cache first
+                try:
+                    from shared.market_cache import sync_get_quote, sync_cache_quote
+
+                    cached = sync_get_quote(ticker)
+                    if cached and cached > 0:
+                        prices[ticker] = cached
+                        continue
+                except Exception:
+                    pass
                 try:
                     http = await self._get_http()
                     resp = await http.get(
@@ -1046,6 +1195,12 @@ class TradingPipeline:
                         px = float(rt_data.get("price", rt_data.get("close", 0.0)))
                         if px > 0:
                             prices[ticker] = px
+                            try:
+                                from shared.market_cache import sync_cache_quote
+
+                                sync_cache_quote(ticker, px, source="data_service")
+                            except Exception:
+                                pass
                 except Exception:
                     pass
 

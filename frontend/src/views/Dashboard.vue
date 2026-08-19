@@ -45,11 +45,10 @@ function showToast(message: string, duration = 3000) {
 }
 
 const canRollback = computed(() => {
-  const us = execStore.marketStatus?.US
-  const hk = execStore.marketStatus?.HK
-  const usOpen = us?.is_open ?? false
-  const hkOpen = hk?.is_open ?? false
-  return !usOpen && !hkOpen
+  const status = execStore.marketStatus ?? {}
+  // Allow rollback when no enabled market is open (US 24h may always be open)
+  const keys = ['US', 'HK', 'SG', 'AU', 'NZ']
+  return !keys.some((k) => status[k]?.is_open)
 })
 
 async function handleRollback() {
@@ -265,7 +264,7 @@ const marketMap = computed(() => execStore.marketStatus ?? {})
               class="text-sm font-mono"
               :class="execStore.marketStatus?.US?.is_open ? 'text-profit' : 'text-xm-text-tertiary'"
             >
-              {{ execStore.marketStatus?.US?.is_open ? 'Open' : 'Closed' }}
+              {{ execStore.marketStatus?.US?.is_open ? 'Open (24h)' : 'Closed' }}
             </span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">

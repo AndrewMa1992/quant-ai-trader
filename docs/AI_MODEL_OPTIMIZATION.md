@@ -26,12 +26,33 @@ This does **not** claim RenTec/Two Sigma model parity. It fixes correctness bugs
 
 ## Operator checklist
 
-1. Retrain models so new scalers / RL meta are on disk:
-   ```bash
-   python scripts/train_all_models.py   # or train_all_v2.py
-   ```
-2. Confirm `data/models/` has: `gbdt_v*.joblib`, `transformer_*.pt`, `tcn_*.pt`, `tft_*.pt`, `rl_*.zip` (+ `.meta.json`).
-3. Restart infer / pipeline; log should show `N/5 models loaded` with N≥2.
+### A) Local RTX 3060 / CUDA desktop (recommended)
+
+Lightsail Windows is CPU-only. Train on the PC with the 3060, then copy checkpoints:
+
+```powershell
+git pull
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install yfinance lightgbm xgboost stable-baselines3 gymnasium scikit-learn
+.\scripts\train_gpu_local.ps1 -Epochs 40
+# artifacts: data\models\gbdt_v2.joblib transformer_v2.pt tcn_v2.pt tft_v2.pt rl_v2.zip
+```
+
+Copy `data\models\*` to Lightsail `C:\quant-ai-trader\data\models\`, then:
+`.\scripts\windows_deploy.ps1 -SkipInstall`
+
+Optimizations for 3060: AMP, **d_model=384**, n_layers=6, batch 96, pin_memory.
+PatchTST ~12–18M params — adequate for daily multi-ticker alpha on a retail book;
+bigger models overfit faster on Yahoo-scale history.
+
+### B) API / UI on a running stack
+
+1. Ingest tickers (Sync page or `/api/v2/data/ingest`)
+2. Models page: choose `transformer` / `gbdt` / `tcn` / `tft` / `rl`
+3. Or: `POST /api/v2/train/train/transformer` with `{"tickers":[...],"device":"cuda"}`
+
+Confirm `data/models/` has: `gbdt_v*.joblib`, `transformer_*.pt`, `tcn_*.pt`, `tft_*.pt`, `rl_*.zip` (+ `.meta.json`).
+Restart infer / pipeline; log should show `N/5 models loaded` with N≥2.
 
 ---
 

@@ -148,6 +148,7 @@ class TigerExecutor:
         price: float,
         confidence: float = 0.5,
         strategy: str = "ensemble",
+        quantity: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """Execute a single trading signal.
 
@@ -158,6 +159,7 @@ class TigerExecutor:
             price: Current price (USD).
             confidence: Model confidence 0.0–1.0.
             strategy: Strategy label for record-keeping.
+            quantity: Optional explicit share count (rebalance path).
 
         Returns:
             Trade record dict, or None if the signal was rejected
@@ -173,12 +175,15 @@ class TigerExecutor:
             logger.warning(f"TigerExecutor: invalid decision {decision!r} for {ticker}")
             return None
 
-        if price <= 0.0 or strength <= 0.0 or confidence < 0.0:
+        if price <= 0.0 or confidence < 0.0:
             logger.debug(f"TigerExecutor: signal below threshold for {ticker}")
             return None
 
         # ── Calculate quantity ─────────────────────────────────
-        quantity: float = self._calc_quantity(ticker, decision_upper, strength, price)
+        if quantity is None:
+            if strength <= 0.0:
+                return None
+            quantity = self._calc_quantity(ticker, decision_upper, strength, price)
         if quantity <= 0.0:
             logger.debug(f"TigerExecutor: zero quantity for {ticker}")
             return None
@@ -194,6 +199,18 @@ class TigerExecutor:
             if rounded != quantity:
                 logger.info(f"📐 {ticker} 整手对齐: {int(quantity)} → {int(rounded)} 股")
                 quantity = rounded
+            # Lot may exceed cash — trim to affordable whole lots
+            max_cash = float(getattr(self.risk, "cash", self.portfolio.cash)) * float(
+                getattr(self.risk, "MAX_CASH_USAGE", 0.95)
+            )
+            if quantity * price > max_cash:
+                lot = _get_lot_size(ticker)
+                afford = int(max_cash / price)
+                if lot > 1:
+                    afford = (afford // lot) * lot
+                if afford <= 0:
+                    return None
+                quantity = float(afford)
 
         # ── Risk check ─────────────────────────────────────────
         side_key: str = "buy" if decision_upper == "BUY" else "sell"
@@ -318,8 +335,11 @@ class TigerExecutor:
         for ticker, target_weight in target_weights.items():
             try:
                 current_shares: float = positions.get(ticker, 0.0)
-                avg_cost: float = self.portfolio.avg_costs.get(ticker, 0.0)
-                current_value: float = current_shares * avg_cost
+                price: float = prices.get(ticker, 0.0)
+                if price <= 0:
+                    continue
+                # Mark-to-market weight (NOT avg_cost — that understates winners)
+                current_value: float = current_shares * price
                 current_weight: float = current_value / max(total_value, 1.0)
                 diff: float = target_weight - current_weight
 
@@ -327,14 +347,9 @@ class TigerExecutor:
                 if abs(diff) < 0.005:
                     continue
 
-                price: float = prices.get(ticker, 0.0)
-                if price <= 0:
-                    continue
-
+                target_value: float = abs(diff) * total_value
+                quantity: float = target_value / price
                 if diff > 0:
-                    # Underweight → BUY.
-                    target_value: float = diff * total_value
-                    quantity: float = target_value / price
                     order = self.execute_signal(
                         ticker=ticker,
                         decision="BUY",
@@ -342,11 +357,11 @@ class TigerExecutor:
                         price=price,
                         confidence=0.6,
                         strategy="bl_rebalance",
+                        quantity=quantity,
                     )
                 else:
-                    # Overweight → SELL.
-                    target_value: float = abs(diff) * total_value
-                    quantity: float = target_value / price
+                    # Cap sell to holdings
+                    quantity = min(quantity, current_shares)
                     order = self.execute_signal(
                         ticker=ticker,
                         decision="SELL",
@@ -354,6 +369,7 @@ class TigerExecutor:
                         price=price,
                         confidence=0.6,
                         strategy="bl_rebalance",
+                        quantity=quantity,
                     )
 
                 if order:
@@ -452,18 +468,53 @@ class TigerExecutor:
         price: float,
         strategy: str,
     ) -> Optional[Dict[str, Any]]:
-        """Simulate an order via local portfolio.
+        """Paper fill: optionally route to Tiger paper account, always update local book.
 
-        Args:
-            ticker: Ticker.
-            side: ``"BUY"`` or ``"SELL"``.
-            quantity: Shares.
-            price: Fill price.
-            strategy: Strategy label.
-
-        Returns:
-            Trade record dict, or None if portfolio rejected.
+        When ``QAT_TIGER_PAPER_TRADING=true`` and Tiger is connected, place a real
+        paper-account order then mirror into PortfolioManager. Otherwise local sim only.
         """
+        tiger_order_id = None
+        try:
+            from configs.settings import settings
+
+            use_tiger_paper = bool(getattr(settings, "TIGER_PAPER_TRADING", False))
+        except Exception:
+            use_tiger_paper = False
+
+        if use_tiger_paper and self.tiger is not None:
+            try:
+                connected = False
+                if hasattr(self.tiger, "is_connected"):
+                    connected = bool(self.tiger.is_connected())
+                elif hasattr(self.tiger, "connect"):
+                    connected = True
+                if connected or hasattr(self.tiger, "place_order"):
+                    qty_int = max(1, int(quantity))
+                    order_result = None
+                    if hasattr(self.tiger, "place_order"):
+                        order_result = self.tiger.place_order(
+                            ticker=ticker,
+                            action=side,
+                            quantity=qty_int,
+                            order_type="MKT",
+                            price=None,
+                        )
+                    if order_result:
+                        tiger_order_id = (
+                            order_result.get("order_id")
+                            or order_result.get("id")
+                            or order_result.get("orderId")
+                        )
+                        logger.info(
+                            f"🐯 Tiger paper {side} {ticker}: {qty_int}股 | id={tiger_order_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Tiger paper place_order returned empty for {ticker} — local sim only"
+                        )
+            except Exception as exc:
+                logger.warning(f"Tiger paper order failed ({ticker}): {exc} — local sim only")
+
         pf_side: str = "buy" if side == "BUY" else "sell"
         trade = self.portfolio.execute_trade(
             ticker=ticker,
@@ -475,6 +526,9 @@ class TigerExecutor:
 
         if trade:
             trade["mode"] = "paper"
+            if tiger_order_id:
+                trade["tiger_order_id"] = tiger_order_id
+                trade["tiger_paper"] = True
             logger.info(
                 f"📝 Paper {side} {ticker}: {quantity:.2f}股 @ ${price:.2f}"
             )
@@ -492,29 +546,28 @@ class TigerExecutor:
         strength: float,
         price: float,
     ) -> float:
-        """Calculate target share quantity from signal strength.
+        """Calculate target share quantity from signal strength (NAV-aware)."""
+        try:
+            from shared.capital_policy import build_capital_policy
 
-        Args:
-            ticker: Ticker.
-            decision: ``"BUY"`` or ``"SELL"``.
-            strength: Signal strength 0.0–1.0.
-            price: Current price (USD).
+            pol = build_capital_policy(self.portfolio.total_value)
+            strength_cap = pol.buy_strength_cap
+        except Exception:
+            strength_cap = 0.20
 
-        Returns:
-            Number of shares (may be fractional for paper mode).
-        """
         if decision == "BUY":
-            # Use available cash × strength, capped at 20% position.
-            buy_value: float = self.portfolio.cash * min(strength, 0.20)
+            buy_value: float = self.portfolio.cash * min(strength, strength_cap)
+            # Also respect max position vs NAV
+            max_pos = float(getattr(self.risk, "MAX_POSITION_SIZE", 0.20))
+            max_by_nav = self.portfolio.total_value * max_pos
+            buy_value = min(buy_value, max_by_nav)
             quantity: float = buy_value / price if price > 0 else 0.0
             return quantity
 
-        # SELL
         shares: float = self.portfolio.positions.get(ticker, 0.0)
         if shares <= 0.0:
             return 0.0
-        quantity = shares * min(strength, 0.50)  # Cap sell at 50% of position
-        return quantity
+        return shares * min(strength, 0.50)
 
     # ═══════════════════════════════════════════════════════════════
     # Status

@@ -126,17 +126,21 @@ class TFTTrainer(TrainerBase):
 
     def __init__(
         self,
-        hidden_dim: int = 64,
+        hidden_dim: int | None = None,
         n_heads: int = 4,
-        lstm_layers: int = 1,
+        lstm_layers: int | None = None,
         dropout: float = 0.1,
         seq_len: int = 64,
         device: str | None = None,
     ) -> None:
         super().__init__(device=device or train_config.DEVICE)
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = hidden_dim or (
+            train_config.TFT_HIDDEN_DIM if self.device == "cuda" else 64
+        )
         self.n_heads = n_heads
-        self.lstm_layers = lstm_layers
+        self.lstm_layers = lstm_layers or (
+            train_config.TFT_LSTM_LAYERS if self.device == "cuda" else 1
+        )
         self.dropout = dropout
         self.seq_len = seq_len
 

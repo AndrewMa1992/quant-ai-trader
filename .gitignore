@@ -55,6 +55,7 @@ htmlcov/
 # Logs
 logs/
 *.log
+scripts/_run_*_logged.ps1
 
 # MLflow
 mlruns/
@@ -102,6 +103,19 @@ _v1_archive/
 # PyTorch model weights
 *.pt
 *.zip
+
+# Allow tracked ensemble checkpoints for Lightsail AutoCD sync
+!data/models/
+!data/models/*.pt
+!data/models/*.joblib
+!data/models/*.zip
+!data/models/*.json
+!data/models/*.meta.json
+!data/models/*.zip.meta.json
+
+# Allow tracked daily bars downloaded on Lightsail (Sydney) for GPU train
+!data/daily/
+!data/daily/*.parquet
 
 # GitHub runner binaries
 .github/runner-work/

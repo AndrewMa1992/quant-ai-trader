@@ -100,8 +100,8 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy database URL (SQLite dev default; use postgresql+asyncpg://... for prod)",
     )
     POSTGRES_SYNC_URL: str = Field(
-        default="sqlite+aiosqlite:///data/quant_trader.db",
-        description="Sync SQLAlchemy database URL (SQLite dev default; use postgresql+psycopg2://... for prod)",
+        default="sqlite:///data/quant_trader.db",
+        description="Sync SQLAlchemy database URL (sqlite:/// or postgresql+psycopg2://)",
     )
     POSTGRES_USER: str = Field(default="qat")
     POSTGRES_PASSWORD: str = Field(default="qat_secret")
@@ -132,7 +132,10 @@ class Settings(BaseSettings):
     )
     TIGER_CLIENT_VERSION: str = Field(default="3.0.0")
     TIGER_LICENSE: str = Field(default="")
-    TIGER_PAPER_TRADING: bool = Field(default=False, description="Tiger paper trading mode")
+    TIGER_PAPER_TRADING: bool = Field(
+        default=True,
+        description="Route paper fills to Tiger paper account when connected",
+    )
     TIGER_CONFIG_DIR: str = Field(default="~/.tigeropen", description="Tiger SDK config directory")
 
     # ── External Data APIs ───────────────────────────────────
@@ -211,8 +214,13 @@ class Settings(BaseSettings):
     MODEL_MACRO_VIX_BULLISH: float = Field(default=15.0, description="VIX below = bullish regime")
 
     # ── Data: Stock Universe ─────────────────────────────────
+    # Default: US + HK + SG + AU + NZ (no CN)
+    ENABLED_MARKETS: str = Field(
+        default="US,HK,SG,AU,NZ",
+        description="Comma-separated markets to trade/scan",
+    )
     DATA_US_TICKERS: str = Field(
-        default="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM,V,SPY",
+        default="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM,V,SPY,QQQ,IWM",
         description="Comma‑separated US tickers",
     )
     DATA_HK_TICKERS: str = Field(
@@ -254,7 +262,9 @@ class Settings(BaseSettings):
     EXECUTION_RETRY_ATTEMPTS: int = Field(default=3)
 
     # ── Trading ──────────────────────────────────────────────
-    TRADING_INITIAL_CAPITAL: float = Field(default=10000.0, description="Initial trading capital")
+    TRADING_INITIAL_CAPITAL: float = Field(
+        default=1700.0, description="Initial paper/sim trading capital (USD)"
+    )
     TRADING_BASE_CURRENCY: str = Field(default="USD")
     TRADING_SIMULATION_MODE: bool = Field(
         default=True,
@@ -275,7 +285,7 @@ class Settings(BaseSettings):
     TRADING_COMMISSION_RATE: float = Field(default=0.001)
     TRADING_SLIPPAGE: float = Field(default=0.0005)
     TRADING_MIN_CONFIDENCE: float = Field(default=0.15)
-    TRADING_MIN_TRADE_VALUE: float = Field(default=300.0)
+    TRADING_MIN_TRADE_VALUE: float = Field(default=50.0)
     TRADING_MIN_SHARES: int = Field(default=1)
     TRADING_NO_LEVERAGE: bool = Field(default=True, description="Disable leverage entirely")
     TRADING_MAX_CASH_USAGE: float = Field(default=0.95, description="Max portion of cash to deploy")
@@ -378,23 +388,36 @@ class Settings(BaseSettings):
     # ── Properties: Data Ticker Helpers ──────────────────────
 
     @property
+    def enabled_markets_list(self) -> list[str]:
+        markets = [m.strip().upper() for m in _parse_list_str(self.ENABLED_MARKETS)]
+        return markets or ["US"]
+
+    @property
     def data_us_tickers_list(self) -> list[str]:
         return _parse_list_str(self.DATA_US_TICKERS)
 
     @property
     def data_hk_tickers_list(self) -> list[str]:
+        if "HK" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_HK_TICKERS)
 
     @property
     def data_sg_tickers_list(self) -> list[str]:
+        if "SG" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_SG_TICKERS)
 
     @property
     def data_au_tickers_list(self) -> list[str]:
+        if "AU" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_AU_TICKERS)
 
     @property
     def data_nz_tickers_list(self) -> list[str]:
+        if "NZ" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_NZ_TICKERS)
 
     @property
