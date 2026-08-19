@@ -36,7 +36,7 @@ git reset --hard origin/cursor/quant-upgrade-a75f
 # .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -WaitForDataMinutes 90
 ```
 
-Keep the GPU PC **on and logged in** around 03:00 (task is Interactive). `StartWhenAvailable` will catch up after wake.
+Keep the GPU PC **logged in** around 03:00. **Screen lock (Win+L) is fine** — the Interactive task still runs. **Sleep/hibernate** is the problem; the task uses `WakeToRun` + `StartWhenAvailable`. Also set Windows: *Settings → System → Power → Sleep → Never* (or only after the train window).
 
 ### Verify tasks
 

@@ -91,8 +91,10 @@ $action = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`"" `
     -WorkingDirectory $RepoRoot
 $prin = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest -LogonType Interactive
+# WakeToRun: unlock/sleep is OK; PC can wake for the task. Screen lock (Win+L) is fine
+# while still logged in — Interactive tasks keep running. Avoid full sign-out.
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 6)
+    -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 6)
 
 Register-ScheduledTask -TaskName "QAT-Local-TrainSync" -Action $action -Trigger $trigger `
     -Principal $prin -Settings $settings `
@@ -103,7 +105,8 @@ Write-Host "     Daily at $DailyAt | Branch=$Branch | Epochs=$Epochs | SkipRl=$S
 Write-Host "     Entry: $entry"
 Write-Host "     WaitForDataMinutes=$WaitForDataMinutes (Lightsail path)"
 Write-Host "     Logs: $logs\gpu-train-*.log"
-Write-Host "     Keep PC awake / logged in around $DailyAt (Interactive task)."
+Write-Host "     Screen LOCK is OK (stay logged in). Disable SLEEP around $DailyAt."
+Write-Host "     Task has WakeToRun + StartWhenAvailable."
 Write-Host "View: taskschd.msc"
 
 if ($RunNow) {
