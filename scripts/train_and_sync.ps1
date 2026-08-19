@@ -91,9 +91,12 @@ if ($NoPush) {
 }
 
 Write-Host "[..] git checkout $Branch + pull"
-& $GitExe fetch origin
-& $GitExe checkout $Branch
-& $GitExe pull origin $Branch
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $GitExe fetch origin 2>&1 | ForEach-Object { Write-Host $_ }
+& $GitExe checkout $Branch 2>&1 | ForEach-Object { Write-Host $_ }
+& $GitExe pull origin $Branch 2>&1 | ForEach-Object { Write-Host $_ }
+$ErrorActionPreference = $prevEap
 
 Write-Host "[..] stage data/models checkpoints"
 & $GitExe add -f "data/models/*.pt" "data/models/*.joblib" "data/models/*.zip" "data/models/*.json" "data/models/*.meta.json" 2>$null

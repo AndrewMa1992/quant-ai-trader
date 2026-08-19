@@ -1,4 +1,5 @@
 ﻿# Run ON local GPU PC: pull market data pushed by Lightsail, then train + push models.
+# DeployScriptVersion: 2
 #
 # Usage:
 #   .\scripts\train_from_lightsail_data.ps1
@@ -11,7 +12,8 @@ param(
     [switch]$SkipRl
 )
 
-$ErrorActionPreference = "Stop"
+# Do not Stop on git stderr noise like "Already on 'branch'"
+$ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
@@ -26,12 +28,30 @@ function Resolve-Git {
     throw "git not found"
 }
 
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $GitExe @GitArgs 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) {
+            Write-Host $_.ToString()
+        } else {
+            Write-Host $_
+        }
+    }
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    return $code
+}
+
 $GitExe = Resolve-Git
 Write-Host "[..] pull latest (includes data/daily from Lightsail if pushed)"
-& $GitExe fetch origin
-& $GitExe checkout $Branch 2>&1 | Out-Null
-& $GitExe reset --hard "origin/$Branch"
-if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
+$code = Invoke-Git fetch origin
+if ($code -ne 0) { throw "git fetch failed" }
+$code = Invoke-Git checkout $Branch
+# exit 0 even when "Already on branch"
+$code = Invoke-Git reset --hard "origin/$Branch"
+if ($code -ne 0) { throw "git reset failed" }
 
 $n = (Get-ChildItem "data\daily\*.parquet" -ErrorAction SilentlyContinue | Measure-Object).Count
 Write-Host "[ok] local parquet count: $n"
@@ -39,6 +59,7 @@ if ($n -lt 1) {
     throw "No data/daily/*.parquet after pull. First run lightsail_download_and_push.ps1 on the Sydney instance."
 }
 
+$ErrorActionPreference = "Stop"
 $argsList = @("-Epochs", "$Epochs", "-Tickers", $Tickers, "-Branch", $Branch, "-SkipDownload")
 if ($SkipRl) { $argsList += "-SkipRl" }
 & powershell -ExecutionPolicy Bypass -File "scripts\train_and_sync.ps1" @argsList
