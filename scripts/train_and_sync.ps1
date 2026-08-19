@@ -18,6 +18,7 @@ param(
     [switch]$SkipRl,
     [switch]$SkipTrain,
     [switch]$SkipDownload,
+    [switch]$ForceDownload,
     [switch]$NoPush
 )
 
@@ -51,6 +52,7 @@ if (-not $SkipTrain) {
     $trainArgs = @("scripts\train_gpu_local.py", "--tickers", $Tickers, "--epochs", "$Epochs")
     if ($SkipRl) { $trainArgs += "--skip-rl" }
     if ($SkipDownload) { $trainArgs += "--skip-download" }
+    if ($ForceDownload) { $trainArgs += "--force-download" }
     & $PythonExe @trainArgs
     if ($LASTEXITCODE -ne 0) { throw "training failed" }
 } else {
