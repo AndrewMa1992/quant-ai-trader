@@ -44,7 +44,8 @@ class ExecutionServiceConfig(BaseSettings):
 
     # Live trading
     LIVE_TRADING_REQUIRE_CONFIRM: bool = Field(default=True)
-    TIGER_ACCOUNT: str = Field(default="20874631")
+    # Paper account default (sim lock). Override via QAT_EXEC_TIGER_ACCOUNT or QAT_TIGER_ACCOUNT.
+    TIGER_ACCOUNT: str = Field(default="21837535188693626")
 
     # Order management
     ORDER_STATUS_TTL: int = Field(default=86400, description="Order status TTL in seconds (24 hours)")

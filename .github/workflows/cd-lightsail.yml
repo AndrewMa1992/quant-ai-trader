@@ -118,9 +118,12 @@ jobs:
 
           Set-DotEnvValue 'QAT_TIGER_ID' $tigerId
           Set-DotEnvValue 'QAT_TIGER_ACCOUNT' $tigerAcct
+          Set-DotEnvValue 'QAT_EXEC_TIGER_ACCOUNT' $tigerAcct
           Set-DotEnvValue 'QAT_TIGER_LICENSE' $env:TIGER_LICENSE
           Set-DotEnvValue 'QAT_TIGER_PRIVATE_KEY_PATH' './certs/tiger_private_key.pem'
           Set-DotEnvValue 'QAT_TIGER_PAPER_TRADING' 'true'
+          Set-DotEnvValue 'QAT_TRADING_SIMULATION_MODE' 'true'
+          Set-DotEnvValue 'QAT_EXECUTION_MODE' 'paper'
 
 
       - name: Deploy paper stack

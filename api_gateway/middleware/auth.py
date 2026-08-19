@@ -21,16 +21,23 @@ PUBLIC_PATHS: set[str] = {
     "/openapi.json",
     "/api/v2/status",
     "/favicon.ico",
+    "/ws",
 }
 
 # Path prefixes that are public
-PUBLIC_PREFIXES: tuple[str, ...] = ("/docs", "/redoc", "/openapi", "/assets")
+PUBLIC_PREFIXES: tuple[str, ...] = (
+    "/docs",
+    "/redoc",
+    "/openapi",
+    "/assets",
+    "/api/v2/push/",  # pipeline → WS bridge (localhost)
+)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware that validates X-API-Key for protected endpoints.
 
-    Skips validation for public paths (health, docs, root).
+    Skips validation for public paths (health, docs, root, SPA).
     Returns 401 if the API key is missing or invalid.
     """
 
@@ -40,8 +47,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         call_next: RequestResponseEndpoint,
     ) -> Response:
         # Allow public paths without authentication
-        path = request.url.path.rstrip("/")
-        if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
+        # NOTE: "/".rstrip("/") == "" — normalize empty back to "/"
+        path = request.url.path.rstrip("/") or "/"
+        if path in PUBLIC_PATHS:
+            return await call_next(request)
+        if any(path.startswith(prefix.rstrip("/")) for prefix in PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        # SPA routes (Dashboard, etc.) must not require API key
+        if not path.startswith("/api"):
             return await call_next(request)
 
         # Allow OPTIONS preflight requests for CORS
