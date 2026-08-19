@@ -132,14 +132,21 @@ class TradingPipeline:
 
         # ── 组合管理 ─────────────────────────────────────────
         logger.info("初始化组合管理器...")
+        try:
+            from configs.settings import settings as _settings
+
+            _init_cap = float(_settings.TRADING_INITIAL_CAPITAL)
+        except Exception:
+            _init_cap = 1700.0
         self.portfolio: PortfolioManager = PortfolioManager(
-            initial_capital=100000.0,
+            initial_capital=_init_cap,
         )
         # 尝试加载已有状态
         self.portfolio.load_state("data/portfolio_state.json")
         logger.info(
             f"  ✅ PortfolioManager 已就绪 "
-            f"(现金 ${self.portfolio.cash:,.2f}, "
+            f"(初始 ${_init_cap:,.2f}, "
+            f"现金 ${self.portfolio.cash:,.2f}, "
             f"持仓 {len(self.portfolio.positions)} 只)"
         )
 

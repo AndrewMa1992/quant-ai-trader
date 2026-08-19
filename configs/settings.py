@@ -259,7 +259,9 @@ class Settings(BaseSettings):
     EXECUTION_RETRY_ATTEMPTS: int = Field(default=3)
 
     # ── Trading ──────────────────────────────────────────────
-    TRADING_INITIAL_CAPITAL: float = Field(default=10000.0, description="Initial trading capital")
+    TRADING_INITIAL_CAPITAL: float = Field(
+        default=1700.0, description="Initial paper/sim trading capital (USD)"
+    )
     TRADING_BASE_CURRENCY: str = Field(default="USD")
     TRADING_SIMULATION_MODE: bool = Field(
         default=True,
