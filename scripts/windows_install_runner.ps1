@@ -38,7 +38,7 @@ function Invoke-RunnerCmd {
     if (-not (Test-Path $full)) {
         throw "Missing $full"
     }
-    # PowerShell 5.1 often cannot invoke .cmd via & .\svc.cmd — use cmd.exe
+    # PowerShell 5.1 often cannot invoke .cmd via & .\svc.cmd - use cmd.exe
     $p = Start-Process -FilePath "cmd.exe" `
         -ArgumentList @("/c", "`"$full`" $Arguments") `
         -WorkingDirectory $RunnerDir `
