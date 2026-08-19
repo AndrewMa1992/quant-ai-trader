@@ -543,14 +543,28 @@ class StockUniverse:
 
     @property
     def all_tickers(self) -> List[str]:
-        """所有 ticker，HK 加 .HK 后缀，SG/AU/NZ/CN 自带后缀"""
-        us = self.us_tickers
-        hk = [f"{t}.HK" for t in self.hk_tickers]
-        sg = self.sg_tickers  # already .SI
-        au = self.au_tickers  # already .AX
-        nz = self.nz_tickers  # already .NZ
-        cn = self.cn_tickers  # already .SH / .SZ
-        return us + hk + sg + au + nz + cn
+        """Tickers for enabled markets only (default: US)."""
+        try:
+            from configs.settings import settings
+
+            markets = set(settings.enabled_markets_list)
+        except Exception:
+            markets = {"US"}
+
+        out: List[str] = []
+        if "US" in markets:
+            out.extend(self.us_tickers)
+        if "HK" in markets:
+            out.extend(f"{t}.HK" for t in self.hk_tickers)
+        if "SG" in markets:
+            out.extend(self.sg_tickers)
+        if "AU" in markets:
+            out.extend(self.au_tickers)
+        if "NZ" in markets:
+            out.extend(self.nz_tickers)
+        if "CN" in markets:
+            out.extend(self.cn_tickers)
+        return out
 
     def get_top_by(self, key: str = "market_cap", n: int = 50) -> List[Dict]:
         """按指标排序取 top N"""

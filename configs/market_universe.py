@@ -345,23 +345,32 @@ def get_universe_size() -> dict[str, int]:
 
 
 def get_all_tickers(market: str | None = None) -> list[str]:
-    """Return all ticker symbols, optionally filtered by market.
+    """Return ticker symbols, optionally filtered by market.
+
+    When market is None, uses settings.ENABLED_MARKETS (default: US only).
 
     Args:
-        market: Optional market code (US/HK/SG/AU/NZ). If None, returns all.
+        market: Optional market code (US/HK/SG/AU/NZ). If None, uses enabled markets.
 
     Returns:
         List of ticker strings.
     """
     if market:
-        if market.upper() not in MARKET_UNIVERSE:
-            raise ValueError(f"Unknown market: {market}. Valid: {list(MARKET_UNIVERSE.keys())}")
-        return [s["ticker"] for s in MARKET_UNIVERSE[market.upper()]]
+        markets = [market.upper()]
     else:
-        result: list[str] = []
-        for stocks in MARKET_UNIVERSE.values():
-            result.extend(s["ticker"] for s in stocks)
-        return result
+        try:
+            from configs.settings import settings
+
+            markets = settings.enabled_markets_list
+        except Exception:
+            markets = ["US"]
+
+    result: list[str] = []
+    for mkt in markets:
+        if mkt not in MARKET_UNIVERSE:
+            raise ValueError(f"Unknown market: {mkt}. Valid: {list(MARKET_UNIVERSE.keys())}")
+        result.extend(s["ticker"] for s in MARKET_UNIVERSE[mkt])
+    return result
 
 
 def get_stocks_by_sector(market: str | None = None, sector: str | None = None) -> list[StockEntry]:

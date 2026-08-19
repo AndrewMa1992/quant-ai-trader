@@ -46,10 +46,8 @@ function showToast(message: string, duration = 3000) {
 
 const canRollback = computed(() => {
   const us = execStore.marketStatus?.US
-  const hk = execStore.marketStatus?.HK
   const usOpen = us?.is_open ?? false
-  const hkOpen = hk?.is_open ?? false
-  return !usOpen && !hkOpen
+  return !usOpen
 })
 
 async function handleRollback() {
@@ -187,7 +185,12 @@ const sharpe = computed(() => parseFloat(String(riskStore.varData?.sharpe_ratio 
 
 const positionCount = computed(() => portfolioStore.positions?.length ?? 0)
 const alertCount = computed(() => execStore.alerts.length)
-const marketMap = computed(() => execStore.marketStatus ?? {})
+const marketMap = computed(() => {
+  const all = execStore.marketStatus ?? {}
+  // US-focused UI: only show enabled US session status
+  if (all.US) return { US: all.US }
+  return all
+})
 </script>
 
 <template>
@@ -266,15 +269,6 @@ const marketMap = computed(() => execStore.marketStatus ?? {})
               :class="execStore.marketStatus?.US?.is_open ? 'text-profit' : 'text-xm-text-tertiary'"
             >
               {{ execStore.marketStatus?.US?.is_open ? 'Open' : 'Closed' }}
-            </span>
-          </div>
-          <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
-            <span class="text-sm text-xm-text-secondary">HK Market</span>
-            <span
-              class="text-sm font-mono"
-              :class="execStore.marketStatus?.HK?.is_open ? 'text-profit' : 'text-xm-text-tertiary'"
-            >
-              {{ execStore.marketStatus?.HK?.is_open ? 'Open' : 'Closed' }}
             </span>
           </div>
           <div class="flex justify-between items-center py-2">

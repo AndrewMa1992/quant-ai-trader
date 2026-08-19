@@ -211,25 +211,30 @@ class Settings(BaseSettings):
     MODEL_MACRO_VIX_BULLISH: float = Field(default=15.0, description="VIX below = bullish regime")
 
     # ── Data: Stock Universe ─────────────────────────────────
+    # Focus: US equities by default. Leave non-US lists empty unless expanded.
+    ENABLED_MARKETS: str = Field(
+        default="US",
+        description="Comma-separated markets to trade/scan (e.g. US or US,HK)",
+    )
     DATA_US_TICKERS: str = Field(
-        default="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM,V,SPY",
+        default="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM,V,SPY,QQQ,IWM",
         description="Comma‑separated US tickers",
     )
     DATA_HK_TICKERS: str = Field(
-        default="00700,09988,03690,09999,01810,00941,00883,01299",
-        description="Comma‑separated HK tickers (5‑digit numeric)",
+        default="",
+        description="Comma‑separated HK tickers (5‑digit numeric); empty = US-only",
     )
     DATA_SG_TICKERS: str = Field(
-        default="D05.SI,O39.SI,U11.SI,Z74.SI,C52.SI,C6L.SI,S58.SI,BS6.SI",
-        description="Comma‑separated SG tickers",
+        default="",
+        description="Comma‑separated SG tickers; empty = US-only",
     )
     DATA_AU_TICKERS: str = Field(
-        default="BHP.AX,CBA.AX,CSL.AX,NAB.AX,WBC.AX,ANZ.AX,MQG.AX,WES.AX",
-        description="Comma‑separated AU tickers",
+        default="",
+        description="Comma‑separated AU tickers; empty = US-only",
     )
     DATA_NZ_TICKERS: str = Field(
-        default="FPH.NZ,AIA.NZ,MEL.NZ,SPK.NZ,ATM.NZ,MCY.NZ,IFT.NZ,EBO.NZ",
-        description="Comma‑separated NZ tickers",
+        default="",
+        description="Comma‑separated NZ tickers; empty = US-only",
     )
 
     # ── Data: General ────────────────────────────────────────
@@ -378,23 +383,36 @@ class Settings(BaseSettings):
     # ── Properties: Data Ticker Helpers ──────────────────────
 
     @property
+    def enabled_markets_list(self) -> list[str]:
+        markets = [m.strip().upper() for m in _parse_list_str(self.ENABLED_MARKETS)]
+        return markets or ["US"]
+
+    @property
     def data_us_tickers_list(self) -> list[str]:
         return _parse_list_str(self.DATA_US_TICKERS)
 
     @property
     def data_hk_tickers_list(self) -> list[str]:
+        if "HK" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_HK_TICKERS)
 
     @property
     def data_sg_tickers_list(self) -> list[str]:
+        if "SG" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_SG_TICKERS)
 
     @property
     def data_au_tickers_list(self) -> list[str]:
+        if "AU" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_AU_TICKERS)
 
     @property
     def data_nz_tickers_list(self) -> list[str]:
+        if "NZ" not in self.enabled_markets_list:
+            return []
         return _parse_list_str(self.DATA_NZ_TICKERS)
 
     @property

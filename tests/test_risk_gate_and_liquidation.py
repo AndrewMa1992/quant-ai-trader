@@ -100,7 +100,19 @@ def test_cn_removed_from_rotation():
     from configs.pipeline_config import pipeline_config
 
     assert "CN" not in pipeline_config.MARKET_ROTATION
+    assert pipeline_config.MARKET_ROTATION == ["US"]
     assert pipeline_config.EXECUTION_MODE in ("paper", "live")
+
+
+def test_us_only_enabled_markets():
+    from configs.settings import settings
+    from configs.market_universe import get_all_tickers
+
+    assert settings.enabled_markets_list == ["US"]
+    assert settings.data_hk_tickers_list == []
+    tickers = get_all_tickers()
+    assert tickers
+    assert all(not t.endswith((".HK", ".SI", ".AX", ".NZ")) for t in tickers)
 
 
 class _DummyTiger:

@@ -23,8 +23,8 @@ class PipelineConfig:
 
     # ── 全市场轮询 ────────────────────────────────────────
     MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
-    # CN omitted: market_universe has no CN tickers → empty idle cycles
-    MARKET_ROTATION: list = field(default_factory=lambda: ["US", "HK", "SG", "AU", "NZ"])
+    # Default: US only. Override with QAT_MARKET_ROTATION=US,HK,...
+    MARKET_ROTATION: list = field(default_factory=lambda: ["US"])
     MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
 
     # ── 风控参数 ──────────────────────────────────────────────
@@ -63,6 +63,11 @@ class PipelineConfig:
         import os
 
         self.EXECUTION_MODE = os.getenv("QAT_EXECUTION_MODE", self.EXECUTION_MODE)
+        rot = os.getenv("QAT_MARKET_ROTATION", "").strip()
+        if rot:
+            self.MARKET_ROTATION = [m.strip().upper() for m in rot.split(",") if m.strip()]
+            if not self.MARKET_ROTATION:
+                self.MARKET_ROTATION = ["US"]
         try:
             from shared.execution_mode import get_execution_mode
 
