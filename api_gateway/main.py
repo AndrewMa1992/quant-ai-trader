@@ -43,10 +43,15 @@ async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} (env={settings.ENV})")
 
-    # Initialize database engine
+    # Initialize database engine + create missing tables (SQLite paper friendly)
     try:
         engine = get_engine()
-        logger.info("Database engine initialized")
+        import shared.models  # noqa: F401 — register ORM metadata
+        from shared.models.base import Base
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database engine initialized (schema ensure)")
     except Exception as e:
         logger.error(f"Database engine initialization failed: {e}")
 
