@@ -3,7 +3,7 @@ $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $pidDir = Join-Path $Root "cache\windows_pids"
 
-Write-Host "Stopping Quant AI Trader (Windows)…" -ForegroundColor Cyan
+Write-Host "Stopping Quant AI Trader (Windows)..."
 
 if (Test-Path $pidDir) {
     Get-ChildItem $pidDir -Filter "*.pid" | ForEach-Object {
@@ -18,7 +18,6 @@ if (Test-Path $pidDir) {
     }
 }
 
-# Fallback: kill uvicorn / vite on known ports
 $ports = 8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180
 foreach ($port in $ports) {
     try {
@@ -30,4 +29,4 @@ foreach ($port in $ports) {
     } catch { }
 }
 
-Write-Host "Done." -ForegroundColor Green
+Write-Host "Done."
