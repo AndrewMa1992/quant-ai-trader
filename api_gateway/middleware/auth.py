@@ -15,6 +15,7 @@ from configs.settings import settings
 # Paths that do NOT require authentication
 PUBLIC_PATHS: set[str] = {
     "/health",
+    "/health/live",
     "/",
     "/docs",
     "/redoc",

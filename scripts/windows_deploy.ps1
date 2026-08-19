@@ -186,18 +186,25 @@ Start-QatService "risk-service"   "services.risk_service.main:app"         8015
 Start-QatService "execution"       "services.execution_service.main:app"     8016
 
 if (-not $SkipFrontend) {
-    Write-Host "[..] frontend npm install + build..."
+    Write-Host "[..] frontend build..."
     Push-Location (Join-Path $Root "frontend")
     if (-not $SkipInstall) {
         & $NpmCmd install
     }
     $distIndex = Join-Path $Root "frontend\dist\index.html"
     $built = $false
-    try {
-        & $NpmCmd run build
-        if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
-    } catch {
-        Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
+    # CD uses -SkipInstall often — reuse dist to cut downtime (gateway serves SPA)
+    if ((Test-Path $distIndex) -and $SkipInstall) {
+        Write-Host "[ok] reuse existing frontend\dist (faster CD)"
+        $built = $true
+    }
+    if (-not $built) {
+        try {
+            & $NpmCmd run build
+            if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
+        } catch {
+            Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
+        }
     }
     if (-not $built) {
         Write-Host "[..] retry with npx vite build (skip vue-tsc)..."

@@ -134,10 +134,16 @@ $watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
 if (Test-Path $watchdog) {
     Write-Host "[..] installing QAT pipeline watchdog..."
     & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
     Write-Host "[ok] pipeline watchdog"
 } else {
     Write-Host "[warn] missing $watchdog"
+}
+
+$fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
+if (Test-Path $fw) {
+    Write-Host "[..] installing QAT frontend watchdog..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+    Write-Host "[ok] frontend watchdog"
 }
 
 if ($RunNow) {
