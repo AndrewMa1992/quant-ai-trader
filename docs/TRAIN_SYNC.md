@@ -2,6 +2,36 @@
 
 ## Fully automated loop
 
+### Option A — Lightsail (Sydney) downloads data, GPU PC trains
+
+Yahoo often rate-limits home IPs. Use Sydney Lightsail egress to download bars, then train locally.
+
+**1) On Lightsail (once / whenever you need fresh data):**
+```powershell
+cd C:\quant-ai-trader
+git fetch origin
+& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
+.\scripts\lightsail_download_and_push.ps1 -ForceDownload
+```
+
+**2) On RTX 3060 PC:**
+```powershell
+cd C:\Quant_Trader
+git fetch origin
+git reset --hard origin/cursor/quant-upgrade-a75f
+.\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl
+```
+
+```
+Lightsail Sydney download → git push data/daily
+        ↓
+GPU PC pull + train (SkipDownload) → git push data/models
+        ↓
+Lightsail AutoCD hot-reload models
+```
+
+### Option B — GPU PC trains everything (when Yahoo works)
+
 1. **GPU PC (one-time):**
    ```powershell
    .\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -RunNow

@@ -112,6 +112,10 @@ _v1_archive/
 !data/models/*.meta.json
 !data/models/*.zip.meta.json
 
+# Allow tracked daily bars downloaded on Lightsail (Sydney) for GPU train
+!data/daily/
+!data/daily/*.parquet
+
 # GitHub runner binaries
 .github/runner-work/
 

@@ -300,10 +300,18 @@ def main() -> int:
     parser.add_argument("--skip-rl", action="store_true")
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--force-download", action="store_true", help="Re-download even if parquet exists")
+    parser.add_argument("--download-only", action="store_true", help="Only download market data, skip training")
     args = parser.parse_args()
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     device = _ensure_cuda()
+    if args.download_only:
+        n = download_tickers(tickers, years=args.years, force=args.force_download)
+        ok_n = sum(1 for t in tickers if _parquet_ok(Path("data/daily") / f"{t}.parquet"))
+        print(f"[ok] downloaded {n} new; usable={ok_n}/{len(tickers)}")
+        if ok_n < 1:
+            raise SystemExit("No usable market data")
+        return 0
     if not args.skip_download:
         n = download_tickers(tickers, years=args.years, force=args.force_download)
         print(f"[ok] downloaded {n} new tickers")
