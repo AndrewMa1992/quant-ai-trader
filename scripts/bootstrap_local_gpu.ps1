@@ -1,10 +1,8 @@
 ﻿# Bootstrap local GPU PC: find git, sync repo, install daily train+sync.
-# DeployScriptVersion: 1
+# DeployScriptVersion: 2
 # Run as Administrator on the RTX 3060 machine:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   irm ... OR copy this file then:
-#   .\scripts\bootstrap_local_gpu.ps1
-#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader
+#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "02:30" -Epochs 40 -RunNow
 
 param(
     [string]$RepoRoot = "",
@@ -16,7 +14,8 @@ param(
     [switch]$RunNow
 )
 
-$ErrorActionPreference = "Stop"
+# Do not Stop on git stderr noise like "Already on 'branch'"
+$ErrorActionPreference = "Continue"
 
 # Refresh PATH (Git/Python often missing until reopen)
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
@@ -33,6 +32,22 @@ function Resolve-Git {
         if (Test-Path $c) { return $c }
     }
     return $null
+}
+
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $GitExe @GitArgs 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) {
+            Write-Host $_.ToString()
+        } else {
+            Write-Host $_
+        }
+    }
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    return $code
 }
 
 $GitExe = Resolve-Git
@@ -53,23 +68,35 @@ if (-not $RepoRoot) {
     }
 }
 
-if (-not (Test-Path $RepoRoot)) {
+if (-not (Test-Path (Join-Path $RepoRoot ".git"))) {
+    if (Test-Path $RepoRoot) {
+        Write-Host "[warn] $RepoRoot exists but is not a git repo"
+    }
     Write-Host "[..] cloning $RepoUrl -> $RepoRoot"
-    & $GitExe clone $RepoUrl $RepoRoot
+    $parent = Split-Path -Parent $RepoRoot
+    $name = Split-Path -Leaf $RepoRoot
+    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    Set-Location $parent
+    $code = Invoke-Git clone $RepoUrl $name
+    if ($code -ne 0 -and -not (Test-Path (Join-Path $RepoRoot ".git"))) {
+        throw "git clone failed"
+    }
 }
 
 Set-Location $RepoRoot
 Write-Host "[ok] RepoRoot: $RepoRoot"
 
-# Ensure we are on the right remote branch
-& $GitExe fetch origin
-& $GitExe checkout $Branch 2>$null
-& $GitExe reset --hard "origin/$Branch"
-if ($LASTEXITCODE -ne 0) {
+Write-Host "[..] sync branch $Branch"
+Invoke-Git fetch origin | Out-Null
+Invoke-Git checkout $Branch | Out-Null
+$code = Invoke-Git reset --hard "origin/$Branch"
+if ($code -ne 0) {
     Write-Host "[warn] reset failed - trying checkout -B"
-    & $GitExe checkout -B $Branch "origin/$Branch"
-    & $GitExe reset --hard "origin/$Branch"
+    Invoke-Git checkout -B $Branch "origin/$Branch" | Out-Null
+    $code = Invoke-Git reset --hard "origin/$Branch"
+    if ($code -ne 0) { throw "git reset failed" }
 }
+Invoke-Git log -1 --oneline | Out-Null
 
 $installer = Join-Path $RepoRoot "scripts\install_local_train_autostart.ps1"
 if (-not (Test-Path $installer)) {
@@ -77,8 +104,13 @@ if (-not (Test-Path $installer)) {
 }
 
 Write-Host "[..] CUDA check"
-python -c "import torch; print('cuda', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'n/a')"
+try {
+    python -c "import torch; print('cuda', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'n/a')"
+} catch {
+    Write-Host "[warn] python/torch check failed: $($_.Exception.Message)"
+}
 
+$ErrorActionPreference = "Stop"
 $argsList = @(
     "-ExecutionPolicy", "Bypass",
     "-File", $installer,
