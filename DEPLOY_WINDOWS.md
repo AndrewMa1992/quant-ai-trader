@@ -54,22 +54,34 @@ npm --version
 
 ## 2. 同步代码（唯一旁支）
 
-目录已存在时不要再 `git clone`（会报 destination path already exists），直接进入仓库强制对齐远端：
+新开的 PowerShell 经常找不到刚装的 `git`（PATH 未刷新）。先执行：
 
 ```powershell
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 cd C:\quant-ai-trader
-git fetch origin
-git checkout cursor/quant-upgrade-a75f
-git reset --hard origin/cursor/quant-upgrade-a75f
 ```
 
-确认脚本已是新版（第一行附近应有 `DeployScriptVersion: 4`）：
+若仍提示 `git` 找不到，用完整路径：
+
+```powershell
+& "C:\Program Files\Git\cmd\git.exe" fetch origin
+& "C:\Program Files\Git\cmd\git.exe" checkout cursor/quant-upgrade-a75f
+& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
+```
+
+或（拉到 Version 4 之后）用仓库自带脚本：
+
+```powershell
+.\scripts\windows_sync.ps1
+```
+
+确认脚本已是新版（应有 `DeployScriptVersion: 4`）：
 
 ```powershell
 Get-Content .\scripts\windows_deploy.ps1 -TotalCount 3
 ```
 
-若仍出现 `The string is missing the terminator`，说明本地还是旧 UTF-8 脚本，必须先 `reset --hard` 再跑部署。
+若仍是 Version 3 / 出现 `string is missing the terminator`，说明还没同步成功，不要直接部署。
 
 ### 页面 502 Bad Gateway
 
@@ -85,11 +97,11 @@ Get-Content C:\quant-ai-trader\logs\api-gateway.err.log -Tail 50
 以后更新：
 
 ```powershell
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 cd C:\quant-ai-trader
-git fetch origin
-git reset --hard origin/cursor/quant-upgrade-a75f
+.\scripts\windows_sync.ps1
 .\scripts\windows_stop.ps1
-.\scripts\windows_deploy.ps1
+.\scripts\windows_deploy.ps1 -OpenFirewall
 ```
 
 ---
