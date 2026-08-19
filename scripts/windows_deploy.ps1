@@ -73,6 +73,23 @@ $joined = ($envLines -join "`n")
 if ($joined -notmatch '(?m)^QAT_EXECUTION_MODE=paper') { Add-Content ".env" "QAT_EXECUTION_MODE=paper" }
 if ($joined -notmatch '(?m)^QAT_TRADING_SIMULATION_MODE=true') { Add-Content ".env" "QAT_TRADING_SIMULATION_MODE=true" }
 if ($joined -notmatch '(?m)^QAT_USE_DOCKER=false') { Add-Content ".env" "QAT_USE_DOCKER=false" }
+# Force paper Tiger account (do not leave live 20874631 as active in sim)
+function Set-EnvLine([string]$Key, [string]$Value) {
+    $lines = @(Get-Content ".env" -ErrorAction SilentlyContinue)
+    $found = $false
+    $out = foreach ($line in $lines) {
+        if ($line -match ("^{0}=" -f [regex]::Escape($Key))) {
+            $found = $true
+            "{0}={1}" -f $Key, $Value
+        } else { $line }
+    }
+    if (-not $found) { $out += ("{0}={1}" -f $Key, $Value) }
+    Set-Content ".env" -Value $out -Encoding utf8
+}
+Set-EnvLine "QAT_TIGER_ACCOUNT" "21837535188693626"
+Set-EnvLine "QAT_EXEC_TIGER_ACCOUNT" "21837535188693626"
+Set-EnvLine "QAT_TIGER_PAPER_TRADING" "true"
+if ($joined -notmatch '(?m)^QAT_TIGER_ID=') { Set-EnvLine "QAT_TIGER_ID" "20159337" }
 
 New-Item -ItemType Directory -Force -Path "data", "data\daily", "data\models", "cache", "logs" | Out-Null
 
@@ -277,8 +294,9 @@ Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
 Write-Host "  API:      http://127.0.0.1:8001/health"
-Write-Host "  Frontend: http://127.0.0.1:5180"
-Write-Host "  Public:   http://3.106.139.233:5180"
+Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
+Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA — preferred)"
+Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"

@@ -141,4 +141,34 @@ if (-not $ok) {
 }
 
 Write-Log "[ok] CD complete - gateway healthy"
+
+# Ensure trading pipeline stays up
+Write-Log "[..] pipeline watchdog"
+$watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
+if (Test-Path $watchdog) {
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
+        Write-Log "[ok] pipeline watchdog armed"
+    } catch {
+        Write-Log ("[warn] pipeline watchdog: {0}" -f $_.Exception.Message)
+    }
+} else {
+    Write-Log "[warn] missing windows_pipeline_watchdog.ps1"
+}
+
+# Frontend: prefer gateway SPA on :8001; also verify :5180
+try {
+    $fr = Invoke-WebRequest -Uri "http://127.0.0.1:8001/" -UseBasicParsing -TimeoutSec 5
+    Write-Log ("[ok] gateway SPA HTTP {0}" -f $fr.StatusCode)
+} catch {
+    Write-Log ("[warn] gateway SPA: {0}" -f $_.Exception.Message)
+}
+try {
+    $fr2 = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
+    Write-Log ("[ok] frontend :5180 HTTP {0}" -f $fr2.StatusCode)
+} catch {
+    Write-Log "[warn] frontend :5180 not responding (use http://<host>:8001/ if AWS SG blocks 5180)"
+}
+
 exit 0
