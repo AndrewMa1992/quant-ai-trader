@@ -4,6 +4,12 @@ name: CD - Lightsail Windows Paper Deploy
 # Requires a self-hosted runner with labels: self-hosted, windows, lightsail
 # One-time setup on the server: scripts/windows_install_runner.ps1
 # Docs: DEPLOY_WINDOWS.md section "CI/CD"
+#
+# Optional GitHub Actions secrets (repo Settings → Secrets and variables → Actions):
+#   TIGER_PRIVATE_KEY  – PEM or raw base64 RSA private key
+#   TIGER_ID           – e.g. 20159337
+#   TIGER_ACCOUNT      – paper account
+#   TIGER_LICENSE      – e.g. TBSG / TBHK (if required)
 
 on:
   push:
@@ -37,6 +43,56 @@ jobs:
           git --version
           python --version
           node --version
+
+      - name: Materialize Tiger credentials from Actions secrets
+        if: ${{ secrets.TIGER_PRIVATE_KEY != '' }}
+        shell: powershell
+        env:
+          TIGER_PRIVATE_KEY: ${{ secrets.TIGER_PRIVATE_KEY }}
+          TIGER_ID: ${{ secrets.TIGER_ID }}
+          TIGER_ACCOUNT: ${{ secrets.TIGER_ACCOUNT }}
+          TIGER_LICENSE: ${{ secrets.TIGER_LICENSE }}
+        run: |
+          $root = "C:\quant-ai-trader"
+          $certs = Join-Path $root "certs"
+          New-Item -ItemType Directory -Force -Path $certs | Out-Null
+          $pemPath = Join-Path $certs "tiger_private_key.pem"
+          $raw = $env:TIGER_PRIVATE_KEY
+          if ($raw -notmatch "BEGIN") {
+            $lines = @()
+            for ($i = 0; $i -lt $raw.Length; $i += 64) {
+              $len = [Math]::Min(64, $raw.Length - $i)
+              $lines += $raw.Substring($i, $len)
+            }
+            $raw = "-----BEGIN RSA PRIVATE KEY-----`n" + ($lines -join "`n") + "`n-----END RSA PRIVATE KEY-----`n"
+          }
+          Set-Content -Path $pemPath -Value $raw -Encoding ascii -NoNewline:$false
+          Write-Host "Wrote Tiger PEM to $pemPath ($((Get-Item $pemPath).Length) bytes)"
+
+          $envFile = Join-Path $root ".env"
+          if (-not (Test-Path $envFile)) {
+            Copy-Item (Join-Path $root ".env.windows") $envFile -ErrorAction SilentlyContinue
+          }
+          function Upsert-Env([string]$key, [string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return }
+            if (-not (Test-Path $envFile)) { New-Item -ItemType File -Path $envFile | Out-Null }
+            $lines = Get-Content $envFile -ErrorAction SilentlyContinue
+            $found = $false
+            $out = foreach ($line in $lines) {
+              if ($line -match "^$([regex]::Escape($key))=") {
+                $found = $true
+                "$key=$value"
+              } else { $line }
+            }
+            if (-not $found) { $out += "$key=$value" }
+            Set-Content -Path $envFile -Value $out -Encoding utf8
+            Write-Host "Upserted $key in .env"
+          }
+          Upsert-Env "QAT_TIGER_ID" $env:TIGER_ID
+          Upsert-Env "QAT_TIGER_ACCOUNT" $env:TIGER_ACCOUNT
+          Upsert-Env "QAT_TIGER_LICENSE" $env:TIGER_LICENSE
+          Upsert-Env "QAT_TIGER_PRIVATE_KEY_PATH" "./certs/tiger_private_key.pem"
+          Upsert-Env "QAT_TIGER_PAPER_TRADING" "true"
 
       - name: Deploy paper stack
         shell: powershell
