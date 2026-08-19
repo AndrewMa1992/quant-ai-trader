@@ -1,5 +1,5 @@
 ﻿# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 4
+# DeployScriptVersion: 5
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\scripts\windows_deploy.ps1 -OpenFirewall
@@ -178,35 +178,36 @@ if (-not $SkipFrontend) {
     $frontLogOut = Join-Path $Root "logs\frontend.out.log"
     $frontLogErr = Join-Path $Root "logs\frontend.err.log"
     $frontBat = Join-Path $pidDir "start_frontend.bat"
+    # Do NOT use Start-Process -RedirectStandard* with npm.cmd - it often exits immediately.
+    # Log inside the .bat instead, and start minimized without PS redirects.
     try {
         & $NpmCmd run build
         if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
-        $batBody = @"
-@echo off
-cd /d "$Root\frontend"
-"$NpmCmd" run preview -- --host 0.0.0.0 --port 5180
-"@
-        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
-        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
-            -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput $frontLogOut -RedirectStandardError $frontLogErr
-        $frontStarted = $true
+        $mode = "preview"
     } catch {
-        Write-Host "[warn] build/preview failed, falling back to vite dev: $($_.Exception.Message)"
-        $batBody = @"
+        Write-Host "[warn] build failed, falling back to vite dev: $($_.Exception.Message)"
+        $mode = "dev"
+    }
+    $batBody = @"
 @echo off
 cd /d "$Root\frontend"
-"$NpmCmd" run dev -- --host 0.0.0.0 --port 5180
+"$NpmCmd" run $mode -- --host 0.0.0.0 --port 5180 >> "$frontLogOut" 2>> "$frontLogErr"
 "@
-        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
-        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
-            -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput $frontLogOut -RedirectStandardError $frontLogErr
-        $frontStarted = $true
-    }
+    Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
+    $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
+        -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Minimized
+    $frontStarted = $true
+    Start-Sleep -Seconds 5
     if ($frontStarted) {
         Set-Content (Join-Path $pidDir "frontend.pid") $front.Id
-        Write-Host "[ok] frontend        :5180  PID $($front.Id)"
+        Write-Host "[ok] frontend        :5180  PID $($front.Id) mode=$mode"
+        try {
+            $fr = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
+            Write-Host "[ok] frontend HTTP $($fr.StatusCode)"
+        } catch {
+            Write-Host "[warn] frontend not responding yet - see logs\frontend.err.log"
+            if (Test-Path $frontLogErr) { Get-Content $frontLogErr -Tail 20 }
+        }
     }
     Pop-Location
 }
