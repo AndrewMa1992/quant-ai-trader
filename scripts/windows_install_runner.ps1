@@ -1,25 +1,30 @@
 ﻿# Install GitHub Actions self-hosted runner on Lightsail Windows
 # DeployScriptVersion: 5
-# Run as Administrator once:
+# Run as Administrator:
 #   .\scripts\windows_install_runner.ps1 -Token <REGISTRATION_TOKEN>
-# If config already saved but service failed:
-#   .\scripts\windows_install_runner.ps1 -ServiceOnly
+# If already configured WITHOUT service (no svc.cmd):
+#   1) Get a remove token from GitHub Runners page for this runner
+#   2) .\scripts\windows_install_runner.ps1 -Token <NEW_REG_TOKEN> -RemoveToken <REMOVE_TOKEN> -ForceReconfigure
+# Quick online without Windows service:
+#   .\scripts\windows_install_runner.ps1 -StartInteractive
 #
-# Get token:
-#   GitHub repo -> Settings -> Actions -> Runners -> New self-hosted runner
-#   (token expires in ~1 hour)
+# IMPORTANT: zip does NOT contain svc.cmd. It is created only when
+# config.cmd runs with --runasservice on Windows.
 
 [CmdletBinding()]
 param(
     [string]$Token = "",
-
+    [string]$RemoveToken = "",
+    [switch]$ForceReconfigure,
+    [switch]$StartInteractive,
     [switch]$ServiceOnly,
-
     [string]$RepoUrl = "https://github.com/AndrewMa1992/quant-ai-trader",
     [string]$RunnerDir = "C:\actions-runner",
     [string]$RunnerName = "lightsail-qat",
     [string]$Labels = "self-hosted,windows,lightsail",
-    [string]$Version = "2.336.0"
+    [string]$Version = "2.336.0",
+    [string]$WindowsLogonAccount = "",
+    [string]$WindowsLogonPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,7 +43,6 @@ function Invoke-RunnerCmd {
     if (-not (Test-Path $full)) {
         throw "Missing $full"
     }
-    # PowerShell 5.1 often cannot invoke .cmd via & .\svc.cmd - use cmd.exe
     $p = Start-Process -FilePath "cmd.exe" `
         -ArgumentList @("/c", "`"$full`" $Arguments") `
         -WorkingDirectory $RunnerDir `
@@ -56,48 +60,100 @@ Write-Host "============================================"
 New-Item -ItemType Directory -Force -Path $RunnerDir | Out-Null
 Set-Location $RunnerDir
 
-if (-not $ServiceOnly) {
-    $zip = "actions-runner-win-x64-$Version.zip"
-    $url = "https://github.com/actions/runner/releases/download/v$Version/$zip"
+if ($StartInteractive) {
+    $runCmd = Join-Path $RunnerDir "run.cmd"
+    if (-not (Test-Path $runCmd)) { throw "Missing $runCmd - extract/configure runner first" }
+    Write-Host "[..] starting interactive runner (keep window open)..."
+    Start-Process -FilePath "cmd.exe" -ArgumentList @("/k", "`"$runCmd`"") -WorkingDirectory $RunnerDir
+    Write-Host "[ok] run.cmd launched. Check GitHub Runners = Idle"
+    exit 0
+}
 
-    if (-not (Test-Path (Join-Path $RunnerDir "config.cmd"))) {
-        Write-Host "[..] downloading $url"
-        Invoke-WebRequest -Uri $url -OutFile (Join-Path $RunnerDir $zip)
-        Write-Host "[..] extracting..."
-        Expand-Archive -Path (Join-Path $RunnerDir $zip) -DestinationPath $RunnerDir -Force
-        Remove-Item (Join-Path $RunnerDir $zip) -Force
-    } else {
-        Write-Host "[ok] runner files already present"
+$zip = "actions-runner-win-x64-$Version.zip"
+$url = "https://github.com/actions/runner/releases/download/v$Version/$zip"
+
+if (-not (Test-Path (Join-Path $RunnerDir "config.cmd"))) {
+    Write-Host "[..] downloading $url"
+    Invoke-WebRequest -Uri $url -OutFile (Join-Path $RunnerDir $zip)
+    Write-Host "[..] extracting..."
+    Expand-Archive -Path (Join-Path $RunnerDir $zip) -DestinationPath $RunnerDir -Force
+    Remove-Item (Join-Path $RunnerDir $zip) -Force
+} else {
+    Write-Host "[ok] runner files already present"
+}
+
+Write-Host "[..] files in runner dir:"
+Get-ChildItem $RunnerDir -Name | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
+
+$runnerConfigured = Test-Path (Join-Path $RunnerDir ".runner")
+$svcExists = Test-Path (Join-Path $RunnerDir "svc.cmd")
+
+if ($ForceReconfigure -or ($runnerConfigured -and -not $svcExists)) {
+    Write-Host "[warn] Runner configured but svc.cmd missing."
+    Write-Host "      Windows only creates svc.cmd when config uses --runasservice."
+    if ([string]::IsNullOrWhiteSpace($RemoveToken) -and -not $ForceReconfigure) {
+        Write-Host ""
+        Write-Host "Do ONE of the following:"
+        Write-Host "  A) Quick (no reboot service):"
+        Write-Host "       .\scripts\windows_install_runner.ps1 -StartInteractive"
+        Write-Host "  B) Proper service: get REMOVE token from GitHub runner page, then:"
+        Write-Host "       .\scripts\windows_install_runner.ps1 -Token <NEW_REG_TOKEN> -RemoveToken <REMOVE_TOKEN> -ForceReconfigure"
+        exit 1
     }
+    if (-not [string]::IsNullOrWhiteSpace($RemoveToken)) {
+        Write-Host "[..] config.cmd remove ..."
+        $code = Invoke-RunnerCmd "config.cmd" "remove --token $RemoveToken"
+        Write-Host "[ok] remove exit $code"
+    } elseif ($ForceReconfigure -and (Test-Path (Join-Path $RunnerDir ".runner"))) {
+        Write-Host "[..] ForceReconfigure without RemoveToken: trying --replace"
+    }
+    $runnerConfigured = $false
+}
 
-    if (Test-Path (Join-Path $RunnerDir ".runner")) {
-        Write-Host "[ok] already configured (.runner exists) - skipping config"
-    } else {
+if (-not $ServiceOnly) {
+    if ($runnerConfigured -and $svcExists) {
+        Write-Host "[ok] already configured with svc.cmd"
+    } elseif (-not $runnerConfigured) {
         if ([string]::IsNullOrWhiteSpace($Token)) {
-            throw "Need -Token for first-time config (or use -ServiceOnly if already configured)."
+            throw "Need -Token for config."
         }
-        Write-Host "[..] config.cmd ..."
-        $cfgArgs = "--unattended --url $RepoUrl --token $Token --name $RunnerName --labels $Labels --work _work --replace"
+        Write-Host "[..] config.cmd with --runasservice ..."
+        $cfgArgs = "--unattended --url $RepoUrl --token $Token --name $RunnerName --labels $Labels --work _work --replace --runasservice"
+        if (-not [string]::IsNullOrWhiteSpace($WindowsLogonAccount)) {
+            $cfgArgs += " --windowslogonaccount `"$WindowsLogonAccount`""
+            if (-not [string]::IsNullOrWhiteSpace($WindowsLogonPassword)) {
+                $cfgArgs += " --windowslogonpassword `"$WindowsLogonPassword`""
+            }
+        }
         $code = Invoke-RunnerCmd "config.cmd" $cfgArgs
         if ($code -ne 0) { throw "config.cmd failed with exit $code" }
-        Write-Host "[ok] Settings Saved"
+        Write-Host "[ok] Settings Saved (runasservice)"
     }
+}
+
+$svcExists = Test-Path (Join-Path $RunnerDir "svc.cmd")
+if ($svcExists) {
+    Write-Host "[..] svc.cmd install"
+    $code = Invoke-RunnerCmd "svc.cmd" "install"
+    Write-Host "[ok] install exit $code"
+    Write-Host "[..] svc.cmd start"
+    $code = Invoke-RunnerCmd "svc.cmd" "start"
+    if ($code -ne 0) { throw "svc.cmd start failed with exit $code" }
+    Write-Host "[ok] Runner Windows service running"
 } else {
-    Write-Host "[ok] ServiceOnly - skip download/config"
+    Write-Host "[warn] svc.cmd still missing after config."
+    Write-Host "      Falling back to interactive run.cmd + startup scheduled task."
+    $runCmd = Join-Path $RunnerDir "run.cmd"
+    $taskName = "QAT-GitHub-Actions-Runner"
+    $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$runCmd`"" -WorkingDirectory $RunnerDir
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $principalTask = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principalTask -Force | Out-Null
+    Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$runCmd`"") -WorkingDirectory $RunnerDir -WindowStyle Minimized
+    Write-Host "[ok] Scheduled task $taskName registered; run.cmd started"
 }
-
-Write-Host "[..] install Windows service (svc.cmd install)"
-$code = Invoke-RunnerCmd "svc.cmd" "install"
-if ($code -ne 0) {
-    Write-Host "[warn] svc install exit $code (may already be installed)"
-}
-
-Write-Host "[..] start Windows service (svc.cmd start)"
-$code = Invoke-RunnerCmd "svc.cmd" "start"
-if ($code -ne 0) { throw "svc.cmd start failed with exit $code" }
 
 Write-Host ""
-Write-Host "[ok] Runner installed as service"
-Write-Host "  Check: GitHub -> Settings -> Actions -> Runners (Idle/Online)"
-Write-Host "  Deploy: push/merge to main, or Actions -> CD Lightsail -> Run workflow"
-Write-Host "  Repo app: C:\quant-ai-trader (keep separate from runner dir)"
+Write-Host "Check: GitHub -> Settings -> Actions -> Runners (Idle/Online)"
+Write-Host "Deploy: merge to main, or Actions -> CD Lightsail -> Run workflow"
+Write-Host "Note: service account needs git/python/npm on PATH (prefer Administrator logon)."

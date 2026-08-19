@@ -175,14 +175,22 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\windows_install_runner.ps1 -Token "粘贴刚才的TOKEN"
 ```
 
-若出现 `Settings Saved` 但报 `svc.cmd` 找不到，配置其实已成功，补跑：
+**重要**：Windows 的 `svc.cmd` **不在 zip 里**，只有 `config.cmd` 加了 `--runasservice` 才会生成。若你看到 `Settings Saved` 但没有 `svc.cmd`，先让 Runner 在线（任选其一）：
 
 ```powershell
+# 方案 A（最快）：前台跑，窗口不要关
 cd C:\actions-runner
-cmd /c "svc.cmd install"
-cmd /c "svc.cmd start"
-# 或拉最新脚本后:
-# .\scripts\windows_install_runner.ps1 -ServiceOnly
+cmd /c "dir"
+cmd /c "run.cmd"
+```
+
+```powershell
+# 方案 B（装成服务）：GitHub Runners 页对该 runner 点 Remove 拿到 remove token，
+# 再拿一个新的 registration token，然后：
+cd C:\quant-ai-trader
+& "C:\Program Files\Git\cmd\git.exe" fetch origin
+& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
+.\scripts\windows_install_runner.ps1 -Token "新REGISTRATION_TOKEN" -RemoveToken "REMOVE_TOKEN" -ForceReconfigure
 ```
 
 成功后：GitHub → Settings → Actions → Runners 应显示 `lightsail-qat` 为 **Idle**。
