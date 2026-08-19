@@ -1,14 +1,19 @@
-﻿# CD deploy for Lightsail Windows (ASCII-only for PS 5.1)
-# DeployScriptVersion: 4
-# Called by GitHub Actions self-hosted runner OR manually:
+﻿# Smart CD deploy for Lightsail Windows (ASCII-only for PS 5.1)
+# DeployScriptVersion: 5
+# Usage:
 #   .\scripts\windows_cd_deploy.ps1 -Branch main
+#   .\scripts\windows_cd_deploy.ps1 -Branch main -Smart
 #   .\scripts\windows_cd_deploy.ps1 -Branch main -FullInstall
+#
+# -Smart: skip stop/start when already on origin/<branch> AND gateway healthy
 
 [CmdletBinding()]
 param(
     [string]$Branch = "main",
     [string]$RepoRoot = "C:\quant-ai-trader",
-    [switch]$FullInstall
+    [switch]$FullInstall,
+    [switch]$Smart,
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,9 +22,18 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
              [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 if (-not (Test-Path $RepoRoot)) {
-    throw "Repo not found: $RepoRoot  (clone once, then install the runner)"
+    throw "Repo not found: $RepoRoot"
 }
 Set-Location $RepoRoot
+
+New-Item -ItemType Directory -Force -Path "logs" | Out-Null
+$logFile = Join-Path $RepoRoot "logs\cd-deploy.log"
+
+function Write-Log([string]$Msg) {
+    $line = "{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Msg
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line -Encoding ASCII
+}
 
 function Resolve-Git {
     if (Get-Command git -ErrorAction SilentlyContinue) {
@@ -34,28 +48,51 @@ function Resolve-Git {
     return $null
 }
 
+function Test-GatewayHealthy {
+    try {
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 3
+        return ($r.StatusCode -eq 200)
+    } catch {
+        return $false
+    }
+}
+
 $GitExe = Resolve-Git
 if (-not $GitExe) { throw "git not found. Install Git for Windows." }
 
-Write-Host "============================================"
-Write-Host "  QAT Lightsail CD"
-Write-Host "  Root:   $RepoRoot"
-Write-Host "  Branch: $Branch"
-Write-Host "============================================"
+Write-Log "==== QAT CD start branch=$Branch Smart=$Smart Force=$Force ===="
 
-Write-Host "[..] git fetch + reset --hard origin/$Branch"
+Write-Log "[..] git fetch origin"
 & $GitExe fetch origin
 if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+
+$local = (& $GitExe rev-parse HEAD 2>$null)
+$remote = (& $GitExe rev-parse "origin/$Branch" 2>$null)
+if (-not $remote) { throw "origin/$Branch not found. Push/merge that branch first." }
+
+$healthy = Test-GatewayHealthy
+Write-Log "[..] local=$local"
+Write-Log "[..] remote=$remote"
+Write-Log "[..] healthy=$healthy"
+
+if ($Smart -and -not $Force) {
+    if ($local -eq $remote -and $healthy) {
+        Write-Log "[ok] Smart skip: already current and gateway healthy"
+        exit 0
+    }
+}
+
+Write-Log "[..] checkout + reset --hard origin/$Branch"
 & $GitExe checkout $Branch
 if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch failed" }
 & $GitExe reset --hard "origin/$Branch"
 if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
-& $GitExe log -1 --oneline
+& $GitExe log -1 --oneline | ForEach-Object { Write-Log $_ }
 
-Write-Host "[..] stop old processes"
+Write-Log "[..] stop old processes"
 & powershell -ExecutionPolicy Bypass -File "scripts\windows_stop.ps1"
 
-Write-Host "[..] start paper stack"
+Write-Log "[..] start paper stack"
 $deployArgs = @("-ExecutionPolicy", "Bypass", "-File", "scripts\windows_deploy.ps1", "-OpenFirewall")
 if (-not $FullInstall) {
     $deployArgs += "-SkipInstall"
@@ -63,23 +100,19 @@ if (-not $FullInstall) {
 & powershell @deployArgs
 if ($LASTEXITCODE -ne 0) { throw "windows_deploy.ps1 failed" }
 
-Write-Host "[..] health check"
+Write-Log "[..] health check"
 $ok = $false
-for ($i = 0; $i -lt 30; $i++) {
-    try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 3
-        if ($r.StatusCode -eq 200) { $ok = $true; break }
-    } catch {
-        Start-Sleep -Seconds 2
-    }
+for ($i = 0; $i -lt 45; $i++) {
+    if (Test-GatewayHealthy) { $ok = $true; break }
+    Start-Sleep -Seconds 2
 }
 if (-not $ok) {
-    Write-Host "[ERR] Gateway health failed after CD"
+    Write-Log "[ERR] Gateway health failed after CD"
     if (Test-Path "logs\api-gateway.err.log") {
-        Get-Content "logs\api-gateway.err.log" -Tail 40
+        Get-Content "logs\api-gateway.err.log" -Tail 40 | ForEach-Object { Write-Log $_ }
     }
     exit 1
 }
 
-Write-Host "[ok] CD complete - gateway healthy"
+Write-Log "[ok] CD complete - gateway healthy"
 exit 0
