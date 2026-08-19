@@ -1,4 +1,5 @@
-# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
+﻿# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
+# DeployScriptVersion: 3
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\scripts\windows_deploy.ps1 -OpenFirewall

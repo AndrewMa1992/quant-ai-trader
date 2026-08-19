@@ -1,3 +1,4 @@
+﻿# DeployScriptVersion: 3
 # Stop Windows-native QAT services started by windows_deploy.ps1
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)

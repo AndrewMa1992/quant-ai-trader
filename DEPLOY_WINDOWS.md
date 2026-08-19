@@ -54,14 +54,22 @@ npm --version
 
 ## 2. 同步代码（唯一旁支）
 
+目录已存在时不要再 `git clone`（会报 destination path already exists），直接进入仓库强制对齐远端：
+
 ```powershell
-cd C:\
-git clone https://github.com/AndrewMa1992/quant-ai-trader.git
 cd C:\quant-ai-trader
 git fetch origin
 git checkout cursor/quant-upgrade-a75f
-git pull origin cursor/quant-upgrade-a75f
+git reset --hard origin/cursor/quant-upgrade-a75f
 ```
+
+确认脚本已是新版（第一行附近应有 `DeployScriptVersion: 3`）：
+
+```powershell
+Get-Content .\scripts\windows_deploy.ps1 -TotalCount 3
+```
+
+若仍出现 `The string is missing the terminator`，说明本地还是旧 UTF-8 脚本，必须先 `reset --hard` 再跑部署。
 
 私有仓库用 PAT 或配置 GitHub SSH key。
 
@@ -69,7 +77,8 @@ git pull origin cursor/quant-upgrade-a75f
 
 ```powershell
 cd C:\quant-ai-trader
-git pull origin cursor/quant-upgrade-a75f
+git fetch origin
+git reset --hard origin/cursor/quant-upgrade-a75f
 .\scripts\windows_stop.ps1
 .\scripts\windows_deploy.ps1
 ```
