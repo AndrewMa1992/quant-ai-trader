@@ -22,8 +22,8 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 # 外网: http://<公网IP>:5180
 ```
 
-详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP、端口、启停、**CI/CD 自动部署**）。  
-合并进 `main` 后可由 GitHub Actions self-hosted runner 自动 `windows_cd_deploy.ps1`。
+详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP、端口、启停、**开机自启 + 定时自动部署**）。  
+服务器执行一次 `windows_install_autostart.ps1 -RunNow` 即可自动运行、自动拉取部署。
 
 ## 🚀 核心功能
 

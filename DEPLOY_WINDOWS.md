@@ -151,65 +151,49 @@ PID 文件：`cache\windows_pids\`
 
 ---
 
-## 6. CI/CD 自动部署（GitHub Actions → Lightsail）
+## 6. 自动运行 + 自动部署（推荐）
 
-目标流程：
+推荐用 **Windows 计划任务**（不依赖 GitHub Runner 服务，更稳）：
 
-**改代码 → PR → CI 通过 → 合并进 `main` → Lightsail 自动 stop/start（paper）**
+1. **开机自动启动** paper 服务
+2. **每 10 分钟**检查 GitHub：有新提交或服务挂了 → 自动 pull + 重启
 
-### 6.1 一次性：在 Lightsail 上安装 Runner（管理员 PowerShell）
-
-1. 打开：https://github.com/AndrewMa1992/quant-ai-trader/settings/actions/runners/new  
-2. 复制页面上的 **Registration token**（约 1 小时过期）  
-3. 先保证仓库已在 `C:\quant-ai-trader` 且能手动部署成功  
-4. 同步本仓库最新脚本后执行：
+### 6.1 一次性安装（管理员 PowerShell）
 
 ```powershell
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 cd C:\quant-ai-trader
 & "C:\Program Files\Git\cmd\git.exe" fetch origin
-& "C:\Program Files\Git\cmd\git.exe" checkout cursor/quant-upgrade-a75f
 & "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
 
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.\scripts\windows_install_runner.ps1 -Token "粘贴刚才的TOKEN"
+# 立刻部署一次，并注册开机 + 定时自动部署
+.\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f -RunNow
 ```
 
-**重要**：Windows 的 `svc.cmd` **不在 zip 里**，只有 `config.cmd` 加了 `--runasservice` 才会生成。若你看到 `Settings Saved` 但没有 `svc.cmd`，先让 Runner 在线（任选其一）：
+合并进 `main` 后，把跟踪分支改成 main：
 
 ```powershell
-# 方案 A（最快）：前台跑，窗口不要关
-cd C:\actions-runner
-cmd /c "dir"
-cmd /c "run.cmd"
+.\scripts\windows_install_autostart.ps1 -Branch main -RunNow
 ```
 
-```powershell
-# 方案 B（装成服务）：GitHub Runners 页对该 runner 点 Remove 拿到 remove token，
-# 再拿一个新的 registration token，然后：
-cd C:\quant-ai-trader
-& "C:\Program Files\Git\cmd\git.exe" fetch origin
-& "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
-.\scripts\windows_install_runner.ps1 -Token "新REGISTRATION_TOKEN" -RemoveToken "REMOVE_TOKEN" -ForceReconfigure
-```
-
-成功后：GitHub → Settings → Actions → Runners 应显示 `lightsail-qat` 为 **Idle**。
+查看任务：`taskschd.msc` → `QAT-Paper-Boot` / `QAT-Paper-AutoCD`  
+日志：`C:\quant-ai-trader\logs\cd-deploy.log`
 
 ### 6.2 日常开发
 
-1. 在旁支改代码、开 PR（CI 会自动跑 lint/build）  
-2. Review 后 **合并到 `main`**  
-3. Workflow `CD - Lightsail Windows Paper Deploy` 自动在服务器执行 `windows_cd_deploy.ps1`  
-4. 浏览器验证：http://3.106.139.233:5180 与 http://3.106.139.233:8001/health  
+1. 改代码 → PR → CI
+2. 合并到跟踪分支（现在是 `cursor/quant-upgrade-a75f`，稳定后用 `main`）
+3. 最多约 10 分钟内服务器自动拉取并重启
+4. 验证：http://3.106.139.233:8001/health 与 http://3.106.139.233:5180
 
-也可在 Actions 页手动 **Run workflow**（可选手动选 branch / FullInstall）。
+### 6.3 可选：GitHub Actions Runner
 
-### 6.3 注意
+计划任务已足够实现自动部署自动运行。若仍要用 Actions：
 
-- Runner 与业务目录分离：`C:\actions-runner` vs `C:\quant-ai-trader`  
-- CD 默认 `-SkipInstall`（快）；依赖变更时在 Actions 里把 `full_install=true`  
-- 现有 `cd-train.yml` 面向另一台 GPU 机器，与 Lightsail 标签不同，互不影响  
-- 合并进 `main` 前请确认 paper 模式：`QAT_EXECUTION_MODE=paper`
+1. https://github.com/AndrewMa1992/quant-ai-trader/settings/actions/runners/new 复制 token
+2. `.\scripts\windows_install_runner.ps1 -Token "..."`（需 `--runasservice` 才有 svc.cmd）
+3. 或 `cd C:\actions-runner` 后 `cmd /c "run.cmd"` 保持在线
 
 ---
 
