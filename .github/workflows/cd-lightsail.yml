@@ -45,7 +45,6 @@ jobs:
           node --version
 
       - name: Materialize Tiger credentials from Actions secrets
-        if: ${{ secrets.TIGER_PRIVATE_KEY != '' }}
         shell: powershell
         env:
           TIGER_PRIVATE_KEY: ${{ secrets.TIGER_PRIVATE_KEY }}
@@ -53,6 +52,11 @@ jobs:
           TIGER_ACCOUNT: ${{ secrets.TIGER_ACCOUNT }}
           TIGER_LICENSE: ${{ secrets.TIGER_LICENSE }}
         run: |
+          # Note: do not use secrets.* in job/step `if:` — GitHub rejects that and the whole workflow fails.
+          if ([string]::IsNullOrWhiteSpace($env:TIGER_PRIVATE_KEY)) {
+            Write-Host "TIGER_PRIVATE_KEY secret not set — skip materialize (deploy continues)"
+            exit 0
+          }
           $root = "C:\quant-ai-trader"
           $certs = Join-Path $root "certs"
           New-Item -ItemType Directory -Force -Path $certs | Out-Null
