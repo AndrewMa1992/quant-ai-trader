@@ -63,13 +63,22 @@ git checkout cursor/quant-upgrade-a75f
 git reset --hard origin/cursor/quant-upgrade-a75f
 ```
 
-确认脚本已是新版（第一行附近应有 `DeployScriptVersion: 3`）：
+确认脚本已是新版（第一行附近应有 `DeployScriptVersion: 4`）：
 
 ```powershell
 Get-Content .\scripts\windows_deploy.ps1 -TotalCount 3
 ```
 
 若仍出现 `The string is missing the terminator`，说明本地还是旧 UTF-8 脚本，必须先 `reset --hard` 再跑部署。
+
+### 页面 502 Bad Gateway
+
+前端 `:5180` 会把 `/api` 反代到 `127.0.0.1:8001`。出现 502 几乎总是 **网关没起来**。在服务器上检查：
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8001/health -UseBasicParsing
+Get-Content C:\quant-ai-trader\logs\api-gateway.err.log -Tail 50
+```
 
 私有仓库用 PAT 或配置 GitHub SSH key。
 

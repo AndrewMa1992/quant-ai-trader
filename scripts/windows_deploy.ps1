@@ -1,5 +1,5 @@
 ﻿# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 3
+# DeployScriptVersion: 4
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\scripts\windows_deploy.ps1 -OpenFirewall
@@ -23,14 +23,9 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 Write-Host "============================================"
 Write-Host "  Quant AI Trader - Windows Paper Deploy"
+Write-Host "  DeployScriptVersion: 4"
 Write-Host "  Root: $Root"
 Write-Host "============================================"
-
-function Assert-Command([string]$Name) {
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "Required command not found: $Name. See DEPLOY_WINDOWS.md"
-    }
-}
 
 # Prefer full paths if PATH still broken
 $PythonExe = $null
@@ -146,8 +141,17 @@ function Start-QatService {
     param([string]$Name, [string]$Module, [int]$Port)
     $logOut = Join-Path $Root "logs\$Name.out.log"
     $logErr = Join-Path $Root "logs\$Name.err.log"
-    $argList = @("-m", "uvicorn", $Module, "--host", "0.0.0.0", "--port", "$Port")
-    $p = Start-Process -FilePath $PythonExe -ArgumentList $argList `
+    # Launcher bat ensures PYTHONPATH is set even if Start-Process env is odd
+    $bat = Join-Path $pidDir "start_$Name.bat"
+    $batBody = @"
+@echo off
+set PYTHONPATH=$Root
+set QAT_PROJECT_ROOT=$Root
+cd /d "$Root"
+"$PythonExe" -m uvicorn $Module --host 0.0.0.0 --port $Port
+"@
+    Set-Content -Path $bat -Value $batBody -Encoding ASCII
+    $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
         -WorkingDirectory $Root -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput $logOut -RedirectStandardError $logErr
     Set-Content (Join-Path $pidDir "$Name.pid") $p.Id
@@ -171,18 +175,33 @@ if (-not $SkipFrontend) {
         & $NpmCmd install
     }
     $frontStarted = $false
+    $frontLogOut = Join-Path $Root "logs\frontend.out.log"
+    $frontLogErr = Join-Path $Root "logs\frontend.err.log"
+    $frontBat = Join-Path $pidDir "start_frontend.bat"
     try {
         & $NpmCmd run build
-        $front = Start-Process -FilePath $NpmCmd -ArgumentList @("run", "preview", "--", "--host", "0.0.0.0", "--port", "5180") `
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
+        $batBody = @"
+@echo off
+cd /d "$Root\frontend"
+"$NpmCmd" run preview -- --host 0.0.0.0 --port 5180
+"@
+        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
+        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
             -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $Root "logs\frontend.out.log") `
-            -RedirectStandardError (Join-Path $Root "logs\frontend.err.log")
+            -RedirectStandardOutput $frontLogOut -RedirectStandardError $frontLogErr
         $frontStarted = $true
     } catch {
-        $front = Start-Process -FilePath $NpmCmd -ArgumentList @("run", "dev", "--", "--host", "0.0.0.0", "--port", "5180") `
+        Write-Host "[warn] build/preview failed, falling back to vite dev: $($_.Exception.Message)"
+        $batBody = @"
+@echo off
+cd /d "$Root\frontend"
+"$NpmCmd" run dev -- --host 0.0.0.0 --port 5180
+"@
+        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
+        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
             -WorkingDirectory (Join-Path $Root "frontend") -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $Root "logs\frontend.out.log") `
-            -RedirectStandardError (Join-Path $Root "logs\frontend.err.log")
+            -RedirectStandardOutput $frontLogOut -RedirectStandardError $frontLogErr
         $frontStarted = $true
     }
     if ($frontStarted) {
@@ -192,27 +211,66 @@ if (-not $SkipFrontend) {
     Pop-Location
 }
 
-Write-Host "[..] waiting for gateway health..."
-$healthy = $false
-for ($i = 0; $i -lt 30; $i++) {
+function Test-LocalUrl([string]$Url) {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 3
-        if ($r.StatusCode -eq 200) { $healthy = $true; break }
+        $r = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3
+        return ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500)
     } catch {
-        Start-Sleep -Seconds 2
+        return $false
     }
 }
+
+Write-Host "[..] waiting for gateway health..."
+$healthy = $false
+for ($i = 0; $i -lt 45; $i++) {
+    if (Test-LocalUrl "http://127.0.0.1:8001/health") { $healthy = $true; break }
+    Start-Sleep -Seconds 2
+}
 if ($healthy) {
-    Write-Host "[ok] Gateway healthy"
+    Write-Host "[ok] Gateway healthy  http://127.0.0.1:8001/health"
 } else {
-    Write-Host "[warn] Gateway not healthy yet - check logs\api-gateway.err.log"
+    Write-Host "[ERR] Gateway NOT healthy - API calls from UI will be 502"
+    $errLog = Join-Path $Root "logs\api-gateway.err.log"
+    if (Test-Path $errLog) {
+        Write-Host "---- logs\api-gateway.err.log (tail) ----"
+        Get-Content $errLog -Tail 40
+        Write-Host "-----------------------------------------"
+    }
+}
+
+Write-Host "[..] checking microservice ports..."
+$svcPorts = @{
+    "data-service" = 8011
+    "factor-service" = 8012
+    "model-train" = 8013
+    "model-infer" = 8014
+    "risk-service" = 8015
+    "execution" = 8016
+}
+foreach ($name in $svcPorts.Keys) {
+    $port = $svcPorts[$name]
+    if (Test-LocalUrl "http://127.0.0.1:$port/health") {
+        Write-Host "[ok] $name :$port"
+    } else {
+        Write-Host "[warn] $name :$port not healthy - see logs\$name.err.log"
+    }
+}
+
+if (-not $SkipFrontend) {
+    Start-Sleep -Seconds 3
+    if (Test-LocalUrl "http://127.0.0.1:5180/") {
+        Write-Host "[ok] Frontend listening :5180"
+    } else {
+        Write-Host "[warn] Frontend :5180 not responding - see logs\frontend.err.log"
+    }
 }
 
 Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
-Write-Host "  API:      http://127.0.0.1:8001"
+Write-Host "  API:      http://127.0.0.1:8001/health"
 Write-Host "  Frontend: http://127.0.0.1:5180"
 Write-Host "  Public:   http://3.106.139.233:5180"
+Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"
