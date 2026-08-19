@@ -100,19 +100,26 @@ def test_cn_removed_from_rotation():
     from configs.pipeline_config import pipeline_config
 
     assert "CN" not in pipeline_config.MARKET_ROTATION
-    assert pipeline_config.MARKET_ROTATION == ["US"]
+    assert pipeline_config.MARKET_ROTATION == ["US", "HK", "SG", "AU", "NZ"]
+    assert pipeline_config.TRADING_HOURS_ONLY is False
     assert pipeline_config.EXECUTION_MODE in ("paper", "live")
 
 
-def test_us_only_enabled_markets():
+def test_multi_market_enabled():
     from configs.settings import settings
     from configs.market_universe import get_all_tickers
+    from shared.market_session import is_market_open, get_market_status
 
-    assert settings.enabled_markets_list == ["US"]
-    assert settings.data_hk_tickers_list == []
+    assert settings.enabled_markets_list == ["US", "HK", "SG", "AU", "NZ"]
+    assert settings.data_hk_tickers_list
     tickers = get_all_tickers()
     assert tickers
-    assert all(not t.endswith((".HK", ".SI", ".AX", ".NZ")) for t in tickers)
+    assert any(t.endswith(".HK") for t in tickers) or any(
+        t.isdigit() or t.replace(".HK", "").isdigit() for t in get_all_tickers("HK")
+    )
+    assert is_market_open("US") is True  # US 24h default
+    status = get_market_status()
+    assert "US" in status and "HK" in status and "SG" in status
 
 
 class _DummyTiger:

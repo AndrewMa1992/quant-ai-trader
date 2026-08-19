@@ -12,7 +12,8 @@ class PipelineConfig:
 
     # ── 调度参数 ──────────────────────────────────────────────
     CYCLE_INTERVAL_SECONDS: int = 300          # 每轮间隔（秒），默认5分钟
-    TRADING_HOURS_ONLY: bool = True            # 仅交易时段运行
+    # False = 24h pipeline (US 24h + rotate HK/SG/AU/NZ when in session)
+    TRADING_HOURS_ONLY: bool = False
     MAX_TICKERS_PER_CYCLE: int = 9999            # 移除限制，交由市场轮询控制
 
     # ── 信号阈值（Top-N 替代固定阈值） ─────────────────────
@@ -23,8 +24,10 @@ class PipelineConfig:
 
     # ── 全市场轮询 ────────────────────────────────────────
     MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
-    # Default: US only. Override with QAT_MARKET_ROTATION=US,HK,...
-    MARKET_ROTATION: list = field(default_factory=lambda: ["US"])
+    # US + HK/SG/AU/NZ. Override: QAT_MARKET_ROTATION=US,HK,...
+    MARKET_ROTATION: list = field(
+        default_factory=lambda: ["US", "HK", "SG", "AU", "NZ"]
+    )
     MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
 
     # ── 风控参数 ──────────────────────────────────────────────
@@ -67,7 +70,12 @@ class PipelineConfig:
         if rot:
             self.MARKET_ROTATION = [m.strip().upper() for m in rot.split(",") if m.strip()]
             if not self.MARKET_ROTATION:
-                self.MARKET_ROTATION = ["US"]
+                self.MARKET_ROTATION = ["US", "HK", "SG", "AU", "NZ"]
+        hours_only = os.getenv("QAT_TRADING_HOURS_ONLY", "").strip().lower()
+        if hours_only in ("1", "true", "yes", "on"):
+            self.TRADING_HOURS_ONLY = True
+        elif hours_only in ("0", "false", "no", "off"):
+            self.TRADING_HOURS_ONLY = False
         try:
             from shared.execution_mode import get_execution_mode
 

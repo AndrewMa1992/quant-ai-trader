@@ -211,30 +211,30 @@ class Settings(BaseSettings):
     MODEL_MACRO_VIX_BULLISH: float = Field(default=15.0, description="VIX below = bullish regime")
 
     # ── Data: Stock Universe ─────────────────────────────────
-    # Focus: US equities by default. Leave non-US lists empty unless expanded.
+    # Default: US + HK + SG + AU + NZ (no CN)
     ENABLED_MARKETS: str = Field(
-        default="US",
-        description="Comma-separated markets to trade/scan (e.g. US or US,HK)",
+        default="US,HK,SG,AU,NZ",
+        description="Comma-separated markets to trade/scan",
     )
     DATA_US_TICKERS: str = Field(
         default="AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,JPM,V,SPY,QQQ,IWM",
         description="Comma‑separated US tickers",
     )
     DATA_HK_TICKERS: str = Field(
-        default="",
-        description="Comma‑separated HK tickers (5‑digit numeric); empty = US-only",
+        default="00700,09988,03690,09999,01810,00941,00883,01299",
+        description="Comma‑separated HK tickers (5‑digit numeric)",
     )
     DATA_SG_TICKERS: str = Field(
-        default="",
-        description="Comma‑separated SG tickers; empty = US-only",
+        default="D05.SI,O39.SI,U11.SI,Z74.SI,C52.SI,C6L.SI,S58.SI,BS6.SI",
+        description="Comma‑separated SG tickers",
     )
     DATA_AU_TICKERS: str = Field(
-        default="",
-        description="Comma‑separated AU tickers; empty = US-only",
+        default="BHP.AX,CBA.AX,CSL.AX,NAB.AX,WBC.AX,ANZ.AX,MQG.AX,WES.AX",
+        description="Comma‑separated AU tickers",
     )
     DATA_NZ_TICKERS: str = Field(
-        default="",
-        description="Comma‑separated NZ tickers; empty = US-only",
+        default="FPH.NZ,AIA.NZ,MEL.NZ,SPK.NZ,ATM.NZ,MCY.NZ,IFT.NZ,EBO.NZ",
+        description="Comma‑separated NZ tickers",
     )
 
     # ── Data: General ────────────────────────────────────────
