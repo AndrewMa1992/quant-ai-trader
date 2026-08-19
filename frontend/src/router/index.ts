@@ -36,6 +36,21 @@ const routes: RouteRecordRaw[] = [
     name: 'ExecutionMonitor',
     component: () => import('../views/ExecutionMonitor.vue'),
   },
+  {
+    path: '/orders',
+    name: 'OrderHistory',
+    component: () => import('../views/OrderHistory.vue'),
+  },
+  {
+    path: '/data',
+    name: 'DataExplorer',
+    component: () => import('../views/DataExplorer.vue'),
+  },
+  {
+    path: '/sync',
+    name: 'DataSyncDashboard',
+    component: () => import('../views/DataSyncDashboard.vue'),
+  },
 ]
 
 const router = createRouter({

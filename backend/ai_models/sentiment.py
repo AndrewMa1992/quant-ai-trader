@@ -13,7 +13,7 @@ import numpy as np
 from loguru import logger
 from configs.settings import settings
 
-NEWS_CACHE_FILE = CACHE_DIR / "news_cache.json"
+NEWS_CACHE_FILE = Path(settings.CACHE_DIR) / "news_cache.json"
 NEWS_CACHE_TTL = 1800  # 30分钟缓存
 
 # 升级模型: ProsusAI/finbert → yiyanghkust/finbert-tone
@@ -84,10 +84,10 @@ class SentimentAnalyzer:
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
             logger.info(f"📥 加载 {label} ({model_name})...")
             self.tokenizer = AutoTokenizer.from_pretrained(
-                model_name, cache_dir=str(CACHE_DIR / "huggingface")
+                model_name, cache_dir=str(settings.HF_CACHE)
             )
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                model_name, cache_dir=str(CACHE_DIR / "huggingface")
+                model_name, cache_dir=str(settings.HF_CACHE)
             )
             self._finbert_loaded = True
             logger.info(f"✅ {label} 加载完成")

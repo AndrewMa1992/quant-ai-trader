@@ -367,6 +367,12 @@ class TradingPipeline:
         report = self.risk_manager.check_circuit_breaker()
         if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
             logger.error(f"🚨 熔断触发: {report.reason}")
+            try:
+                from shared.kill_switch import get_kill_switch
+
+                get_kill_switch().engage(report.reason or "circuit_breaker", engaged_by="trading_pipeline")
+            except Exception:
+                pass
             await self.ws_pusher.push_alert("circuit_breaker", report.reason)
             # P1-2: Tiger price fallback when HTTP prices are empty
             if not prices and self.tiger_ready:
@@ -793,6 +799,16 @@ class TradingPipeline:
                 logger.warning("  Step 3: 无有数据的 ticker，跳过推理")
                 return []
 
+            # Regime adapt once per cycle (SPY / fallback)
+            try:
+                adapt = self.inference_engine.adapt_from_market()
+                logger.info(
+                    f"  Step 3: market regime={adapt.get('regime')} "
+                    f"(fitted={adapt.get('fitted')}, bench={adapt.get('benchmark')})"
+                )
+            except Exception as adapt_exc:
+                logger.debug(f"  Step 3: regime adapt skipped: {adapt_exc}")
+
             # Ensure factor_df has a 'ticker' column for batch inference
             if "ticker" not in factor_df.columns and len(factor_df) <= len(tickers):
                 factor_df = factor_df.copy()
@@ -804,6 +820,14 @@ class TradingPipeline:
                 min_threshold=self.config.SIGNAL_THRESHOLD_MIN,
                 min_confidence=self.config.MIN_CONFIDENCE,
             )
+
+            # Feed ensemble Bayesian weights with this cycle's components
+            try:
+                weights = self.inference_engine.update_ensemble_from_signals(signals)
+                if weights:
+                    logger.debug(f"  Step 3: bayesian weights={weights}")
+            except Exception as bw_exc:
+                logger.debug(f"  Step 3: bayesian update skipped: {bw_exc}")
 
             elapsed: float = time.time() - t0
             logger.info(
@@ -843,6 +867,7 @@ class TradingPipeline:
             "total_value": self.portfolio.total_value,
             "cash": self.portfolio.cash,
             "positions": dict(self.portfolio.positions),
+            "position_values": dict(getattr(self.risk_manager, "position_values", {}) or {}),
         }
 
         for sig in signals:
@@ -876,6 +901,12 @@ class TradingPipeline:
                 approved.append(sig)
             else:
                 rejected.append(f"{ticker}: {result.reason}")
+                try:
+                    from shared.audit_trail import get_audit_trail
+
+                    get_audit_trail().risk_reject(ticker, result.reason)
+                except Exception:
+                    pass
                 if result.warnings:
                     for w in result.warnings:
                         logger.debug(f"    ⚠️ {ticker}: {w}")
@@ -1085,6 +1116,26 @@ class TradingPipeline:
                 f"盈亏 {metrics.get('total_return_pct', 0):+.1f}% | "
                 f"持仓 {metrics.get('num_positions', 0)} 只"
             )
+
+            # Institutional audit trail
+            try:
+                from shared.audit_trail import get_audit_trail
+                from shared.kill_switch import get_kill_switch
+
+                get_audit_trail().cycle(
+                    self.cycle_count,
+                    self.trade_date,
+                    orders=len(orders),
+                    risk_snapshot={
+                        **self.risk_manager.get_status(),
+                        "kill_switch": get_kill_switch().status(),
+                    },
+                    extra={"metrics": metrics},
+                )
+                for o in orders:
+                    get_audit_trail().order(o)
+            except Exception as audit_exc:
+                logger.debug(f"AuditTrail skipped: {audit_exc}")
 
             # ── CycleSummary 持久化到 cache/cycle_history.jsonl（追加模式）──
             cycle_summary = {

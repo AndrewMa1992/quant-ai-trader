@@ -1,0 +1,63 @@
+name: CD - Lightsail Windows Paper Deploy
+
+# Auto-deploy to Amazon Lightsail Windows after merge to main.
+# Requires a self-hosted runner with labels: self-hosted, windows, lightsail
+# One-time setup on the server: scripts/windows_install_runner.ps1
+# Docs: DEPLOY_WINDOWS.md section "CI/CD"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Git branch to deploy (default main)"
+        required: false
+        default: "main"
+      full_install:
+        description: "Re-run pip/npm install (true/false)"
+        required: false
+        default: "false"
+
+concurrency:
+  group: lightsail-paper-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, lightsail]
+    timeout-minutes: 45
+    steps:
+      - name: Refresh PATH
+        shell: powershell
+        run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                       [System.Environment]::GetEnvironmentVariable("Path","User")
+          Write-Host "PATH refreshed"
+          git --version
+          python --version
+          node --version
+
+      - name: Deploy paper stack
+        shell: powershell
+        run: |
+          $branch = "${{ github.event.inputs.branch }}"
+          if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
+          $full = "${{ github.event.inputs.full_install }}"
+          $script = "C:\quant-ai-trader\scripts\windows_cd_deploy.ps1"
+          if (-not (Test-Path $script)) {
+            throw "Missing $script - clone repo to C:\quant-ai-trader and pull once manually first"
+          }
+          if ($full -eq "true") {
+            & powershell -ExecutionPolicy Bypass -File $script -Branch $branch -FullInstall
+          } else {
+            & powershell -ExecutionPolicy Bypass -File $script -Branch $branch
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify public health (localhost)
+        shell: powershell
+        run: |
+          $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 10
+          Write-Host $r.Content
+          if ($r.StatusCode -ne 200) { throw "health status $($r.StatusCode)" }

@@ -258,7 +258,7 @@ class Settings(BaseSettings):
     TRADING_BASE_CURRENCY: str = Field(default="USD")
     TRADING_SIMULATION_MODE: bool = Field(
         default=True,
-        description="Force paper/sim trading; must be false to allow live",
+        description="Paper/sim lock — must be false AND live promotion approved for live orders",
     )
 
     TRADING_CURRENCY_RATES: str = Field(

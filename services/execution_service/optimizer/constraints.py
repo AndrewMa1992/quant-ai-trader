@@ -67,6 +67,16 @@ class ConstraintSystem:
         if min_w > 0:
             constraints.append(w >= min_w)
 
+        # Turnover constraint: Σ|w - w_prev| ≤ limit
+        prev = overrides.get("prev_weights_vector") if overrides else None
+        turnover_limit = config.get("turnover_limit")
+        if prev is not None and turnover_limit is not None:
+            constraints.append(cp.norm(w - prev, 1) <= float(turnover_limit))
+
+        # Fully invested / cash buffer
+        if config.get("sum_to_one", True):
+            constraints.append(cp.sum(w) <= 1.0)
+
         # Beta neutrality
         if config.get("beta_neutral", False):
             constraints.append(cp.sum(w) <= 1.0)  # Simplified

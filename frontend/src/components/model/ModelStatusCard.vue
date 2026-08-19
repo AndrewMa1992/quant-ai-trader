@@ -16,10 +16,12 @@ interface Model {
 const props = defineProps<{ model: Model }>()
 
 const latest = props.model.latest_versions?.[0]
-const stageColor = (s: string = '') =>
-  s === 'production' ? 'text-accent-green bg-accent-green/10' :
-  s === 'staging' ? 'text-accent-yellow bg-accent-yellow/10' :
-  'text-text-muted bg-text-muted/10'
+
+function stageClass(s: string = '') {
+  if (s === 'production') return 'bg-xm-profit-bg text-xm-profit'
+  if (s === 'staging') return 'bg-yellow-50 text-yellow-700'
+  return 'bg-xm-bg-surface text-xm-text-tertiary'
+}
 
 function formatName(name: string): string {
   return name.replace(/^quant-/, '').toUpperCase()
@@ -27,33 +29,35 @@ function formatName(name: string): string {
 </script>
 
 <template>
-  <div class="bg-bg-card rounded-lg p-4 shadow border border-border">
+  <div class="bg-xm-bg-card rounded-lg p-4 shadow-xm border border-xm-border-light">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold text-text-primary">{{ formatName(model.name) }}</h3>
-      <span class="w-2.5 h-2.5 rounded-full"
-        :class="model.loaded ? 'bg-accent-green animate-pulse' : 'bg-text-muted'" />
+      <h3 class="text-sm font-semibold text-xm-text-primary">{{ formatName(model.name) }}</h3>
+      <span
+        class="w-2.5 h-2.5 rounded-full"
+        :class="model.loaded ? 'bg-risk-green animate-pulse' : 'bg-xm-text-tertiary'"
+      />
     </div>
 
     <div v-if="latest" class="space-y-2 text-xs">
       <div class="flex justify-between">
-        <span class="text-text-muted">Version</span>
-        <span class="text-text-primary">v{{ latest.version }}</span>
+        <span class="text-xm-text-tertiary">Version</span>
+        <span class="text-xm-text-primary">v{{ latest.version }}</span>
       </div>
-      <div class="flex justify-between">
-        <span class="text-text-muted">Stage</span>
-        <span class="px-1.5 py-0.5 rounded text-xs font-medium" :class="stageColor(latest.stage)">
-          {{ latest.stage ?? 'unknown' }}
+      <div class="flex justify-between items-center">
+        <span class="text-xm-text-tertiary">Stage</span>
+        <span class="px-2 py-0.5 rounded text-xxs font-semibold" :class="stageClass(latest.stage)">
+          {{ latest.stage }}
         </span>
       </div>
-    </div>
-
-    <div v-if="model.metrics" class="mt-3 pt-3 border-t border-border space-y-1 text-xs">
-      <div v-for="(val, key) in model.metrics" :key="key" class="flex justify-between">
-        <span class="text-text-muted">{{ key }}</span>
-        <span class="text-text-primary font-mono">{{ typeof val === 'number' ? val.toFixed(4) : val }}</span>
+      <div class="flex justify-between">
+        <span class="text-xm-text-tertiary">Status</span>
+        <span class="text-xm-text-primary">{{ latest.status }}</span>
       </div>
     </div>
+    <p v-else class="text-xs text-xm-text-tertiary">No version registered</p>
 
-    <p v-if="model.description" class="text-xs text-text-muted mt-2 truncate">{{ model.description }}</p>
+    <p v-if="model.description" class="mt-3 text-xs text-xm-text-secondary line-clamp-2">
+      {{ model.description }}
+    </p>
   </div>
 </template>

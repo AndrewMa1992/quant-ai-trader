@@ -13,13 +13,16 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/', name: 'Dashboard', label: 'Dashboard', icon: '📊' },
-  { path: '/factors', name: 'FactorResearch', label: 'Factors', icon: '🧬' },
-  { path: '/models', name: 'ModelCenter', label: 'Models', icon: '🤖' },
-  { path: '/risk', name: 'RiskDashboard', label: 'Risk', icon: '🛡️' },
-  { path: '/portfolio', name: 'PortfolioOptimizer', label: 'Portfolio', icon: '💼' },
-  { path: '/backtest', name: 'BacktestAnalysis', label: 'Backtest', icon: '📋' },
-  { path: '/execution', name: 'ExecutionMonitor', label: 'Execution', icon: '⚡' },
+  { path: '/', name: 'Dashboard', label: 'Dashboard', icon: 'Dash' },
+  { path: '/factors', name: 'FactorResearch', label: 'Factors', icon: 'Fac' },
+  { path: '/models', name: 'ModelCenter', label: 'Models', icon: 'ML' },
+  { path: '/risk', name: 'RiskDashboard', label: 'Risk', icon: 'Risk' },
+  { path: '/portfolio', name: 'PortfolioOptimizer', label: 'Portfolio', icon: 'Port' },
+  { path: '/backtest', name: 'BacktestAnalysis', label: 'Backtest', icon: 'BT' },
+  { path: '/execution', name: 'ExecutionMonitor', label: 'Execution', icon: 'Exec' },
+  { path: '/orders', name: 'OrderHistory', label: 'Orders', icon: 'Ord' },
+  { path: '/data', name: 'DataExplorer', label: 'Data', icon: 'Data' },
+  { path: '/sync', name: 'DataSyncDashboard', label: 'Sync', icon: 'Sync' },
 ]
 
 const activeIndex = computed(() => navItems.findIndex((item) => item.name === route.name))
@@ -55,7 +58,9 @@ function navigate(path: string) {
           : 'text-xm-text-secondary hover:text-xm-text-primary hover:bg-xm-bg-surface'"
         @click="navigate(item.path)"
       >
-        <span class="text-base flex-shrink-0 w-5 text-center">{{ item.icon }}</span>
+        <span
+          class="flex-shrink-0 w-8 text-center text-xxs font-mono font-semibold tracking-wide uppercase opacity-70"
+        >{{ item.icon }}</span>
         <span>{{ item.label }}</span>
         <div
           v-if="idx === activeIndex"

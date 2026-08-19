@@ -6,26 +6,30 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import AccountSummary from '@/components/dashboard/AccountSummary.vue'
+import MarketStatusBar from '@/components/dashboard/MarketStatusBar.vue'
+import SignalTrendChart from '@/components/SignalTrendChart.vue'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import { usePortfolioStore } from '@/stores/usePortfolioStore'
 import { useRiskStore } from '@/stores/useRiskStore'
 import { useExecutionStore } from '@/stores/useExecutionStore'
+import { useModelStore } from '@/stores/useModelStore'
 import { tradeApi } from '@/api/tradeApi'
+import { modelApi } from '@/api/modelApi'
 
 use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const portfolioStore = usePortfolioStore()
 const riskStore = useRiskStore()
 const execStore = useExecutionStore()
+const modelStore = useModelStore()
 
-/** NAV history from real API data — populated on mount */
 const navHistory = ref<number[]>([])
-const signalHistory = ref<Array<{ time: string; buy: number; sell: number }>>([])
+/** SignalTrendChart expects { cycle, strength, decision } */
+const signalHistory = ref<Array<{ cycle: number; strength: number; decision: string }>>([])
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 
-/** Rollback state */
 const rollbackLoading = ref(false)
 const toastMessage = ref('')
 const toastVisible = ref(false)
@@ -40,11 +44,9 @@ function showToast(message: string, duration = 3000) {
   }, duration)
 }
 
-/** Whether rollback is available (non-trading hours) */
 const canRollback = computed(() => {
   const us = execStore.marketStatus?.US
   const hk = execStore.marketStatus?.HK
-  // Available when both markets are known and closed (or unknown = assume closed)
   const usOpen = us?.is_open ?? false
   const hkOpen = hk?.is_open ?? false
   return !usOpen && !hkOpen
@@ -67,15 +69,47 @@ async function handleRollback() {
   }
 }
 
+async function fetchSignals() {
+  try {
+    await modelStore.fetchAllSignals()
+    const signals = modelStore.signals
+    if (signals.length > 0) {
+      signalHistory.value = signals.map((s, i) => ({
+        cycle: i + 1,
+        strength: Number(s.signal ?? s.confidence ?? 0),
+        decision: String(s.direction || 'hold').toLowerCase(),
+      }))
+      return
+    }
+  } catch {
+    // try direct API
+  }
+
+  try {
+    const data = await modelApi.getAllSignals()
+    const signals = data?.signals ?? []
+    signalHistory.value = signals.map((s: { signal?: number; confidence?: number; direction?: string }, i: number) => ({
+      cycle: i + 1,
+      strength: Number(s.signal ?? s.confidence ?? 0),
+      decision: String(s.direction || 'hold').toLowerCase(),
+    }))
+  } catch {
+    signalHistory.value = []
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([
+  await Promise.allSettled([
     portfolioStore.fetchPositions(),
     execStore.fetchAlerts(),
     execStore.fetchMarketStatus(),
+    riskStore.fetchBreakerStatus(),
     fetchNavHistory(),
+    fetchSignals(),
   ])
   refreshTimer = setInterval(() => {
     portfolioStore.fetchPositions()
+    fetchSignals()
   }, 30000)
 })
 
@@ -83,7 +117,6 @@ onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
-/** Fetch NAV history: primary source = /api/v2/analysis/portfolio-history, fallback = /api/trade/portfolio value_history */
 async function fetchNavHistory(): Promise<void> {
   try {
     const result = await tradeApi.getPortfolioHistory(90)
@@ -92,10 +125,9 @@ async function fetchNavHistory(): Promise<void> {
       return
     }
   } catch {
-    // Silent fallback — try the trade portfolio endpoint
+    // fallback
   }
 
-  // Fallback: use value_history from /api/trade/portfolio
   try {
     const portfolio = await tradeApi.getPortfolio()
     if (portfolio.value_history && portfolio.value_history.length > 0) {
@@ -103,13 +135,12 @@ async function fetchNavHistory(): Promise<void> {
       return
     }
   } catch {
-    // Ultimate fallback: empty chart
+    // empty
   }
 
   navHistory.value = []
 }
 
-// NAV chart option
 const navChartOption = computed(() => ({
   grid: { top: 8, right: 16, bottom: 4, left: 50 },
   tooltip: {
@@ -149,18 +180,18 @@ const navChartOption = computed(() => ({
 }))
 
 const nav = computed(() => portfolioStore.summary?.total_market_value ?? 0)
-const dailyPnl = computed(() => parseFloat(String(riskStore.varData?.daily_pnl ?? 0)))
-const dailyPnlPct = computed(() => parseFloat(String(riskStore.varData?.daily_pnl_pct ?? 0)))
-const drawdown = computed(() => parseFloat(String(riskStore.varData?.max_drawdown ?? 0)))
+const dailyPnl = computed(() => riskStore.dailyPnl)
+const dailyPnlPct = computed(() => riskStore.dailyPnlPct)
+const drawdown = computed(() => riskStore.currentDrawdown)
 const sharpe = computed(() => parseFloat(String(riskStore.varData?.sharpe_ratio ?? 0)))
 
 const positionCount = computed(() => portfolioStore.positions?.length ?? 0)
 const alertCount = computed(() => execStore.alerts.length)
+const marketMap = computed(() => execStore.marketStatus ?? {})
 </script>
 
 <template>
   <div class="space-y-6 xm-fade-in">
-    <!-- Toast Notification -->
     <Transition name="toast-slide">
       <div
         v-if="toastVisible"
@@ -171,7 +202,8 @@ const alertCount = computed(() => execStore.alerts.length)
       </div>
     </Transition>
 
-    <!-- KPI Cards Row with Rollback -->
+    <MarketStatusBar :markets="marketMap" />
+
     <div class="flex items-start gap-4">
       <div class="flex-1">
         <AccountSummary
@@ -201,17 +233,20 @@ const alertCount = computed(() => execStore.alerts.length)
       </button>
     </div>
 
-    <!-- Charts Row -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- NAV Chart -->
       <XmCard title="NAV Trend" class="lg:col-span-2 !p-5">
         <template #header>
           <XmBadge variant="info">Live</XmBadge>
         </template>
-        <VChart :option="navChartOption" style="height: 280px" autoresize />
+        <div
+          v-if="navHistory.length === 0"
+          class="flex items-center justify-center h-[280px] text-xm-text-tertiary text-sm"
+        >
+          No NAV history available
+        </div>
+        <VChart v-else :option="navChartOption" style="height: 280px" autoresize />
       </XmCard>
 
-      <!-- Quick Stats -->
       <XmCard title="Quick Stats" class="!p-5">
         <div class="space-y-4">
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
@@ -226,27 +261,42 @@ const alertCount = computed(() => execStore.alerts.length)
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
             <span class="text-sm text-xm-text-secondary">US Market</span>
-            <span class="text-sm font-mono" :class="execStore.marketStatus?.US?.is_open ? 'text-profit' : 'text-xm-text-tertiary'">
+            <span
+              class="text-sm font-mono"
+              :class="execStore.marketStatus?.US?.is_open ? 'text-profit' : 'text-xm-text-tertiary'"
+            >
               {{ execStore.marketStatus?.US?.is_open ? 'Open' : 'Closed' }}
             </span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
             <span class="text-sm text-xm-text-secondary">HK Market</span>
-            <span class="text-sm font-mono" :class="execStore.marketStatus?.HK?.is_open ? 'text-profit' : 'text-xm-text-tertiary'">
+            <span
+              class="text-sm font-mono"
+              :class="execStore.marketStatus?.HK?.is_open ? 'text-profit' : 'text-xm-text-tertiary'"
+            >
               {{ execStore.marketStatus?.HK?.is_open ? 'Open' : 'Closed' }}
             </span>
           </div>
           <div class="flex justify-between items-center py-2">
-            <span class="text-sm text-xm-text-secondary">Auto Trader</span>
-            <span class="text-sm font-mono text-profit font-semibold">Running</span>
+            <span class="text-sm text-xm-text-secondary">Signals</span>
+            <span class="text-sm font-mono font-semibold">{{ signalHistory.length }}</span>
           </div>
         </div>
       </XmCard>
     </div>
 
-    <!-- Recent Positions -->
+    <XmCard title="Signal Trend" class="!p-5">
+      <div
+        v-if="signalHistory.length === 0"
+        class="flex items-center justify-center h-[120px] text-xm-text-tertiary text-sm"
+      >
+        No signals available. Models may be offline.
+      </div>
+      <SignalTrendChart v-else :history="signalHistory" height="120px" />
+    </XmCard>
+
     <XmCard title="Recent Positions" class="!p-5">
-      <table class="xm-table" v-if="portfolioStore.positions && portfolioStore.positions.length > 0">
+      <table v-if="portfolioStore.positions && portfolioStore.positions.length > 0" class="xm-table">
         <thead>
           <tr>
             <th>Ticker</th>
@@ -261,8 +311,13 @@ const alertCount = computed(() => execStore.alerts.length)
             <td class="font-mono font-semibold">{{ pos.ticker }}</td>
             <td class="text-right font-mono">{{ pos.quantity?.toFixed(0) }}</td>
             <td class="text-right font-mono">${{ pos.cost_basis?.toFixed(2) }}</td>
-            <td class="text-right font-mono">${{ pos.market_value?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
-            <td class="text-right font-mono" :class="(pos.unrealized_pnl ?? 0) >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+            <td class="text-right font-mono">
+              ${{ pos.market_value?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+            </td>
+            <td
+              class="text-right font-mono"
+              :class="(pos.unrealized_pnl ?? 0) >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'"
+            >
               {{ (pos.unrealized_pnl ?? 0) >= 0 ? '+' : '' }}${{ pos.unrealized_pnl?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
             </td>
           </tr>
