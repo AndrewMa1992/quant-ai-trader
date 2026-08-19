@@ -529,6 +529,20 @@ class TigerExecutor:
             if tiger_order_id:
                 trade["tiger_order_id"] = tiger_order_id
                 trade["tiger_paper"] = True
+            try:
+                from shared.tiger_persist import persist_fill
+
+                persist_fill(
+                    ticker=ticker,
+                    side=side,
+                    quantity=quantity,
+                    price=price,
+                    order_id=str(tiger_order_id) if tiger_order_id else None,
+                    strategy=strategy,
+                    is_paper=True,
+                )
+            except Exception as exc:
+                logger.debug(f"persist_fill skipped: {exc}")
             logger.info(
                 f"📝 Paper {side} {ticker}: {quantity:.2f}股 @ ${price:.2f}"
             )

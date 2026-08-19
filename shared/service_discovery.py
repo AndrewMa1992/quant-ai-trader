@@ -17,6 +17,7 @@ SERVICE_PORT_MAP: Dict[str, int] = {
     "model_infer": int(os.getenv("QAT_MODEL_INFER_PORT", "8014")),
     "risk": int(os.getenv("QAT_RISK_PORT", "8015")),
     "execution": int(os.getenv("QAT_EXEC_PORT", "8016")),
+    "api": int(os.getenv("QAT_API_PORT", "8001")),
 }
 
 # Compose service DNS names when running under Docker
@@ -27,6 +28,7 @@ _DOCKER_HOST_DEFAULTS: Dict[str, str] = {
     "model_infer": "model-infer",
     "risk": "risk-service",
     "execution": "execution-service",
+    "api": "api-gateway",
 }
 
 _ENV_HOST_KEYS: Dict[str, str] = {
@@ -36,6 +38,7 @@ _ENV_HOST_KEYS: Dict[str, str] = {
     "model_infer": "QAT_SVC_MODEL_INFER_HOST",
     "risk": "QAT_SVC_RISK_HOST",
     "execution": "QAT_SVC_EXEC_HOST",
+    "api": "QAT_SVC_API_HOST",
 }
 
 

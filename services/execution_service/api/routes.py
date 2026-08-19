@@ -291,8 +291,17 @@ async def execute_order(req: OrderRequest) -> OrderResult:
 
 @router.get("/positions")
 async def get_positions() -> APIResponse:
-    """Get current positions."""
+    """Get current positions — prefer Tiger/DB snapshot, then in-memory tracker."""
     try:
+        from shared.tiger_persist import load_positions_for_api
+
+        db_data = load_positions_for_api()
+        if db_data.get("positions"):
+            return APIResponse(
+                success=True,
+                message=f"{len(db_data['positions'])} positions (db/tiger)",
+                data=db_data,
+            )
         positions = _position_tracker.get_positions()
         summary = _position_tracker.get_summary()
         return APIResponse(success=True, message=f"{len(positions)} positions", data={
@@ -455,6 +464,31 @@ async def list_orders(
                             continue
             except Exception as e:
                 log.warning(f"Failed to read orders cache: {e}")
+
+        # ── Tiger/SQLite orders table (paper + live sync) ───
+        try:
+            from shared.tiger_persist import load_orders_for_api
+
+            seen_ids = {str(o.get("order_id") or "") for o in orders}
+            for rec in load_orders_for_api(limit=limit, ticker=ticker):
+                oid = str(rec.get("order_id") or "")
+                if oid and oid in seen_ids:
+                    continue
+                if since:
+                    ts = rec.get("filled_at") or rec.get("submitted_at") or ""
+                    try:
+                        since_ts = datetime.fromisoformat(since.replace("Z", "+00:00")).timestamp()
+                        if ts:
+                            rt = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+                            if rt < since_ts:
+                                continue
+                    except (ValueError, TypeError):
+                        pass
+                orders.append(rec)
+                if oid:
+                    seen_ids.add(oid)
+        except Exception as e:
+            log.warning(f"Tiger DB orders query failed (non-fatal): {e}")
 
         # ── DB trades ────────────────────────────────────────
         try:

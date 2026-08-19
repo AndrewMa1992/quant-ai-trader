@@ -109,7 +109,7 @@ onMounted(async () => {
   refreshTimer = setInterval(() => {
     portfolioStore.fetchPositions()
     fetchSignals()
-  }, 30000)
+  }, 60000)
 })
 
 onUnmounted(() => {

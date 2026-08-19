@@ -101,6 +101,7 @@ def _build_service_urls() -> dict:
             "model_infer": service_base_url("model_infer"),
             "risk": service_base_url("risk"),
             "execution": service_base_url("execution"),
+            "api": service_base_url("api"),
         }
     except Exception:
         from configs.settings import settings
@@ -112,6 +113,7 @@ def _build_service_urls() -> dict:
             "model_infer": f"http://localhost:{settings.MODEL_INFER_PORT}",
             "risk": f"http://localhost:{settings.RISK_PORT}",
             "execution": f"http://localhost:{settings.EXEC_PORT}",
+            "api": f"http://localhost:{settings.API_PORT}",
         }
 
 

@@ -170,27 +170,22 @@ def get_account_info(force: bool = False) -> Optional[Dict[str, Any]]:
 
 
 def get_positions(force: bool = False) -> List[Dict[str, Any]]:
-    """Retrieve current Tiger positions.
-
-    Args:
-        force: If True, refresh from broker instead of cache.
-
-    Returns:
-        A list of position dicts. Empty list on failure.
-    """
+    """Retrieve current Tiger positions (normalized shares/quantity)."""
     try:
         client = _lazy_import()
         if client is None:
             return []
+        raw: List[Dict[str, Any]] = []
         if hasattr(client, "get_positions"):
-            # Try sync call with force param (legacy), fall back to async (v2)
             import inspect
             sig = inspect.signature(client.get_positions)
             if "force" in sig.parameters:
-                return client.get_positions(force=force)
-            # v2 TigerBroker — async method, no force param
-            return _run_async(client.get_positions())
-        return []
+                raw = client.get_positions(force=force) or []
+            else:
+                raw = _run_async(client.get_positions()) or []
+        from shared.tiger_persist import normalize_position
+
+        return [normalize_position(p if isinstance(p, dict) else dict(p)) for p in raw]
     except Exception as exc:
         logger.error(f"TigerBridge: get_positions failed — {exc}")
         return []
@@ -275,25 +270,51 @@ def get_quote(ticker: str) -> Optional[Dict[str, Any]]:
 
 
 def sync_all_to_db() -> Dict[str, Any]:
-    """Sync all Tiger positions / account info to the local database.
-
-    Returns:
-        Summary dict, e.g. {"positions_synced": 15, "account_updated": True}.
-        Returns an empty dict on failure.
-    """
+    """Sync Tiger positions / account / open orders into local SQLite + Redis."""
     try:
         client = _lazy_import()
         if client is None:
             return {"error": "client_unavailable", "positions_synced": 0, "account_updated": False}
         if hasattr(client, "sync_all_to_db"):
-            return client.sync_all_to_db()
-        # v2 TigerBroker — sync manually via get_positions + get_account_summary
-        positions = _run_async(client.get_positions()) if hasattr(client, "get_positions") else []
-        account = _run_async(client.get_account_summary()) if hasattr(client, "get_account_summary") else {}
-        return {
-            "positions_synced": len(positions) if isinstance(positions, list) else 0,
-            "account_updated": bool(account),
-        }
+            # Legacy path may already persist — also run our ORM writer for UI
+            try:
+                legacy = client.sync_all_to_db()
+            except Exception as exc:
+                logger.warning(f"legacy sync_all_to_db: {exc}")
+                legacy = {}
+        else:
+            legacy = {}
+
+        positions = get_positions(force=True)
+        account = get_account_info(force=True) or {}
+        open_orders: List[Dict[str, Any]] = []
+        try:
+            if hasattr(client, "get_open_orders"):
+                oo = client.get_open_orders()
+                open_orders = oo if isinstance(oo, list) else []
+            elif hasattr(client, "_client") and client._client is not None:
+                raw = client._client.get_open_orders()
+                for o in raw or []:
+                    ticker = ""
+                    if hasattr(o, "contract") and o.contract is not None:
+                        ticker = getattr(o.contract, "symbol", "") or ""
+                    open_orders.append({
+                        "order_id": str(getattr(o, "id", "") or getattr(o, "order_id", "")),
+                        "ticker": ticker,
+                        "side": str(getattr(o, "action", "") or getattr(o, "action_type", "")),
+                        "quantity": getattr(o, "quantity", 0),
+                        "status": str(getattr(o, "status", "SUBMITTED")),
+                        "price": getattr(o, "limit_price", 0) or getattr(o, "avg_fill_price", 0),
+                    })
+        except Exception as exc:
+            logger.debug(f"get_open_orders skipped: {exc}")
+
+        from shared.tiger_persist import persist_tiger_snapshot
+
+        snap = persist_tiger_snapshot(positions, account, open_orders)
+        if isinstance(legacy, dict) and legacy:
+            snap["legacy"] = legacy
+        return snap
     except Exception as exc:
         logger.error(f"TigerBridge: sync_all_to_db failed — {exc}")
         return {"error": str(exc), "positions_synced": 0, "account_updated": False}

@@ -46,6 +46,28 @@ Home GPU already has `QAT-Local-TrainSync` at 03:00 — keep models fresh.
 - Tiger credentials must be valid for paper account routing
 - Markets closed (non-US) still need liquidity/lot awareness
 
+## Tiger realtime → DB + frontend
+
+Every pipeline cycle:
+
+1. `TigerBridge.sync_all_to_db()` → SQLite `positions` / `portfolios` / `orders`
+2. Paper fills → `persist_fill()` → `orders` + `executions` + `trades`
+3. `WsPusher` → gateway `/api/v2/push/tiger-snapshot` + `/api/v2/push/cycle-data`
+4. Frontend joins `/ws?room=tiger,market-data` and updates Pinia immediately
+
+Required `.env` (Lightsail):
+
+```
+QAT_TIGER_ID=...
+QAT_TIGER_ACCOUNT=...          # paper account
+QAT_TIGER_PRIVATE_KEY_PATH=./certs/tiger_private_key.pem
+QAT_TIGER_LICENSE=...
+QAT_TIGER_PAPER_TRADING=true
+QAT_ENABLE_WS_PUSH=true         # or ENABLE_WS_PUSH via pipeline config
+```
+
+DB file: `data/quant_trader.db` (WAL). REST hydrate: `GET /api/v2/execution/positions` and `/orders`.
+
 ## Kill / promote
 
 See `docs/INSTITUTIONAL_STANDARDS.md`. Live requires sim off + mode live + promotion approve.
