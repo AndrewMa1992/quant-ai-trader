@@ -52,51 +52,63 @@ jobs:
           TIGER_ACCOUNT: ${{ secrets.TIGER_ACCOUNT }}
           TIGER_LICENSE: ${{ secrets.TIGER_LICENSE }}
         run: |
-          # Note: do not use secrets.* in job/step `if:` — GitHub rejects that and the whole workflow fails.
+          # Do not gate this step with secrets.* in YAML `if:` (GitHub rejects it).
           if ([string]::IsNullOrWhiteSpace($env:TIGER_PRIVATE_KEY)) {
-            Write-Host "TIGER_PRIVATE_KEY secret not set — skip materialize (deploy continues)"
+            Write-Host 'TIGER_PRIVATE_KEY secret not set - skip materialize (deploy continues)'
             exit 0
           }
-          $root = "C:\quant-ai-trader"
-          $certs = Join-Path $root "certs"
-          New-Item -ItemType Directory -Force -Path $certs | Out-Null
-          $pemPath = Join-Path $certs "tiger_private_key.pem"
-          $raw = $env:TIGER_PRIVATE_KEY
-          if ($raw -notmatch "BEGIN") {
-            $lines = @()
-            for ($i = 0; $i -lt $raw.Length; $i += 64) {
-              $len = [Math]::Min(64, $raw.Length - $i)
-              $lines += $raw.Substring($i, $len)
-            }
-            $raw = "-----BEGIN RSA PRIVATE KEY-----`n" + ($lines -join "`n") + "`n-----END RSA PRIVATE KEY-----`n"
-          }
-          Set-Content -Path $pemPath -Value $raw -Encoding ascii -NoNewline:$false
-          Write-Host "Wrote Tiger PEM to $pemPath ($((Get-Item $pemPath).Length) bytes)"
 
-          $envFile = Join-Path $root ".env"
-          if (-not (Test-Path $envFile)) {
-            Copy-Item (Join-Path $root ".env.windows") $envFile -ErrorAction SilentlyContinue
-          }
-          function Upsert-Env([string]$key, [string]$value) {
-            if ([string]::IsNullOrWhiteSpace($value)) { return }
-            if (-not (Test-Path $envFile)) { New-Item -ItemType File -Path $envFile | Out-Null }
-            $lines = Get-Content $envFile -ErrorAction SilentlyContinue
-            $found = $false
-            $out = foreach ($line in $lines) {
-              if ($line -match "^$([regex]::Escape($key))=") {
-                $found = $true
-                "$key=$value"
-              } else { $line }
+          $root = 'C:\quant-ai-trader'
+          $certs = Join-Path $root 'certs'
+          New-Item -ItemType Directory -Force -Path $certs | Out-Null
+          $pemPath = Join-Path $certs 'tiger_private_key.pem'
+          $raw = $env:TIGER_PRIVATE_KEY.Trim()
+
+          if ($raw -notmatch 'BEGIN') {
+            $chunks = for ($i = 0; $i -lt $raw.Length; $i += 64) {
+              $raw.Substring($i, [Math]::Min(64, $raw.Length - $i))
             }
-            if (-not $found) { $out += "$key=$value" }
-            Set-Content -Path $envFile -Value $out -Encoding utf8
-            Write-Host "Upserted $key in .env"
+            $body = ($chunks -join "`n")
+            $raw = "-----BEGIN RSA PRIVATE KEY-----`n$body`n-----END RSA PRIVATE KEY-----"
           }
-          Upsert-Env "QAT_TIGER_ID" $env:TIGER_ID
-          Upsert-Env "QAT_TIGER_ACCOUNT" $env:TIGER_ACCOUNT
-          Upsert-Env "QAT_TIGER_LICENSE" $env:TIGER_LICENSE
-          Upsert-Env "QAT_TIGER_PRIVATE_KEY_PATH" "./certs/tiger_private_key.pem"
-          Upsert-Env "QAT_TIGER_PAPER_TRADING" "true"
+
+          Set-Content -Path $pemPath -Value $raw -Encoding ascii
+          $bytes = (Get-Item -LiteralPath $pemPath).Length
+          Write-Host ("Wrote Tiger PEM to {0} ({1} bytes)" -f $pemPath, $bytes)
+
+          $envFile = Join-Path $root '.env'
+          if (-not (Test-Path $envFile)) {
+            $template = Join-Path $root '.env.windows'
+            if (Test-Path $template) { Copy-Item $template $envFile }
+          }
+          if (-not (Test-Path $envFile)) {
+            New-Item -ItemType File -Path $envFile | Out-Null
+          }
+
+          function Set-DotEnvValue([string]$Key, [string]$Value) {
+            if ([string]::IsNullOrWhiteSpace($Value)) { return }
+            $content = @(Get-Content -LiteralPath $envFile -ErrorAction SilentlyContinue)
+            $pattern = '^{0}=' -f [regex]::Escape($Key)
+            $replaced = $false
+            $next = foreach ($line in $content) {
+              if ($line -match $pattern) {
+                $replaced = $true
+                '{0}={1}' -f $Key, $Value
+              } else {
+                $line
+              }
+            }
+            if (-not $replaced) { $next += ('{0}={1}' -f $Key, $Value) }
+            Set-Content -LiteralPath $envFile -Value $next -Encoding utf8
+            Write-Host ("Upserted {0} in .env" -f $Key)
+          }
+
+          Set-DotEnvValue 'QAT_TIGER_ID' $env:TIGER_ID
+          Set-DotEnvValue 'QAT_TIGER_ACCOUNT' $env:TIGER_ACCOUNT
+          Set-DotEnvValue 'QAT_TIGER_LICENSE' $env:TIGER_LICENSE
+          Set-DotEnvValue 'QAT_TIGER_PRIVATE_KEY_PATH' './certs/tiger_private_key.pem'
+          Set-DotEnvValue 'QAT_TIGER_PAPER_TRADING' 'true'
+
 
       - name: Deploy paper stack
         shell: powershell
