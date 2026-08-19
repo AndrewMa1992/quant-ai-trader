@@ -10,6 +10,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const backtestResult = ref<BacktestResult | null>(null)
   const loading = ref(false)
   const error = ref('')
+  const liveSource = ref('')
+  const lastLiveAt = ref('')
 
   // Computed: positions with color coding (green = positive PnL, red = negative)
   const positionsWithColors = computed(() => {
@@ -17,7 +19,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       ...p,
       pnlColor: (p.unrealized_pnl ?? 0) >= 0 ? 'profit' as const : 'loss' as const,
       pnlPercent: p.cost_basis > 0
-        ? ((p.unrealized_pnl ?? 0) / (p.cost_basis * p.quantity)) * 100
+        ? ((p.unrealized_pnl ?? 0) / (p.cost_basis * Math.abs(p.quantity || 1))) * 100
         : 0,
     }))
   })
@@ -26,6 +28,45 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const totalValue = computed(() => summary.value?.total_market_value ?? 0)
   const totalPnl = computed(() => summary.value?.total_pnl ?? 0)
   const unrealizedPnl = computed(() => summary.value?.unrealized_pnl ?? 0)
+  const cash = computed(() => (summary.value as PortfolioSummary & { cash?: number } | null)?.cash ?? 0)
+
+  /** Apply Tiger/local paper WS snapshot immediately (no HTTP round-trip). */
+  function applyTigerSnapshot(snap: Record<string, unknown>) {
+    const rawPos = (snap.positions as Array<Record<string, unknown>> | undefined) ?? []
+    positions.value = rawPos.map((p) => {
+      const qty = Number(p.quantity ?? p.shares ?? 0)
+      const avg = Number(p.avg_cost ?? p.cost_basis ?? 0)
+      const mv = Number(p.market_value ?? 0)
+      const px = Number(p.market_price ?? (qty ? mv / Math.abs(qty) : 0))
+      const unreal = Number(p.unrealized_pnl ?? (px - avg) * qty)
+      return {
+        ticker: String(p.ticker ?? ''),
+        quantity: qty,
+        cost_basis: avg,
+        market_value: mv,
+        unrealized_pnl: unreal,
+        day_trades: 0,
+      }
+    }).filter((p) => p.ticker)
+
+    const nav = Number(snap.nav ?? snap.total_value ?? 0)
+    const cashAmt = Number(
+      (snap.cash as number | undefined)
+      ?? (snap.account as Record<string, unknown> | undefined)?.cash
+      ?? 0,
+    )
+    const pnlSum = positions.value.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0)
+    summary.value = {
+      position_count: positions.value.length,
+      total_market_value: nav || positions.value.reduce((s, p) => s + Math.abs(p.market_value || 0), 0),
+      unrealized_pnl: pnlSum,
+      realized_pnl: 0,
+      total_pnl: pnlSum,
+      ...( { cash: cashAmt } as Partial<PortfolioSummary> ),
+    } as PortfolioSummary
+    liveSource.value = String(snap.source || 'tiger')
+    lastLiveAt.value = String(snap.timestamp || new Date().toISOString())
+  }
 
   async function fetchPositions() {
     loading.value = true
@@ -87,7 +128,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
   return {
     positions, summary, optimizeResult, backtestResult, loading, error,
-    positionsWithColors, totalValue, totalPnl, unrealizedPnl,
-    fetchPositions, optimize, optimizeBL, optimizeRiskParity, runBacktest,
+    liveSource, lastLiveAt,
+    positionsWithColors, totalValue, totalPnl, unrealizedPnl, cash,
+    fetchPositions, applyTigerSnapshot, optimize, optimizeBL, optimizeRiskParity, runBacktest,
   }
 })

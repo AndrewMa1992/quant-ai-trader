@@ -546,6 +546,23 @@ class TradingPipeline:
         except Exception as e:
             logger.warning(f"状态保存异常: {e}")
 
+        # ── P2-2: Tiger 全量同步到本地 DB (每轮 + Redis/WS) ──────────
+        tiger_snap: Dict = {}
+        if self.tiger_ready:
+            try:
+                tiger_snap = self.tiger.sync_all_to_db() or {}
+                # Also refresh in-memory portfolio from Tiger paper
+                try:
+                    self.portfolio.sync_from_tiger(self.tiger, force=False)
+                except Exception:
+                    pass
+                logger.info(
+                    f"Tiger sync: positions={tiger_snap.get('positions_synced', 0)} "
+                    f"NAV={tiger_snap.get('nav', 0)}"
+                )
+            except Exception as e:
+                logger.warning(f"Tiger sync_all_to_db: {e}")
+
         # ── Redis: cycle + portfolio + signals ───────────────
         try:
             from shared.market_cache import (
@@ -571,13 +588,33 @@ class TradingPipeline:
         except Exception as e:
             logger.debug(f"Redis cycle publish skipped: {e}")
 
-        # ── P2-2: Tiger 全量同步到本地 DB (每10轮) ──────────
-        if self.tiger_ready and self.cycle_count % 10 == 0:
-            try:
-                self.tiger.sync_all_to_db()
-                logger.debug(f"Tiger 全量同步完成 (cycle #{self.cycle_count})")
-            except Exception:
-                pass  # 静默降级，不阻塞交易
+        # Push Tiger snapshot to frontend WS room
+        try:
+            if tiger_snap and not tiger_snap.get("error"):
+                await self.ws_pusher.push_tiger_snapshot(tiger_snap)
+            else:
+                # Local paper book snapshot when Tiger offline
+                await self.ws_pusher.push_tiger_snapshot({
+                    "type": "tiger_snapshot",
+                    "source": "local_paper",
+                    "nav": self.portfolio.total_value,
+                    "cash": self.portfolio.cash,
+                    "positions": [
+                        {
+                            "ticker": t,
+                            "quantity": s,
+                            "shares": s,
+                            "avg_cost": self.portfolio.avg_costs.get(t, 0),
+                            "market_value": s * self.portfolio._last_prices.get(
+                                t, self.portfolio.avg_costs.get(t, 0)
+                            ),
+                        }
+                        for t, s in self.portfolio.positions.items()
+                        if s != 0
+                    ],
+                })
+        except Exception as e:
+            logger.debug(f"tiger snapshot push skipped: {e}")
 
         # ── 周期汇总 ─────────────────────────────────────────
         elapsed: float = time.time() - t_start

@@ -163,11 +163,18 @@ class PortfolioManager:
             # Load positions.
             for pos in tiger_positions:
                 ticker: str = pos.get("ticker", "")
-                shares: float = float(pos.get("shares", 0.0))
+                shares: float = float(
+                    pos.get("shares")
+                    if pos.get("shares") is not None
+                    else pos.get("quantity", 0.0)
+                )
                 avg_cost: float = float(pos.get("avg_cost", 0.0))
                 if ticker and shares != 0.0:
                     self.positions[ticker] = shares
                     self.avg_costs[ticker] = avg_cost
+                    mv = float(pos.get("market_value") or 0.0)
+                    if mv > 0 and abs(shares) > 0:
+                        self._last_prices[ticker] = mv / abs(shares)
 
             # Compute total_value — Tiger's is authoritative.
             if tiger_total > 0:

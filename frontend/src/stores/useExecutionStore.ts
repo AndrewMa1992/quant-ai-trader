@@ -60,6 +60,40 @@ export const useExecutionStore = defineStore('execution', () => {
     cbStatus.value = status
   }
 
+  /** Apply cycle / alert payloads from gateway WebSocket. */
+  function applyCyclePush(msg: Record<string, unknown>) {
+    const type = String(msg.type || '')
+    if (type === 'alert') {
+      alerts.value.unshift({
+        id: `ws-${Date.now()}`,
+        message: String(msg.message || ''),
+        severity: String(msg.alert_type || msg.severity || 'info'),
+        source: 'ws',
+        timestamp: new Date().toISOString(),
+      })
+      if (alerts.value.length > 100) alerts.value = alerts.value.slice(0, 100)
+      return
+    }
+    const data = (msg.data as Record<string, unknown> | undefined) || msg
+    const maybeOrders = data.orders
+    if (Array.isArray(maybeOrders)) {
+      for (const o of maybeOrders as Array<Record<string, unknown>>) {
+        const oid = String(o.order_id || '')
+        if (!oid) continue
+        if (orders.value.some((x) => x.order_id === oid)) continue
+        orders.value.unshift({
+          order_id: oid,
+          ticker: String(o.ticker || ''),
+          side: String(o.side || ''),
+          quantity: Number(o.quantity || 0),
+          status: String(o.status || 'FILLED'),
+          timestamp: String(o.timestamp || o.filled_at || new Date().toISOString()),
+        })
+      }
+      if (orders.value.length > 200) orders.value = orders.value.slice(0, 200)
+    }
+  }
+
   async function rollback(): Promise<{ success: boolean; message: string; timestamp: string } | null> {
     try {
       const result = await executionApi.rollback()
@@ -73,6 +107,6 @@ export const useExecutionStore = defineStore('execution', () => {
 
   return {
     orders, alerts, marketStatus, cbStatus, loading, error,
-    fetchAlerts, fetchMarketStatus, placeOrder, setCBStatus, rollback,
+    fetchAlerts, fetchMarketStatus, placeOrder, setCBStatus, applyCyclePush, rollback,
   }
 })

@@ -303,18 +303,38 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time market data and alerts.
 
     Supports room-based subscriptions via ``?room=<name>`` query parameter.
-    Rooms: ``market-data``, ``tiger``, or custom names.
+    Comma-separated rooms allowed (e.g. ``tiger,market-data``).
+    Empty room → join both ``tiger`` and ``market-data`` (dashboard default).
+    Clients may also send JSON ``{"action":"join","room":"..."}``.
     """
-    room = websocket.query_params.get("room", "")
+    import json as _json
+
+    room_param = websocket.query_params.get("room", "")
     await websocket_manager.connect(websocket)
-    if room:
-        await websocket_manager.join_room(websocket, room)
+    if room_param.strip():
+        for room in [r.strip() for r in room_param.split(",") if r.strip()]:
+            await websocket_manager.join_room(websocket, room)
+    else:
+        await websocket_manager.join_room(websocket, "tiger")
+        await websocket_manager.join_room(websocket, "market-data")
     try:
         while True:
-            # Keep connection alive; clients may send pings
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
+                continue
+            try:
+                msg = _json.loads(data)
+                if isinstance(msg, dict) and msg.get("action") == "join":
+                    room = str(msg.get("room") or "").strip()
+                    if room:
+                        await websocket_manager.join_room(websocket, room)
+                elif isinstance(msg, dict) and msg.get("action") == "leave":
+                    room = str(msg.get("room") or "").strip()
+                    if room:
+                        await websocket_manager.leave_room(websocket, room)
+            except Exception:
+                pass
     except WebSocketDisconnect:
         pass
     except Exception:

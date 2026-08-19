@@ -1,6 +1,12 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import { startRealtimeSync } from '@/composables/useRealtimeSync'
+
+onMounted(() => {
+  startRealtimeSync()
+})
 </script>
 
 <template>
