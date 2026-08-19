@@ -458,6 +458,42 @@ class TestP04_TigerSync:
         assert result["synced"] is False
         assert result["source"] in ("tiger_offline", "none")
 
+    def test_sync_from_tiger_zero_nav_preserves_paper_capital(self, monkeypatch):
+        """Paper/sim: empty Tiger account must not wipe local $1700 buying power."""
+        from shared.portfolio_manager import PortfolioManager
+
+        monkeypatch.setenv("QAT_TRADING_SIMULATION_MODE", "true")
+        pf = PortfolioManager(initial_capital=1700.0)
+        assert pf.cash == 1700.0
+
+        mock_tiger = MagicMock()
+        mock_tiger.is_connected.return_value = True
+        mock_tiger.connect.return_value = True
+        mock_tiger.get_positions.return_value = []
+        mock_tiger.get_account_info.return_value = {
+            "cash": 0.0,
+            "total_value": 0.0,
+            "leverage": 1.0,
+        }
+
+        result = pf.sync_from_tiger(mock_tiger, force=False)
+        assert result["synced"] is False
+        assert result["source"] == "tiger_zero_nav_preserved"
+        assert pf.cash == 1700.0
+        assert pf.total_value == 1700.0
+
+    def test_ensure_buying_power_restores_wiped_book(self, monkeypatch):
+        """If state was already wiped to $0, restore sim floor capital."""
+        from shared.portfolio_manager import PortfolioManager
+
+        monkeypatch.setenv("QAT_TRADING_SIMULATION_MODE", "true")
+        pf = PortfolioManager(initial_capital=1700.0)
+        pf.cash = 0.0
+        pf.total_value = 0.0
+        assert pf.ensure_buying_power(1700.0) is True
+        assert pf.cash == 1700.0
+        assert pf.total_value == 1700.0
+
 
 # ── P0-5: 桥接清理 ──────────────────────────────────────────
 

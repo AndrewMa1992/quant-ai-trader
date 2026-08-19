@@ -483,12 +483,29 @@ class TigerExecutor:
 
         if use_tiger_paper and self.tiger is not None:
             try:
+                # Skip broker submit when Tiger paper has no buying power —
+                # still fill locally so US paper book can trade.
+                tiger_cash_ok = True
+                try:
+                    if hasattr(self.tiger, "get_account_info"):
+                        acct = self.tiger.get_account_info()
+                        if acct is not None:
+                            tc = float(acct.get("cash", 0) or 0)
+                            tv = float(acct.get("total_value", 0) or 0)
+                            if tc <= 1.0 and tv <= 1.0 and side.upper() == "BUY":
+                                tiger_cash_ok = False
+                                logger.info(
+                                    f"Tiger paper cash≈0 — skip broker BUY for {ticker}, local sim only"
+                                )
+                except Exception:
+                    tiger_cash_ok = True
+
                 connected = False
                 if hasattr(self.tiger, "is_connected"):
                     connected = bool(self.tiger.is_connected())
                 elif hasattr(self.tiger, "connect"):
                     connected = True
-                if connected or hasattr(self.tiger, "place_order"):
+                if tiger_cash_ok and (connected or hasattr(self.tiger, "place_order")):
                     qty_int = max(1, int(quantity))
                     order_result = None
                     if hasattr(self.tiger, "place_order"):

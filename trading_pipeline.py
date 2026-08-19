@@ -143,6 +143,12 @@ class TradingPipeline:
         )
         # 尝试加载已有状态
         self.portfolio.load_state("data/portfolio_state.json")
+        # Recover if a prior Tiger zero-NAV sync wiped local buying power
+        if self.portfolio.ensure_buying_power(_init_cap):
+            logger.warning(
+                f"  💰 Paper capital restored to ${_init_cap:,.2f} "
+                f"(Tiger paper account was empty / unfunded)"
+            )
         logger.info(
             f"  ✅ PortfolioManager 已就绪 "
             f"(初始 ${_init_cap:,.2f}, "
@@ -350,6 +356,7 @@ class TradingPipeline:
         if self.tiger_ready:
             try:
                 sync_result = self.portfolio.sync_from_tiger(self.tiger, force=False)
+                src = sync_result.get("source", "")
                 if sync_result.get("synced"):
                     self.risk_manager.sync_portfolio_value(
                         self.portfolio.total_value,
@@ -367,6 +374,16 @@ class TradingPipeline:
                     logger.info(
                         f"🔄 Tiger 同步: {sync_result.get('positions')} 只持仓, "
                         f"现金 ${sync_result.get('cash', 0):,.2f}"
+                    )
+                elif src == "tiger_zero_nav_preserved":
+                    # Keep risk/local book aligned with preserved capital
+                    self.risk_manager.sync_portfolio_value(
+                        self.portfolio.total_value,
+                        self.portfolio.cash,
+                        is_tiger_sync=False,
+                    )
+                    logger.warning(
+                        "🛡️ Tiger 纸账户 NAV≈0 — 已保留本地资金，继续本地 paper 下单"
                     )
             except Exception as e:
                 logger.warning(f"Tiger 同步异常（继续使用本地数据）: {e}")
@@ -997,9 +1014,70 @@ class TradingPipeline:
                 f"floor={self.config.SIGNAL_THRESHOLD_MIN}, "
                 f"min_conf={self.config.MIN_CONFIDENCE})"
             )
+            if not signals:
+                signals = self._factor_score_fallback(factor_df, tickers)
             return signals
         except Exception as e:
             logger.error(f"Step 3 推理失败: {e}", exc_info=True)
+            return self._factor_score_fallback(factor_df, tickers)
+
+    def _factor_score_fallback(self, factor_df, tickers: List[str]) -> List[Dict]:
+        """When models return no signals, rank by simple factor score so paper can trade.
+
+        Prefer momentum-like columns; otherwise mean of numeric factor columns.
+        """
+        if factor_df is None or getattr(factor_df, "empty", True):
+            return []
+        try:
+            df = factor_df.copy()
+            if "ticker" not in df.columns:
+                return []
+            prefer = [
+                c
+                for c in df.columns
+                if any(
+                    k in str(c).lower()
+                    for k in ("mom", "ret", "momentum", "trend", "alpha")
+                )
+            ]
+            num_cols = [
+                c
+                for c in (prefer or list(df.columns))
+                if c != "ticker" and pd.api.types.is_numeric_dtype(df[c])
+            ]
+            if not num_cols:
+                return []
+            scores = df[num_cols].astype(float).mean(axis=1)
+            df = df.assign(_score=scores)
+            df = df.dropna(subset=["_score"])
+            df = df.sort_values("_score", ascending=False)
+            top_n = int(getattr(self.config, "TOP_N_SIGNALS", 10) or 10)
+            out: List[Dict] = []
+            for _, row in df.head(max(1, top_n)).iterrows():
+                ticker = str(row["ticker"])
+                if tickers and ticker not in tickers:
+                    continue
+                score = float(row["_score"])
+                if abs(score) < 1e-12:
+                    continue
+                strength = min(1.0, abs(score) / (abs(scores).max() + 1e-9))
+                out.append(
+                    {
+                        "ticker": ticker,
+                        "signal": float(np.sign(score) * strength),
+                        "strength": strength,
+                        "confidence": 0.45,
+                        "decision": "BUY" if score > 0 else "SELL",
+                        "source": "factor_fallback",
+                    }
+                )
+            if out:
+                logger.warning(
+                    f"  Step 3: model empty — factor fallback produced {len(out)} signals"
+                )
+            return out
+        except Exception as exc:
+            logger.debug(f"factor fallback skipped: {exc}")
             return []
 
     # ═══════════════════════════════════════════════════════════════
