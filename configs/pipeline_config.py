@@ -41,8 +41,8 @@ class PipelineConfig:
     # ── P0-P1 新增参数 ──────────────────────────────────────────
     # Default paper for safety; set QAT_EXECUTION_MODE=live explicitly for live trading
     EXECUTION_MODE: str = "paper"              # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
-    MAX_DAILY_TRADES: int = 5                  # 每日交易上限，5笔/天安全起步
-    DAILY_LOSS_LIMIT: float = 0.05             # 日亏损熔断阈值（组合价值%），默认 5%
+    MAX_DAILY_TRADES: int = 24                 # 五市场轮询 + 小资金日内可成交次数
+    DAILY_LOSS_LIMIT: float = 0.03             # 对齐 RISK_LIMITS 日亏损熔断
     LEVERAGE_LIMIT: float = 1.001              # 杠杆上限，≥ 此值阻止买入
     V1_FALLBACK_RETRIES: int = 3               # v2 服务 HTTP 调用重试次数
     ENABLE_WS_PUSH: bool = True                # 是否启用前端 WebSocket 推送
@@ -50,9 +50,12 @@ class PipelineConfig:
     FORCE_SELL_TICKERS: list = field(default_factory=list)  # 启动时强制清仓列表
 
     ENABLE_ALERTS: bool = True                 # 是否启用告警
+    MODEL_MAX_AGE_DAYS: int = 14             # 模型过期则降仓/HOLD
+    PREFER_OPEN_MARKETS: bool = True        # 轮询时优先当前开市市场
 
     # ── 交易参数 ──────────────────────────────────────────────
-    MIN_TRADE_VALUE: float = 1000.0            # 最小交易金额（USD）
+    # Floor only — live min trade comes from shared.capital_policy
+    MIN_TRADE_VALUE: float = 50.0
 
     # ── v2 微服务地址 ─────────────────────────────────────────
     SERVICE_BASE_URLS: dict = field(default_factory=lambda: _build_service_urls())

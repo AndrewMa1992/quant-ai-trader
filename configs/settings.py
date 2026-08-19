@@ -132,7 +132,10 @@ class Settings(BaseSettings):
     )
     TIGER_CLIENT_VERSION: str = Field(default="3.0.0")
     TIGER_LICENSE: str = Field(default="")
-    TIGER_PAPER_TRADING: bool = Field(default=False, description="Tiger paper trading mode")
+    TIGER_PAPER_TRADING: bool = Field(
+        default=True,
+        description="Route paper fills to Tiger paper account when connected",
+    )
     TIGER_CONFIG_DIR: str = Field(default="~/.tigeropen", description="Tiger SDK config directory")
 
     # ── External Data APIs ───────────────────────────────────
@@ -282,7 +285,7 @@ class Settings(BaseSettings):
     TRADING_COMMISSION_RATE: float = Field(default=0.001)
     TRADING_SLIPPAGE: float = Field(default=0.0005)
     TRADING_MIN_CONFIDENCE: float = Field(default=0.15)
-    TRADING_MIN_TRADE_VALUE: float = Field(default=300.0)
+    TRADING_MIN_TRADE_VALUE: float = Field(default=50.0)
     TRADING_MIN_SHARES: int = Field(default=1)
     TRADING_NO_LEVERAGE: bool = Field(default=True, description="Disable leverage entirely")
     TRADING_MAX_CASH_USAGE: float = Field(default=0.95, description="Max portion of cash to deploy")

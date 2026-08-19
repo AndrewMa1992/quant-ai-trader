@@ -33,6 +33,7 @@ MIN_TRADE_VALUE: float = 100.0
 DEFAULT_BREAKER_MODE: str = "hard"
 
 
+
 @dataclass
 class RiskReport:
     """Risk-check result returned by all RiskManager check methods.
@@ -114,12 +115,27 @@ class RiskManager:
         # Institutional kill switch (durable)
         self.kill_switch_engaged: bool = False
 
+        # Capital-aware thresholds (micro accounts e.g. $1700)
+        try:
+            from shared.capital_policy import build_capital_policy
+
+            pol = build_capital_policy(initial_capital)
+            self.MIN_TRADE_VALUE = pol.min_trade_value
+            self.MAX_POSITION_SIZE = pol.max_position_frac
+            self.MAX_CASH_USAGE = pol.max_cash_usage
+            if max_daily_trades <= 0:
+                self.max_daily_trades = pol.max_daily_trades
+        except Exception as exc:
+            logger.warning(f"capital_policy unavailable: {exc}")
+
         logger.info(
             f"RiskManager initialised | mode={breaker_mode} | "
             f"capital=${initial_capital:,.0f} | "
+            f"min_trade=${self.MIN_TRADE_VALUE:.0f} | "
+            f"max_pos={self.MAX_POSITION_SIZE:.0%} | "
             f"daily_loss_limit={self.DAILY_LOSS_LIMIT:.0%} | "
             f"max_drawdown={self.MAX_DRAWDOWN:.0%} | "
-            f"limits=RISK_LIMITS"
+            f"limits=RISK_LIMITS+capital_policy"
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -736,3 +752,59 @@ class RiskManager:
         old: str = self.breaker_mode
         self.breaker_mode = mode
         logger.info(f"🔧 断路器模式切换: {old} → {mode}")
+
+    def save_state(self, path: str = "data/risk_state.json") -> None:
+        """Persist breaker / daily anchors so restarts do not false-trigger."""
+        import json
+        from pathlib import Path
+
+        payload = {
+            "portfolio_value": self.portfolio_value,
+            "cash": self.cash,
+            "peak_value": self.peak_value,
+            "daily_start_value": self.daily_start_value,
+            "circuit_breaker_triggered": self.circuit_breaker_triggered,
+            "circuit_breaker_time": (
+                self.circuit_breaker_time.isoformat()
+                if self.circuit_breaker_time
+                else None
+            ),
+            "trades_today": self.trades_today,
+            "max_daily_trades": self.max_daily_trades,
+            "MIN_TRADE_VALUE": self.MIN_TRADE_VALUE,
+            "MAX_POSITION_SIZE": self.MAX_POSITION_SIZE,
+            "saved_at": datetime.now().isoformat(),
+        }
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def load_state(self, path: str = "data/risk_state.json") -> bool:
+        """Restore risk anchors if file exists. Returns True if loaded."""
+        import json
+        from pathlib import Path
+
+        p = Path(path)
+        if not p.exists():
+            return False
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            self.peak_value = float(data.get("peak_value", self.peak_value))
+            self.daily_start_value = float(data.get("daily_start_value", 0.0))
+            self.circuit_breaker_triggered = bool(
+                data.get("circuit_breaker_triggered", False)
+            )
+            ts = data.get("circuit_breaker_time")
+            self.circuit_breaker_time = (
+                datetime.fromisoformat(ts) if ts else None
+            )
+            self.trades_today = int(data.get("trades_today", 0))
+            if data.get("MIN_TRADE_VALUE"):
+                self.MIN_TRADE_VALUE = float(data["MIN_TRADE_VALUE"])
+            if data.get("MAX_POSITION_SIZE"):
+                self.MAX_POSITION_SIZE = float(data["MAX_POSITION_SIZE"])
+            logger.info(f"RiskManager state loaded from {path}")
+            return True
+        except Exception as exc:
+            logger.warning(f"RiskManager load_state failed: {exc}")
+            return False
