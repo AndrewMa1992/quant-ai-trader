@@ -3,7 +3,7 @@
 > 最前沿科技打造的量化AI美股交易系统，对标顶级量化基金标准。  
 > Python 全栈 + PyTorch/TensorFlow AI 引擎 + Vue 3 前端 + 老虎证券 API
 
-## 🐳 Docker 一键部署（模拟盘）
+## 🐳 Docker 一键部署（模拟盘 · Linux）
 
 ```bash
 chmod +x scripts/docker_deploy.sh
@@ -12,6 +12,17 @@ chmod +x scripts/docker_deploy.sh
 ```
 
 详见 [DEPLOY.md](./DEPLOY.md)。默认强制 `paper` 模拟模式。
+
+## 🪟 Windows Server / Lightsail 部署（原生 · 无 Docker）
+
+```powershell
+git checkout cursor/quant-upgrade-a75f
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\windows_deploy.ps1 -OpenFirewall
+# 外网: http://<公网IP>:5180
+```
+
+详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP 登录、放行端口、一键启停）。
 
 ## 🚀 核心功能
 
