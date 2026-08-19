@@ -43,10 +43,15 @@ async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} (env={settings.ENV})")
 
-    # Initialize database engine
+    # Initialize database engine + create missing tables (SQLite paper friendly)
     try:
         engine = get_engine()
-        logger.info("Database engine initialized")
+        import shared.models  # noqa: F401 - register ORM metadata
+        from shared.models.base import Base
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database engine initialized (schema ensure)")
     except Exception as e:
         logger.error(f"Database engine initialization failed: {e}")
 
@@ -438,21 +443,38 @@ async def proxy_to_service(service: str, path: str, request: Request) -> Respons
             detail=f"Service {service} timed out",
         )
 
-# ── SPA Catch-all (must be last route registered) ────────────
+# ── Frontend static assets + SPA (must be after API routes) ─
+from pathlib import Path as _Path
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+_FRONTEND_DIST = _Path("frontend/dist")
+_FRONTEND_ASSETS = _FRONTEND_DIST / "assets"
+if _FRONTEND_ASSETS.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_ASSETS)), name="frontend-assets")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Any:
+    icon = _FRONTEND_DIST / "favicon.ico"
+    if icon.exists():
+        return FileResponse(str(icon))
+    raise HTTPException(status_code=404, detail="favicon not found")
+
+
 @app.get("/{full_path:path}", tags=["SPA"])
 async def spa_catchall(full_path: str) -> Any:
-    """Serve the SPA frontend for any non-API route.
+    """SPA fallback: return index.html for client routes only.
 
-    If ``frontend/dist/index.html`` exists, returns it as a static file.
-    Otherwise returns a 404 JSON response.
+    Never return HTML for missing /assets/* (that breaks ES modules).
     """
-    from pathlib import Path
+    if full_path.startswith("assets/") or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail=f"Not found: {full_path}")
 
-    from fastapi.responses import FileResponse
-
-    index_path = Path("frontend/dist/index.html")
+    index_path = _FRONTEND_DIST / "index.html"
     if index_path.exists():
-        return FileResponse(str(index_path))
+        return FileResponse(str(index_path), media_type="text/html")
     raise HTTPException(
         status_code=404,
         detail="Frontend not built. Run 'cd frontend && npm run build'.",
