@@ -1,7 +1,7 @@
 """services/model_train_service/trainers/transformer_trainer.py – PatchTST-style Transformer.
 
-d_model=128(CPU)/512(GPU), n_heads=8, n_layers=4/6, dropout=0.1.
-Positional encoding, gradient clipping=1.0, warmup LR schedule.
+d_model=128(CPU)/384(GPU), n_heads=8, n_layers=4/6, dropout=0.1.
+Positional encoding, gradient clipping, warmup LR schedule.
 """
 
 from __future__ import annotations
@@ -107,9 +107,7 @@ class TransformerTrainer(TrainerBase):
 
     Auto-selects d_model based on device:
     - CPU: d_model=128, n_layers=4
-    - GPU: d_model=512, n_layers=6
-
-    Supports gradient clipping and warmup cosine LR schedule.
+    - GPU: d_model=384, n_layers=6 (~12–18M params for ~68 features)
     """
 
     model_name = "transformer"
@@ -168,7 +166,10 @@ class TransformerTrainer(TrainerBase):
             self._feature_names = [f"f{i}" for i in range(n)]
 
         epochs = kwargs.get("epochs", train_config.EPOCHS)
-        batch_size = kwargs.get("batch_size", train_config.BATCH_SIZE)
+        batch_size = kwargs.get(
+            "batch_size",
+            train_config.BATCH_SIZE_GPU if self.device == "cuda" else train_config.BATCH_SIZE,
+        )
         lr = kwargs.get("lr", self._lr)
 
         # ---- Feature normalization (fix NaN/inf) ----
@@ -197,6 +198,11 @@ class TransformerTrainer(TrainerBase):
             seq_len=self.seq_len,
             forecast_horizon=self.forecast_horizon,
         ).to(self.device)
+        n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        logger.info(
+            f"PatchTST params={n_params/1e6:.2f}M | d_model={self.d_model} "
+            f"layers={self.n_layers} heads={self.n_heads} device={self.device}"
+        )
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)

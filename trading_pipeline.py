@@ -209,6 +209,25 @@ class TradingPipeline:
         self.data_dir: Path = Path("data/daily")
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
+        # ── SQLite / Redis warm-up ──────────────────────────
+        try:
+            from shared.database.engine import optimize_sqlite_file
+
+            optimize_sqlite_file("data/quant_trader.db")
+        except Exception as e:
+            logger.debug(f"SQLite optimize skipped: {e}")
+        try:
+            from shared.market_cache import sync_cache_portfolio
+
+            sync_cache_portfolio({
+                "cash": self.portfolio.cash,
+                "total_value": self.portfolio.total_value,
+                "positions": len(self.portfolio.positions),
+            })
+            logger.info("  ✅ Redis market cache warmed (or in-memory degrade)")
+        except Exception as e:
+            logger.info(f"  ⚠️ Redis cache warm skipped: {e}")
+
         # ── HTTP 客户端 ──────────────────────────────────────
         self._http: Optional[httpx.AsyncClient] = None
 
@@ -526,6 +545,31 @@ class TradingPipeline:
             self.risk_manager.save_state("data/risk_state.json")
         except Exception as e:
             logger.warning(f"状态保存异常: {e}")
+
+        # ── Redis: cycle + portfolio + signals ───────────────
+        try:
+            from shared.market_cache import (
+                sync_cache_cycle,
+                sync_cache_portfolio,
+                sync_cache_signals,
+            )
+
+            sync_cache_signals(signals if isinstance(signals, list) else [])
+            sync_cache_portfolio({
+                "cash": self.portfolio.cash,
+                "total_value": self.portfolio.total_value,
+                "n_positions": len(self.portfolio.positions),
+                "cycle": self.cycle_count,
+            })
+            sync_cache_cycle({
+                "cycle": self.cycle_count,
+                "orders": len(orders),
+                "signals": len(signals) if isinstance(signals, list) else 0,
+                "nav": self.portfolio.total_value,
+                "mode": getattr(self.executor, "mode", "paper"),
+            })
+        except Exception as e:
+            logger.debug(f"Redis cycle publish skipped: {e}")
 
         # ── P2-2: Tiger 全量同步到本地 DB (每10轮) ──────────
         if self.tiger_ready and self.cycle_count % 10 == 0:
@@ -1036,9 +1080,11 @@ class TradingPipeline:
                 "views": views,
                 "tickers": [v["ticker"] for v in views],
                 "constraints": {
-                    "max_position_size": 0.20,
+                    "max_position_size": float(
+                        getattr(self.risk_manager, "MAX_POSITION_SIZE", 0.35)
+                    ),
                     "min_position_size": 0.0,
-                    "max_turnover": 0.30,
+                    "max_turnover": 0.40,
                 },
             }
             resp = await http.post(
@@ -1128,6 +1174,16 @@ class TradingPipeline:
             # 获取实时价格（优先HTTP，失败则用信号自带price）
             prices: Dict[str, float] = {}
             for ticker in target_weights:
+                # Redis quote cache first
+                try:
+                    from shared.market_cache import sync_get_quote, sync_cache_quote
+
+                    cached = sync_get_quote(ticker)
+                    if cached and cached > 0:
+                        prices[ticker] = cached
+                        continue
+                except Exception:
+                    pass
                 try:
                     http = await self._get_http()
                     resp = await http.get(
@@ -1139,6 +1195,12 @@ class TradingPipeline:
                         px = float(rt_data.get("price", rt_data.get("close", 0.0)))
                         if px > 0:
                             prices[ticker] = px
+                            try:
+                                from shared.market_cache import sync_cache_quote
+
+                                sync_cache_quote(ticker, px, source="data_service")
+                            except Exception:
+                                pass
                 except Exception:
                     pass
 

@@ -49,13 +49,22 @@ class TrainServiceConfig(BaseSettings):
     )
     USE_AMP: bool = Field(default=True, description="CUDA automatic mixed precision")
 
-    # Model Architecture defaults (RTX 3060 8-12GB friendly; was 512/8 layers)
-    TRANSFORMER_D_MODEL_GPU: int = Field(default=256)
+    # Model Architecture (RTX 3060 12GB sweet spot)
+    # ~12–18M PatchTST params @ 384/6 — enough for daily multi-asset alpha,
+    # fits AMP training with batch 96–128 without OOM.
+    TRANSFORMER_D_MODEL_GPU: int = Field(default=384)
     TRANSFORMER_D_MODEL_CPU: int = Field(default=128)
     TRANSFORMER_N_HEADS: int = Field(default=8)
     TRANSFORMER_N_LAYERS: int = Field(default=6)
     TRANSFORMER_DROPOUT: float = Field(default=0.1)
     GRADIENT_CLIP_VAL: float = Field(default=0.5)
+    BATCH_SIZE_GPU: int = Field(default=96)
+
+    # TCN / TFT capacity (aligned upward for GPU)
+    TCN_CHANNELS: int = Field(default=64)
+    TCN_LEVELS: int = Field(default=6)
+    TFT_HIDDEN_DIM: int = Field(default=128)
+    TFT_LSTM_LAYERS: int = Field(default=2)
 
     # GBDT
     GBDT_DEFAULT: str = Field(default="lightgbm", description="Default GBDT: xgboost/lightgbm/catboost")

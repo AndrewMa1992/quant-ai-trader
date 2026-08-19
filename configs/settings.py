@@ -100,8 +100,8 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy database URL (SQLite dev default; use postgresql+asyncpg://... for prod)",
     )
     POSTGRES_SYNC_URL: str = Field(
-        default="sqlite+aiosqlite:///data/quant_trader.db",
-        description="Sync SQLAlchemy database URL (SQLite dev default; use postgresql+psycopg2://... for prod)",
+        default="sqlite:///data/quant_trader.db",
+        description="Sync SQLAlchemy database URL (sqlite:/// or postgresql+psycopg2://)",
     )
     POSTGRES_USER: str = Field(default="qat")
     POSTGRES_PASSWORD: str = Field(default="qat_secret")

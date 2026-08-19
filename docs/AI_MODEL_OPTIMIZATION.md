@@ -41,7 +41,9 @@ pip install yfinance lightgbm xgboost stable-baselines3 gymnasium scikit-learn
 Copy `data\models\*` to Lightsail `C:\quant-ai-trader\data\models\`, then:
 `.\scripts\windows_deploy.ps1 -SkipInstall`
 
-Optimizations for 3060: AMP, d_model=256, batch=128, pin_memory.
+Optimizations for 3060: AMP, **d_model=384**, n_layers=6, batch 96, pin_memory.
+PatchTST ~12–18M params — adequate for daily multi-ticker alpha on a retail book;
+bigger models overfit faster on Yahoo-scale history.
 
 ### B) API / UI on a running stack
 

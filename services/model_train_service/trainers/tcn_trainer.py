@@ -130,7 +130,14 @@ class TCNTrainer(TrainerBase):
         lr: float | None = None,
     ) -> None:
         super().__init__(device=device or train_config.DEVICE)
-        self.num_channels = num_channels or [32, 32, 32, 16]  # Reduced for stability
+        if num_channels is not None:
+            self.num_channels = num_channels
+        elif self.device == "cuda":
+            ch = train_config.TCN_CHANNELS
+            levels = train_config.TCN_LEVELS
+            self.num_channels = [ch] * (levels - 1) + [ch // 2]
+        else:
+            self.num_channels = [32, 32, 32, 16]
         self.kernel_size = kernel_size
         self.dropout = dropout
         self.seq_len = seq_len
