@@ -1,5 +1,6 @@
 # Keep trading_pipeline.py alive on Lightsail Windows (paper / Tiger sim).
-# DeployScriptVersion: 2
+# Avoid PowerShell here-strings (LF checkouts break them on Windows PS 5.1).
+# Start children via Win32_Process.Create so they survive GitHub Actions job cleanup.
 #   .\scripts\windows_pipeline_watchdog.ps1 -InstallTask
 #   .\scripts\windows_pipeline_watchdog.ps1 -Once
 
@@ -23,7 +24,7 @@ $log = Join-Path $logDir "pipeline-watchdog.log"
 
 function Write-Log([string]$msg) {
     $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | $msg"
-    Add-Content -Path $log -Value $line
+    Add-Content -Path $log -Value $line -ErrorAction SilentlyContinue
     Write-Host $line
 }
 
@@ -54,6 +55,31 @@ function Test-PipelineAlive {
     return [bool]$procs
 }
 
+function Start-Detached([string]$CommandLine) {
+    # Win32_Process.Create is outside the GHA job object → survives "Cleaning up orphan processes"
+    try {
+        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+            CommandLine = $CommandLine
+            CurrentDirectory = $RepoRoot
+        }
+        if ($r.ReturnValue -eq 0) {
+            Write-Log ("detached pid={0}" -f $r.ProcessId)
+            return $true
+        }
+        Write-Log ("Win32_Process.Create failed rc={0}" -f $r.ReturnValue)
+    } catch {
+        Write-Log ("Win32_Process.Create error: {0}" -f $_.Exception.Message)
+    }
+    # Fallback (may still be killed by GHA cleanup if called mid-job)
+    try {
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $CommandLine -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
+        return $true
+    } catch {
+        Write-Log ("Start-Process fallback failed: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
 function Start-Pipeline {
     Write-Log "Starting trading pipeline (paper / Tiger sim)..."
     Import-DotEnv
@@ -65,8 +91,12 @@ function Start-Pipeline {
     if (-not (Test-Path $runner)) {
         $runner = Join-Path $RepoRoot "trading_pipeline.py"
     }
-    $bat = Join-Path $RepoRoot "cache\windows_pids\start_pipeline.bat"
-    New-Item -ItemType Directory -Force -Path (Split-Path $bat) | Out-Null
+    $batDir = Join-Path $RepoRoot "cache\windows_pids"
+    New-Item -ItemType Directory -Force -Path $batDir | Out-Null
+    $bat = Join-Path $batDir "start_pipeline.bat"
+    $outLog = Join-Path $logDir "pipeline-stdout.log"
+    $errLog = Join-Path $logDir "pipeline-stderr.log"
+
     $envLines = @(
         "@echo off",
         "set PYTHONPATH=$RepoRoot",
@@ -84,34 +114,39 @@ function Start-Pipeline {
         "set QAT_ENABLED_MARKETS=$($env:QAT_ENABLED_MARKETS)",
         "set QAT_MARKET_ROTATION=$($env:QAT_MARKET_ROTATION)",
         "cd /d `"$RepoRoot`"",
-        "`"$py`" -u `"$runner`""
+        "`"$py`" -u `"$runner`" >> `"$outLog`" 2>> `"$errLog`""
     )
     Set-Content -Path $bat -Value ($envLines -join "`r`n") -Encoding ASCII
-    Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
-        -WorkingDirectory $RepoRoot -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $logDir "pipeline-stdout.log") `
-        -RedirectStandardError (Join-Path $logDir "pipeline-stderr.log")
-    Start-Sleep -Seconds 3
+
+    $ok = Start-Detached "cmd.exe /c `"$bat`""
+    Start-Sleep -Seconds 4
+    return $ok
 }
 
 function Invoke-Check {
     if (Test-PipelineAlive) {
         Write-Log "pipeline OK"
-    } else {
-        Write-Log "pipeline DOWN — restarting"
-        Start-Pipeline
-        if (Test-PipelineAlive) { Write-Log "pipeline restarted OK" } else { Write-Log "pipeline restart FAILED" }
+        return $true
     }
+    Write-Log "pipeline DOWN — restarting"
+    Start-Pipeline | Out-Null
+    if (Test-PipelineAlive) {
+        Write-Log "pipeline restarted OK"
+        return $true
+    }
+    Write-Log "pipeline restart FAILED"
+    return $false
 }
 
 if ($InstallTask) {
     $wrapper = Join-Path $RepoRoot "scripts\_run_pipeline_watchdog_logged.ps1"
-    $body = @"
-`$ErrorActionPreference='Continue'
-Set-Location '$RepoRoot'
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path '$RepoRoot' 'scripts\windows_pipeline_watchdog.ps1') -Once
-"@
-    Set-Content -Path $wrapper -Value $body -Encoding UTF8
+    $wrapperLines = @(
+        "`$ErrorActionPreference='Continue'",
+        "Set-Location '$RepoRoot'",
+        "& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path '$RepoRoot' 'scripts\windows_pipeline_watchdog.ps1') -Once"
+    )
+    Set-Content -Path $wrapper -Value ($wrapperLines -join "`r`n") -Encoding ASCII
+
     $action = New-ScheduledTaskAction -Execute "powershell.exe" `
         -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`"" `
         -WorkingDirectory $RepoRoot
@@ -125,17 +160,19 @@ Set-Location '$RepoRoot'
         -Trigger @($trigger, $onceTrig) -Principal $prin -Settings $settings `
         -Description "QAT: keep trading_pipeline process alive (Tiger paper)" -Force | Out-Null
     Write-Log "Registered QAT-Pipeline-Watchdog"
-    Invoke-Check
+    $alive = Invoke-Check
+    if (-not $alive) { exit 1 }
     exit 0
 }
 
 if ($Once) {
-    Invoke-Check
+    $alive = Invoke-Check
+    if (-not $alive) { exit 1 }
     exit 0
 }
 
 Write-Log "Watchdog loop every $IntervalSeconds s"
 while ($true) {
-    Invoke-Check
+    Invoke-Check | Out-Null
     Start-Sleep -Seconds $IntervalSeconds
 }

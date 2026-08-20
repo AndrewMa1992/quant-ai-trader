@@ -147,17 +147,29 @@ if (-not $ok) {
 
 Write-Log "[ok] CD complete - gateway healthy"
 
-# Ensure trading pipeline stays up
+# Ensure trading pipeline stays up (must survive GHA orphan cleanup)
 Write-Log "[..] pipeline watchdog"
 $watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
 if (Test-Path $watchdog) {
-    try {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
-        Write-Log "[ok] pipeline watchdog armed"
-    } catch {
-        Write-Log ("[warn] pipeline watchdog: {0}" -f $_.Exception.Message)
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "[ERR] pipeline watchdog InstallTask failed"
+        exit 1
     }
+    # Kick scheduled task so restart happens outside this job's process tree
+    try {
+        Start-ScheduledTask -TaskName "QAT-Pipeline-Watchdog" -ErrorAction SilentlyContinue
+        schtasks /Run /TN "QAT-Pipeline-Watchdog" 2>$null | Out-Null
+    } catch {
+        Write-Log ("[warn] schtasks run: {0}" -f $_.Exception.Message)
+    }
+    Start-Sleep -Seconds 5
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "[ERR] pipeline still down after watchdog"
+        exit 1
+    }
+    Write-Log "[ok] pipeline watchdog armed"
 } else {
     Write-Log "[warn] missing windows_pipeline_watchdog.ps1"
 }
@@ -165,12 +177,15 @@ if (Test-Path $watchdog) {
 # Frontend / gateway SPA watchdog
 $fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
 if (Test-Path $fw) {
-    try {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -Once
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "[warn] frontend watchdog InstallTask exit=$LASTEXITCODE"
+    } else {
+        try {
+            Start-ScheduledTask -TaskName "QAT-Frontend-Watchdog" -ErrorAction SilentlyContinue
+            schtasks /Run /TN "QAT-Frontend-Watchdog" 2>$null | Out-Null
+        } catch {}
         Write-Log "[ok] frontend watchdog armed"
-    } catch {
-        Write-Log ("[warn] frontend watchdog: {0}" -f $_.Exception.Message)
     }
 }
 
