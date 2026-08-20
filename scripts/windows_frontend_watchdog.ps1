@@ -1,4 +1,6 @@
 # Keep API gateway (+ optional :5180) alive so the UI stays reachable.
+# Avoid PowerShell here-strings (LF checkouts break them on Windows PS 5.1).
+# Start children via Win32_Process.Create so they survive GitHub Actions job cleanup.
 # Primary public UI: http://<host>:8001/  (gateway SPA)
 #   .\scripts\windows_frontend_watchdog.ps1 -InstallTask
 #   .\scripts\windows_frontend_watchdog.ps1 -Once
@@ -23,7 +25,7 @@ New-Item -ItemType Directory -Force -Path $pidDir | Out-Null
 
 function Write-Log([string]$msg) {
     $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | $msg"
-    Add-Content -Path $log -Value $line
+    Add-Content -Path $log -Value $line -ErrorAction SilentlyContinue
     Write-Host $line
 }
 
@@ -47,22 +49,44 @@ function Get-Python {
     return $null
 }
 
+function Start-Detached([string]$CommandLine) {
+    try {
+        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+            CommandLine = $CommandLine
+            CurrentDirectory = $RepoRoot
+        }
+        if ($r.ReturnValue -eq 0) {
+            Write-Log ("detached pid={0}" -f $r.ProcessId)
+            return $true
+        }
+        Write-Log ("Win32_Process.Create failed rc={0}" -f $r.ReturnValue)
+    } catch {
+        Write-Log ("Win32_Process.Create error: {0}" -f $_.Exception.Message)
+    }
+    try {
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $CommandLine -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
+        return $true
+    } catch {
+        Write-Log ("Start-Process fallback failed: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
 function Start-Gateway {
     $py = Get-Python
     if (-not $py) { Write-Log "python missing"; return }
     $bat = Join-Path $pidDir "start_api-gateway.bat"
-    $batBody = @"
-@echo off
-set PYTHONPATH=$RepoRoot
-set QAT_PROJECT_ROOT=$RepoRoot
-cd /d "$RepoRoot"
-"$py" -m uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001
-"@
-    Set-Content -Path $bat -Value $batBody -Encoding ASCII
-    Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
-        -WorkingDirectory $RepoRoot -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $logDir "api-gateway.out.log") `
-        -RedirectStandardError (Join-Path $logDir "api-gateway.err.log")
+    $outLog = Join-Path $logDir "api-gateway.out.log"
+    $errLog = Join-Path $logDir "api-gateway.err.log"
+    $lines = @(
+        "@echo off",
+        "set PYTHONPATH=$RepoRoot",
+        "set QAT_PROJECT_ROOT=$RepoRoot",
+        "cd /d `"$RepoRoot`"",
+        "`"$py`" -m uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001 >> `"$outLog`" 2>> `"$errLog`""
+    )
+    Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
+    Start-Detached "cmd.exe /c `"$bat`"" | Out-Null
     Write-Log "started api-gateway :8001"
 }
 
@@ -75,23 +99,21 @@ function Start-Frontend5180 {
         return
     }
     $bat = Join-Path $pidDir "start_frontend.bat"
-    $batBody = @"
-@echo off
-set PYTHONPATH=$RepoRoot
-set QAT_PROJECT_ROOT=$RepoRoot
-cd /d "$RepoRoot"
-"$py" scripts\windows_frontend_server.py --root "$RepoRoot" --port 5180
-"@
-    Set-Content -Path $bat -Value $batBody -Encoding ASCII
-    Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
-        -WorkingDirectory $RepoRoot -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $logDir "frontend.out.log") `
-        -RedirectStandardError (Join-Path $logDir "frontend.err.log")
+    $outLog = Join-Path $logDir "frontend.out.log"
+    $errLog = Join-Path $logDir "frontend.err.log"
+    $lines = @(
+        "@echo off",
+        "set PYTHONPATH=$RepoRoot",
+        "set QAT_PROJECT_ROOT=$RepoRoot",
+        "cd /d `"$RepoRoot`"",
+        "`"$py`" scripts\windows_frontend_server.py --root `"$RepoRoot`" --port 5180 >> `"$outLog`" 2>> `"$errLog`""
+    )
+    Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
+    Start-Detached "cmd.exe /c `"$bat`"" | Out-Null
     Write-Log "started frontend :5180"
 }
 
 function Invoke-Check {
-    # Prefer fast liveness endpoint
     $liveOk = Test-Url "http://127.0.0.1:8001/health/live"
     if (-not $liveOk) {
         $liveOk = Test-Url "http://127.0.0.1:8001/api/v2/status"
@@ -104,7 +126,6 @@ function Invoke-Check {
         Write-Log "gateway OK"
     }
 
-    # SPA must return HTML (not 401)
     try {
         $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/" -UseBasicParsing -TimeoutSec 5
         $ct = $r.Headers["Content-Type"]
@@ -127,12 +148,13 @@ function Invoke-Check {
 
 if ($InstallTask) {
     $wrapper = Join-Path $RepoRoot "scripts\_run_frontend_watchdog_logged.ps1"
-    $body = @"
-`$ErrorActionPreference='Continue'
-Set-Location '$RepoRoot'
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path '$RepoRoot' 'scripts\windows_frontend_watchdog.ps1') -Once
-"@
-    Set-Content -Path $wrapper -Value $body -Encoding UTF8
+    $wrapperLines = @(
+        "`$ErrorActionPreference='Continue'",
+        "Set-Location '$RepoRoot'",
+        "& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path '$RepoRoot' 'scripts\windows_frontend_watchdog.ps1') -Once"
+    )
+    Set-Content -Path $wrapper -Value ($wrapperLines -join "`r`n") -Encoding ASCII
+
     $action = New-ScheduledTaskAction -Execute "powershell.exe" `
         -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`"" `
         -WorkingDirectory $RepoRoot
