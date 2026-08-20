@@ -151,9 +151,11 @@ Write-Log "[ok] CD complete - gateway healthy"
 Write-Log "[..] pipeline watchdog"
 $watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
 if (Test-Path $watchdog) {
+    $wc = 0
     & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "[ERR] pipeline watchdog InstallTask failed"
+    $wc = $LASTEXITCODE
+    if ($wc -ne 0) {
+        Write-Log ("[ERR] pipeline watchdog InstallTask failed exit={0}" -f $wc)
         exit 1
     }
     # Kick scheduled task so restart happens outside this job's process tree
@@ -165,8 +167,9 @@ if (Test-Path $watchdog) {
     }
     Start-Sleep -Seconds 5
     & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "[ERR] pipeline still down after watchdog"
+    $wc = $LASTEXITCODE
+    if ($wc -ne 0) {
+        Write-Log ("[ERR] pipeline still down after watchdog exit={0}" -f $wc)
         exit 1
     }
     Write-Log "[ok] pipeline watchdog armed"
@@ -178,8 +181,9 @@ if (Test-Path $watchdog) {
 $fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
 if (Test-Path $fw) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "[warn] frontend watchdog InstallTask exit=$LASTEXITCODE"
+    $fwc = $LASTEXITCODE
+    if ($fwc -ne 0) {
+        Write-Log ("[warn] frontend watchdog InstallTask exit={0}" -f $fwc)
     } else {
         try {
             Start-ScheduledTask -TaskName "QAT-Frontend-Watchdog" -ErrorAction SilentlyContinue

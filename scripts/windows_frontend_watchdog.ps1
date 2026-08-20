@@ -1,6 +1,6 @@
 # Keep API gateway (+ optional :5180) alive so the UI stays reachable.
-# Avoid PowerShell here-strings (LF checkouts break them on Windows PS 5.1).
-# Start children via Win32_Process.Create so they survive GitHub Actions job cleanup.
+# ASCII-only. No here-strings. Safe string concat (no nested `" escapes).
+# Children started via Win32_Process.Create to survive GHA orphan cleanup.
 # Primary public UI: http://<host>:8001/  (gateway SPA)
 #   .\scripts\windows_frontend_watchdog.ps1 -InstallTask
 #   .\scripts\windows_frontend_watchdog.ps1 -Once
@@ -64,7 +64,7 @@ function Start-Detached([string]$CommandLine) {
         Write-Log ("Win32_Process.Create error: {0}" -f $_.Exception.Message)
     }
     try {
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $CommandLine -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
+        Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $CommandLine) -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
         return $true
     } catch {
         Write-Log ("Start-Process fallback failed: {0}" -f $_.Exception.Message)
@@ -78,15 +78,16 @@ function Start-Gateway {
     $bat = Join-Path $pidDir "start_api-gateway.bat"
     $outLog = Join-Path $logDir "api-gateway.out.log"
     $errLog = Join-Path $logDir "api-gateway.err.log"
+    $runLine = '"{0}" -m uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001 >> "{1}" 2>> "{2}"' -f $py, $outLog, $errLog
     $lines = @(
         "@echo off",
-        "set PYTHONPATH=$RepoRoot",
-        "set QAT_PROJECT_ROOT=$RepoRoot",
-        "cd /d `"$RepoRoot`"",
-        "`"$py`" -m uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001 >> `"$outLog`" 2>> `"$errLog`""
+        ("set PYTHONPATH={0}" -f $RepoRoot),
+        ("set QAT_PROJECT_ROOT={0}" -f $RepoRoot),
+        ("cd /d {0}" -f $RepoRoot),
+        $runLine
     )
     Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
-    Start-Detached "cmd.exe /c `"$bat`"" | Out-Null
+    Start-Detached ('cmd.exe /c "{0}"' -f $bat) | Out-Null
     Write-Log "started api-gateway :8001"
 }
 
@@ -95,21 +96,22 @@ function Start-Frontend5180 {
     if (-not $py) { return }
     $dist = Join-Path $RepoRoot "frontend\dist\index.html"
     if (-not (Test-Path $dist)) {
-        Write-Log "frontend dist missing — use gateway SPA only"
+        Write-Log "frontend dist missing - use gateway SPA only"
         return
     }
     $bat = Join-Path $pidDir "start_frontend.bat"
     $outLog = Join-Path $logDir "frontend.out.log"
     $errLog = Join-Path $logDir "frontend.err.log"
+    $runLine = '"{0}" scripts\windows_frontend_server.py --root "{1}" --port 5180 >> "{2}" 2>> "{3}"' -f $py, $RepoRoot, $outLog, $errLog
     $lines = @(
         "@echo off",
-        "set PYTHONPATH=$RepoRoot",
-        "set QAT_PROJECT_ROOT=$RepoRoot",
-        "cd /d `"$RepoRoot`"",
-        "`"$py`" scripts\windows_frontend_server.py --root `"$RepoRoot`" --port 5180 >> `"$outLog`" 2>> `"$errLog`""
+        ("set PYTHONPATH={0}" -f $RepoRoot),
+        ("set QAT_PROJECT_ROOT={0}" -f $RepoRoot),
+        ("cd /d {0}" -f $RepoRoot),
+        $runLine
     )
     Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
-    Start-Detached "cmd.exe /c `"$bat`"" | Out-Null
+    Start-Detached ('cmd.exe /c "{0}"' -f $bat) | Out-Null
     Write-Log "started frontend :5180"
 }
 
@@ -119,7 +121,7 @@ function Invoke-Check {
         $liveOk = Test-Url "http://127.0.0.1:8001/api/v2/status"
     }
     if (-not $liveOk) {
-        Write-Log "gateway DOWN — restarting"
+        Write-Log "gateway DOWN - restarting"
         Start-Gateway
         Start-Sleep -Seconds 5
     } else {
@@ -139,7 +141,7 @@ function Invoke-Check {
     }
 
     if (-not (Test-Url "http://127.0.0.1:5180/")) {
-        Write-Log "frontend :5180 down — restarting (optional)"
+        Write-Log "frontend :5180 down - restarting (optional)"
         Start-Frontend5180
     } else {
         Write-Log "frontend :5180 OK"
@@ -148,16 +150,16 @@ function Invoke-Check {
 
 if ($InstallTask) {
     $wrapper = Join-Path $RepoRoot "scripts\_run_frontend_watchdog_logged.ps1"
+    $watchdogPs1 = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
     $wrapperLines = @(
-        "`$ErrorActionPreference='Continue'",
-        "Set-Location '$RepoRoot'",
-        "& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path '$RepoRoot' 'scripts\windows_frontend_watchdog.ps1') -Once"
+        '$ErrorActionPreference=''Continue''',
+        ('Set-Location ''{0}''' -f $RepoRoot),
+        ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -Once' -f $watchdogPs1)
     )
     Set-Content -Path $wrapper -Value ($wrapperLines -join "`r`n") -Encoding ASCII
 
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$wrapper`"" `
-        -WorkingDirectory $RepoRoot
+    $arg = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $wrapper
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arg -WorkingDirectory $RepoRoot
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $onceTrig = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
         -RepetitionInterval (New-TimeSpan -Minutes 2) `

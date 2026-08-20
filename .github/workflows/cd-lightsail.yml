@@ -132,16 +132,30 @@ jobs:
           $branch = "${{ github.event.inputs.branch }}"
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
           $full = "${{ github.event.inputs.full_install }}"
-          $script = "C:\quant-ai-trader\scripts\windows_cd_deploy.ps1"
-          if (-not (Test-Path $script)) {
-            throw "Missing $script - clone repo to C:\quant-ai-trader and pull once manually first"
+          $root = "C:\quant-ai-trader"
+          if (-not (Test-Path $root)) {
+            throw "Missing $root - clone repo once manually first"
           }
+          # Pull BEFORE invoking deploy script so CD logic itself is fresh
+          # (running an already-loaded old windows_cd_deploy.ps1 skips new checks).
+          Set-Location $root
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                       [System.Environment]::GetEnvironmentVariable("Path","User")
+          git fetch origin $branch
+          if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+          git checkout $branch
+          git reset --hard "origin/$branch"
+          if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
+          git log -1 --oneline
+          $script = Join-Path $root "scripts\windows_cd_deploy.ps1"
+          if (-not (Test-Path $script)) { throw "Missing $script" }
           if ($full -eq "true") {
             & powershell -ExecutionPolicy Bypass -File $script -Branch $branch -FullInstall
           } else {
             & powershell -ExecutionPolicy Bypass -File $script -Branch $branch
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not $?) { exit 1 }
 
       - name: Verify public health (localhost)
         shell: powershell
