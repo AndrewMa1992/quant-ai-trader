@@ -201,6 +201,18 @@ if (Test-Path $watchdog) {
     Write-Log "[warn] missing windows_pipeline_watchdog.ps1"
 }
 
+# Actions runner watchdog: a dead runner leaves every CD run stuck in "queued".
+# Register only - restarting the runner from inside its own job would kill this job.
+$rw = Join-Path $RepoRoot "scripts\windows_runner_watchdog.ps1"
+if (Test-Path $rw) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $rw -InstallTask
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log ("[warn] runner watchdog InstallTask exit={0}" -f $LASTEXITCODE)
+    } else {
+        Write-Log "[ok] runner watchdog armed"
+    }
+}
+
 # Frontend / gateway SPA watchdog
 $fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
 if (Test-Path $fw) {
