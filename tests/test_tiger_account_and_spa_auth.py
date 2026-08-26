@@ -35,3 +35,15 @@ def test_root_path_normalization_for_auth():
     # Regression: "/".rstrip("/") == "" previously broke public root.
     assert ("/".rstrip("/") or "/") in PUBLIC_PATHS
     assert ("".rstrip("/") or "/") in PUBLIC_PATHS
+
+
+def test_gateway_root_prefers_spa_html():
+    """Regression: GET / used to return JSON so the public UI looked 'down'."""
+    from pathlib import Path
+
+    src = Path("api_gateway/main.py").read_text(encoding="utf-8")
+    assert "def _spa_index_response" in src
+    assert 'async def root(request: Request)' in src
+    assert "_spa_index_response()" in src
+    assert "text/html" in src
+    assert 'async def api_info' in src

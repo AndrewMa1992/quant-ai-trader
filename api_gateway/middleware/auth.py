@@ -21,6 +21,7 @@ PUBLIC_PATHS: set[str] = {
     "/redoc",
     "/openapi.json",
     "/api/v2/status",
+    "/api",
     "/favicon.ico",
     "/ws",
 }
