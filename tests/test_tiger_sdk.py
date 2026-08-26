@@ -136,6 +136,40 @@ def test_connect_retries_license_on_auth_error(monkeypatch):
     ts.reset()
 
 
+def test_probe_uses_connect_account_not_settings(monkeypatch):
+    probed: list[str] = []
+
+    class Cfg:
+        def __init__(self, sandbox_debug=False, **kwargs):
+            self.sandbox_debug = sandbox_debug
+            self.private_key = self.tiger_id = self.account = self.license = None
+
+    class Trade:
+        def __init__(self, cfg):
+            pass
+
+        def get_prime_assets(self, **kwargs):
+            probed.append(str(kwargs.get("account") or ""))
+            return {"ok": True}
+
+    class Quote:
+        def __init__(self, cfg):
+            pass
+
+    class SettingsMismatch(_Settings):
+        TIGER_ACCOUNT = "20874631"
+
+    monkeypatch.setattr(ts, "_try_import", lambda: (Cfg, Trade, Quote))
+    monkeypatch.setattr(ts, "load_private_key", lambda: "KEY")
+    monkeypatch.setattr(ts, "is_sandbox_requested", lambda: False)
+    monkeypatch.setattr(ts, "get_settings", lambda: SettingsMismatch())
+    monkeypatch.setattr(ts, "_props_candidates", lambda: [])
+    ts.reset()
+    ts.connect(force=True, account="21837535188693626")
+    assert probed == ["21837535188693626"]
+    ts.reset()
+
+
 @pytest.mark.asyncio
 async def test_broker_surfaces_sdk_error(monkeypatch):
     from services.execution_service.live.tiger_broker import TigerBroker

@@ -238,12 +238,12 @@ def _looks_like_auth(exc: BaseException) -> bool:
     return any(hint in msg for hint in _AUTH_HINTS)
 
 
-def _probe_trade(client: Any) -> Any:
+def _probe_trade(client: Any, account: str = "") -> Any:
     """Hit a cheap trade endpoint so a bad license/key fails fast.
 
     Empty books are still a successful connection — do not treat zeros as auth failure.
+    Probe the same account that ``connect(account=...)`` just configured.
     """
-    account = _setting("TIGER_ACCOUNT", "tiger_account")
     last_auth: Optional[Exception] = None
     for name in ("get_prime_assets", "get_assets", "get_managed_accounts", "get_accounts"):
         fn = getattr(client, name, None)
@@ -300,7 +300,7 @@ def connect(
             _, TradeClient, QuoteClient = _try_import()
             cfg = _build_config(sandbox=sandbox, license_code=license_code, account=want_account)
             trade = TradeClient(cfg)
-            _probe_trade(trade)
+            _probe_trade(trade, account=want_account)
             quote = QuoteClient(cfg)
             _TRADE_CLIENT = trade
             _QUOTE_CLIENT = quote
