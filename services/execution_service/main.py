@@ -6,6 +6,7 @@ backtesting, order execution, and position management.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -23,7 +24,22 @@ _START_TIME: float = time.time()
 async def lifespan(app: FastAPI):
     setup_logger()
     logger.info(f"Starting {exec_config.SERVICE_NAME} on port {exec_config.PORT}")
+    stop = asyncio.Event()
+    sync_task: asyncio.Task | None = None
+    try:
+        from shared.tiger_sync import run_tiger_sync_forever
+
+        sync_task = asyncio.create_task(run_tiger_sync_forever(stop), name="tiger-sync")
+    except Exception as exc:
+        logger.warning("Tiger sync loop not started: %s", exc)
     yield
+    stop.set()
+    if sync_task is not None:
+        sync_task.cancel()
+        try:
+            await sync_task
+        except (asyncio.CancelledError, Exception):
+            pass
     logger.info(f"Shutting down {exec_config.SERVICE_NAME}")
 
 

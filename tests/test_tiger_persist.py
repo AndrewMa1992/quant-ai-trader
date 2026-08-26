@@ -49,6 +49,8 @@ def test_persist_and_load_snapshot(tiger_db):
     )
     assert snap["positions_synced"] == 1
     assert snap["nav"] == 2000
+    assert snap["buying_power"] == 400
+    assert any(o["order_id"] == "oid-1" for o in snap["orders"])
 
     api = tiger_db.load_positions_for_api()
     assert len(api["positions"]) == 1

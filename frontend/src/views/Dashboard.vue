@@ -100,16 +100,20 @@ async function fetchSignals() {
 onMounted(async () => {
   await Promise.allSettled([
     portfolioStore.fetchPositions(),
+    portfolioStore.fetchTigerAccount(),
     execStore.fetchAlerts(),
     execStore.fetchMarketStatus(),
+    execStore.fetchOrders(),
     riskStore.fetchBreakerStatus(),
     fetchNavHistory(),
     fetchSignals(),
   ])
   refreshTimer = setInterval(() => {
     portfolioStore.fetchPositions()
+    portfolioStore.fetchTigerAccount()
+    execStore.fetchOrders()
     fetchSignals()
-  }, 60000)
+  }, 30000)
 })
 
 onUnmounted(() => {
@@ -187,6 +191,16 @@ const sharpe = computed(() => parseFloat(String(riskStore.varData?.sharpe_ratio 
 const positionCount = computed(() => portfolioStore.positions?.length ?? 0)
 const alertCount = computed(() => execStore.alerts.length)
 const marketMap = computed(() => execStore.marketStatus ?? {})
+const cash = computed(() => portfolioStore.cash ?? 0)
+const buyingPower = computed(() => portfolioStore.buyingPower ?? 0)
+const tigerAccount = computed(() => portfolioStore.tigerAccount || '—')
+const liveSource = computed(() => portfolioStore.liveSource || 'local')
+const lastLiveAt = computed(() => {
+  const raw = portfolioStore.lastLiveAt
+  if (!raw) return '—'
+  try { return new Date(raw).toLocaleTimeString() } catch { return raw }
+})
+const recentOrders = computed(() => execStore.orders.slice(0, 8))
 </script>
 
 <template>
@@ -249,8 +263,24 @@ const marketMap = computed(() => execStore.marketStatus ?? {})
       <XmCard title="Quick Stats" class="!p-5">
         <div class="space-y-4">
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
+            <span class="text-sm text-xm-text-secondary">Tiger Account</span>
+            <span class="text-sm font-mono font-semibold">{{ tigerAccount }}</span>
+          </div>
+          <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
+            <span class="text-sm text-xm-text-secondary">Cash</span>
+            <span class="text-sm font-mono font-semibold">${{ cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
+            <span class="text-sm text-xm-text-secondary">Buying Power</span>
+            <span class="text-sm font-mono font-semibold">${{ buyingPower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
             <span class="text-sm text-xm-text-secondary">Positions</span>
             <span class="text-sm font-mono font-semibold">{{ positionCount }}</span>
+          </div>
+          <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
+            <span class="text-sm text-xm-text-secondary">Live Source</span>
+            <span class="text-sm font-mono">{{ liveSource }} · {{ lastLiveAt }}</span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
             <span class="text-sm text-xm-text-secondary">Alerts (24h)</span>
@@ -324,6 +354,34 @@ const marketMap = computed(() => execStore.marketStatus ?? {})
       </table>
       <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
         No active positions. Start trading to see your portfolio.
+      </div>
+    </XmCard>
+
+    <XmCard title="Recent Tiger Orders" class="!p-5">
+      <table v-if="recentOrders.length > 0" class="xm-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Ticker</th>
+            <th>Side</th>
+            <th class="text-right">Qty</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="o in recentOrders" :key="o.order_id">
+            <td class="text-xs text-xm-text-tertiary">{{ o.timestamp ? new Date(o.timestamp).toLocaleTimeString() : '—' }}</td>
+            <td class="font-mono font-semibold">{{ o.ticker }}</td>
+            <td class="font-mono" :class="String(o.side).toUpperCase() === 'BUY' ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+              {{ o.side }}
+            </td>
+            <td class="text-right font-mono">{{ o.quantity }}</td>
+            <td class="font-mono text-xs">{{ o.status }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
+        No Tiger orders yet. Paper fills will appear here as the pipeline trades.
       </div>
     </XmCard>
   </div>

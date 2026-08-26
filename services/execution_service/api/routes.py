@@ -13,6 +13,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -296,10 +297,12 @@ async def get_positions() -> APIResponse:
         from shared.tiger_persist import load_positions_for_api
 
         db_data = load_positions_for_api()
-        if db_data.get("positions"):
+        summary = db_data.get("summary") or {}
+        has_book = bool(db_data.get("positions")) or bool(summary.get("has_snapshot"))
+        if has_book or float(summary.get("cash") or 0) > 0 or float(summary.get("total_market_value") or 0) > 0:
             return APIResponse(
                 success=True,
-                message=f"{len(db_data['positions'])} positions (db/tiger)",
+                message=f"{len(db_data.get('positions') or [])} positions (db/tiger)",
                 data=db_data,
             )
         positions = _position_tracker.get_positions()
@@ -399,6 +402,48 @@ async def tiger_get_account() -> APIResponse:
             success=result.get("status") != "error",
             message=f"Account {result.get('account', 'unknown')} queried",
             data=result,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tiger/sync", tags=["Tiger Advanced"])
+async def tiger_sync_now() -> APIResponse:
+    """Pull Tiger account, positions, and orders into SQLite and return the snapshot."""
+    try:
+        from shared.tiger_bridge import sync_all_to_db
+
+        snap = await asyncio.to_thread(sync_all_to_db, True)
+        return APIResponse(
+            success=not bool((snap or {}).get("error")),
+            message=(
+                f"Synced {(snap or {}).get('positions_synced', 0)} positions, "
+                f"{(snap or {}).get('orders_synced', 0)} orders, "
+                f"NAV={(snap or {}).get('nav', 0)}"
+            ),
+            data=snap or {},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tiger/snapshot", tags=["Tiger Advanced"])
+async def tiger_get_snapshot() -> APIResponse:
+    """Latest persisted Tiger snapshot (account + positions + orders)."""
+    try:
+        from shared.tiger_persist import load_orders_for_api, load_positions_for_api
+
+        book = load_positions_for_api()
+        orders = load_orders_for_api(limit=100)
+        return APIResponse(
+            success=True,
+            message="Tiger snapshot",
+            data={
+                "type": "tiger_snapshot",
+                "source": "tiger_db",
+                **(book or {}),
+                "orders": orders,
+            },
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -546,10 +591,16 @@ async def list_orders(
             log.warning(f"DB trade query failed (non-fatal): {e}")
 
         # Sort by timestamp descending
-        orders.sort(
-            key=lambda o: o.get("placed_at", o.get("trade_time", 0)) or 0,
-            reverse=True,
-        )
+        def _order_ts(o: dict) -> float:
+            v = o.get("placed_at") or o.get("submitted_at") or o.get("filled_at") or o.get("trade_time") or 0
+            if isinstance(v, (int, float)):
+                return float(v)
+            try:
+                return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError):
+                return 0.0
+
+        orders.sort(key=_order_ts, reverse=True)
 
         # Apply limit
         paged = orders[:limit]

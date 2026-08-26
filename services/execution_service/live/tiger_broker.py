@@ -13,7 +13,8 @@ from loguru import logger
 
 from configs.settings import settings
 from services.execution_service.config import exec_config
-from shared.tiger_account import resolve_tiger_account
+from shared.tiger_account import resolve_tiger_account, should_use_paper_account
+from shared.tiger_assets import merge_orders, parse_account_summary, parse_order, parse_position
 
 
 class TigerBroker:
@@ -35,17 +36,32 @@ class TigerBroker:
         self.require_confirm = require_confirm if require_confirm is not None else exec_config.LIVE_TRADING_REQUIRE_CONFIRM
         self._client: Any = None
         self._initialized = False
+        self._paper = should_use_paper_account(self.account)
+        self._sandbox_enabled: bool | None = None
 
-    def _ensure_client(self) -> None:
-        """Lazy-initialize Tiger client."""
-        if self._initialized:
+    def _ensure_client(self, sandbox: bool | None = None) -> None:
+        """Lazy-initialize Tiger client.
+
+        Paper/sim uses ``sandbox_debug=True`` so virtual funds are read from
+        the sandbox book (the live book for a paper id often reports zeros).
+        """
+        want_sandbox = self._paper if sandbox is None else bool(sandbox)
+        if self._initialized and self._client is not None and self._sandbox_enabled == want_sandbox:
             return
 
         try:
             from tigeropen.tiger_open_config import TigerOpenClientConfig
             from tigeropen.trade.trade_client import TradeClient
 
-            client_config = TigerOpenClientConfig()
+            try:
+                client_config = TigerOpenClientConfig(sandbox_debug=want_sandbox)
+            except TypeError:
+                client_config = TigerOpenClientConfig()
+            if hasattr(client_config, "sandbox_debug"):
+                try:
+                    client_config.sandbox_debug = want_sandbox
+                except Exception:
+                    pass
             client_config.private_key = self._load_key()
             client_config.tiger_id = settings.TIGER_ID
             client_config.account = self.account
@@ -53,12 +69,19 @@ class TigerBroker:
 
             self._client = TradeClient(client_config)
             self._initialized = True
-            logger.info(f"Tiger broker initialized (account={self.account})")
+            self._sandbox_enabled = want_sandbox
+            logger.info(
+                f"Tiger broker initialized (account={self.account} sandbox={want_sandbox} paper={self._paper})"
+            )
 
         except ImportError:
             logger.warning("tigeropen SDK not available — using paper broker")
+            self._initialized = False
+            self._client = None
         except Exception as e:
             logger.error(f"Tiger broker init failed: {e}")
+            self._initialized = False
+            self._client = None
 
     def _load_key(self) -> str:
         """Load RSA private key, stripped of PEM headers for Tiger SDK.
@@ -204,67 +227,197 @@ class TigerBroker:
             return []
 
         try:
-            positions = await asyncio.to_thread(self._client.get_positions)
-            result: list[dict[str, Any]] = []
-            for p in (positions or []):
-                # Tiger SDK: symbol lives under contract.symbol, not position.symbol
-                ticker = ""
-                if hasattr(p, "contract") and p.contract is not None:
-                    ticker = getattr(p.contract, "symbol", "") or ""
-                if not ticker:
-                    ticker = getattr(p, "symbol", "")
-                result.append({
-                    "ticker": ticker,
-                    "quantity": getattr(p, "quantity", 0),
-                    "avg_cost": getattr(p, "average_cost", 0.0),
-                    "market_value": getattr(p, "market_value", 0.0),
-                })
-            return result
+            positions = await asyncio.to_thread(self._fetch_positions)
+            return positions
         except Exception as e:
             logger.error(f"Failed to get positions: {e}")
             return []
 
+    def _fetch_positions(self) -> list[dict[str, Any]]:
+        if not self._client:
+            return []
+        raw = None
+        for kwargs in ({"account": self.account}, {}):
+            try:
+                raw = self._client.get_positions(**kwargs) if kwargs else self._client.get_positions()
+                break
+            except TypeError:
+                try:
+                    raw = self._client.get_positions()
+                    break
+                except Exception as exc:
+                    logger.debug("get_positions: %s", exc)
+            except Exception as exc:
+                logger.debug("get_positions(%s): %s", kwargs, exc)
+        result: list[dict[str, Any]] = []
+        for p in (raw or []):
+            parsed = parse_position(p)
+            if parsed.get("ticker"):
+                result.append(parsed)
+        return result
+
+    def _call_with_account(self, method: str, **extra: Any) -> Any:
+        fn = getattr(self._client, method, None) if self._client else None
+        if not callable(fn):
+            return None
+        kwargs: dict[str, Any] = dict(extra)
+        if self.account:
+            kwargs["account"] = self.account
+        try:
+            return fn(**kwargs)
+        except TypeError:
+            try:
+                return fn()
+            except Exception as exc:
+                logger.debug("%s() failed: %s", method, exc)
+                return None
+        except Exception as exc:
+            logger.debug("%s(%s) failed: %s", method, kwargs, exc)
+            return None
+
+    def _list_orders_sync(self, *methods: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for method in methods:
+            raw = self._call_with_account(method)
+            if not raw:
+                continue
+            try:
+                iterable = list(raw)
+            except TypeError:
+                continue
+            for o in iterable:
+                parsed = parse_order(o)
+                if parsed.get("id") or parsed.get("ticker"):
+                    rows.append(parsed)
+            if rows:
+                break
+        return rows
+
+    async def get_open_orders(self) -> list[dict[str, Any]]:
+        self._ensure_client()
+        if not self._initialized:
+            return []
+        return await asyncio.to_thread(
+            self._list_orders_sync, "get_open_orders", "get_active_orders", "get_orders"
+        )
+
+    async def get_filled_orders(self) -> list[dict[str, Any]]:
+        self._ensure_client()
+        if not self._initialized:
+            return []
+        return await asyncio.to_thread(
+            self._list_orders_sync, "get_filled_orders", "get_executed_orders"
+        )
+
+    async def get_order_history(self) -> list[dict[str, Any]]:
+        open_rows = await self.get_open_orders()
+        filled = await self.get_filled_orders()
+        return merge_orders(open_rows, filled)
+
+    async def get_transactions(self) -> list[dict[str, Any]]:
+        self._ensure_client()
+        if not self._initialized:
+            return []
+        return await asyncio.to_thread(self._fetch_transactions)
+
+    def _fetch_transactions(self) -> list[dict[str, Any]]:
+        raw = self._call_with_account("get_transactions")
+        if raw is None:
+            raw = self._call_with_account("get_trade_fills")
+        out: list[dict[str, Any]] = []
+        for t in (raw or []):
+            parsed = parse_order(t)
+            parsed["source"] = "tiger_tx"
+            if parsed.get("id") or parsed.get("ticker"):
+                out.append(parsed)
+        return out
+
+    def _fetch_assets_raw(self) -> Any:
+        if not self._client:
+            return None
+        attempts: list[tuple[str, dict[str, Any]]] = [
+            ("get_assets", {"account": self.account, "segment": True}),
+            ("get_assets", {"account": self.account}),
+            ("get_prime_assets", {"account": self.account}),
+            ("get_assets", {}),
+        ]
+        for method, kwargs in attempts:
+            fn = getattr(self._client, method, None)
+            if not callable(fn):
+                continue
+            try:
+                raw = fn(**kwargs) if kwargs else fn()
+                if raw:
+                    return raw
+            except TypeError:
+                try:
+                    raw = fn()
+                    if raw:
+                        return raw
+                except Exception as exc:
+                    logger.debug("%s() failed: %s", method, exc)
+            except Exception as exc:
+                logger.debug("%s(%s) failed: %s", method, kwargs, exc)
+        return None
+
+    def _get_account_summary_sync(self) -> dict[str, Any]:
+        raw = self._fetch_assets_raw()
+        parsed = parse_account_summary(raw, account=self.account)
+        parsed["account"] = parsed.get("account") or self.account
+        parsed["sandbox"] = self._sandbox_enabled
+        parsed["paper"] = self._paper
+        return parsed
+
+    def _account_looks_empty(self, parsed: dict[str, Any]) -> bool:
+        cash = float(parsed.get("cash") or 0)
+        nav = float(parsed.get("nav") or parsed.get("net_liquidation") or 0)
+        bp = float(parsed.get("buying_power") or 0)
+        return cash <= 0 and nav <= 0 and bp <= 0
+
     async def get_account_summary(self) -> dict[str, Any]:
-        """Get account summary via Tiger SDK ``get_assets()``.
+        """Get account summary via Tiger SDK ``get_assets(account=...)``.
 
-        The Tiger ``TradeClient.get_assets()`` method returns a list of
-        ``PortfolioAccount`` objects whose ``.summary`` attribute holds
-        ``Account`` fields like ``net_liquidation``, ``cash``, ``buying_power``.
-        Some summary fields may be ``inf`` (e.g. ``accrued_cash``); a safe-float
-        helper filters those out.
-
-        Returns:
-            Account info dict with keys: account, nav, cash, buying_power,
-            currency.
+        Paper virtual funds often live on the sandbox book and/or in
+        ``segments`` rather than ``summary.cash``.  We parse every alias,
+        then retry the opposite sandbox flag if the preferred book is empty.
         """
         self._ensure_client()
         if not self._initialized:
-            return {"account": self.account, "nav": 0, "cash": 0}
+            return {
+                "account": self.account,
+                "nav": 0,
+                "cash": 0,
+                "buying_power": 0,
+                "paper": self._paper,
+            }
 
         try:
-            assets = await asyncio.to_thread(self._client.get_assets)
-            if assets and len(assets) > 0:
-                acc = assets[0]
-                summary = getattr(acc, "summary", acc)
-
-                def _safe_float(val: Any) -> float:
-                    """Convert value to float, returning 0.0 for inf/nan/errors."""
-                    try:
-                        v = float(val)
-                        if v == float("inf") or v == float("-inf") or v != v:  # inf or nan
-                            return 0.0
-                        return v
-                    except (TypeError, ValueError):
-                        return 0.0
-
-                return {
-                    "account": self.account,
-                    "nav": _safe_float(getattr(summary, "net_liquidation", 0.0)),
-                    "cash": _safe_float(getattr(summary, "cash", 0.0)),
-                    "buying_power": _safe_float(getattr(summary, "buying_power", 0.0)),
-                    "currency": getattr(summary, "currency", "USD"),
-                }
+            parsed = await asyncio.to_thread(self._get_account_summary_sync)
+            if self._account_looks_empty(parsed) and self._sandbox_enabled is not None:
+                flipped = not bool(self._sandbox_enabled)
+                logger.info(
+                    "tiger_broker: empty book on sandbox=%s — retrying sandbox=%s",
+                    self._sandbox_enabled,
+                    flipped,
+                )
+                self._ensure_client(sandbox=flipped)
+                if self._initialized:
+                    parsed = await asyncio.to_thread(self._get_account_summary_sync)
+                    if self._account_looks_empty(parsed) and self._paper:
+                        # Restore sandbox so later paper orders still hit the sim book.
+                        self._ensure_client(sandbox=True)
+                        parsed["sandbox"] = self._sandbox_enabled
+            logger.info(
+                "tiger_broker account=%s sandbox=%s cash=%.2f nav=%.2f bp=%.2f segs=%d",
+                parsed.get("account"),
+                parsed.get("sandbox"),
+                float(parsed.get("cash") or 0),
+                float(parsed.get("nav") or 0),
+                float(parsed.get("buying_power") or 0),
+                len(parsed.get("segments") or []),
+            )
+            return parsed
         except Exception as e:
             logger.error(f"Failed to get account: {e}")
 
-        return {"account": self.account, "nav": 0, "cash": 0}
+        return {"account": self.account, "nav": 0, "cash": 0, "buying_power": 0}

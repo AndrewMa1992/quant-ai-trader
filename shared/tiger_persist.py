@@ -56,14 +56,16 @@ def normalize_position(pos: Dict[str, Any]) -> Dict[str, Any]:
 
 def normalize_account(acct: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not acct:
-        return {"nav": 0.0, "cash": 0.0, "total_value": 0.0}
+        return {"nav": 0.0, "cash": 0.0, "total_value": 0.0, "buying_power": 0.0}
     nav = float(acct.get("nav") or acct.get("total_value") or acct.get("net_liquidation") or 0.0)
     cash = float(acct.get("cash") or 0.0)
+    bp = float(acct.get("buying_power") or acct.get("available_funds") or cash or 0.0)
     return {
         **acct,
         "nav": nav,
         "cash": cash,
         "total_value": float(acct.get("total_value") or nav),
+        "buying_power": bp,
     }
 
 
@@ -227,6 +229,22 @@ def persist_tiger_snapshot(
             orders_written += 1
 
         conn.commit()
+        order_payload = []
+        for o in orders or []:
+            ticker = str(o.get("ticker") or o.get("symbol") or "")
+            if not ticker:
+                continue
+            order_payload.append({
+                "order_id": str(o.get("order_id") or o.get("id") or ""),
+                "ticker": ticker,
+                "side": str(o.get("side") or o.get("action") or "").upper(),
+                "quantity": float(o.get("quantity") or o.get("qty") or 0),
+                "filled_quantity": float(o.get("filled_quantity") or o.get("filled_qty") or 0),
+                "status": str(o.get("status") or "SUBMITTED"),
+                "price": float(o.get("price") or o.get("avg_fill_price") or 0),
+                "avg_fill_price": float(o.get("avg_fill_price") or o.get("price") or 0),
+                "source": "tiger",
+            })
         snapshot = {
             "type": "tiger_snapshot",
             "source": "tiger",
@@ -234,6 +252,7 @@ def persist_tiger_snapshot(
             "account": acct,
             "nav": nav,
             "cash": cash,
+            "buying_power": float(acct.get("buying_power") or cash or 0.0),
             "positions": [
                 {
                     "ticker": p["ticker"],
@@ -247,6 +266,7 @@ def persist_tiger_snapshot(
                 }
                 for p in norm_pos
             ],
+            "orders": order_payload,
             "positions_synced": len(norm_pos),
             "orders_synced": orders_written,
             "account_updated": True,
@@ -386,7 +406,9 @@ def load_positions_for_api() -> Dict[str, Any]:
             "total_pnl": sum(p["unrealized_pnl"] for p in positions),
             "unrealized_pnl": sum(p["unrealized_pnl"] for p in positions),
             "realized_pnl": 0.0,
+            "buying_power": float(port[1]) if port else 0.0,
             "source": "tiger_db",
+            "has_snapshot": port is not None,
         }
         return {"positions": positions, "summary": summary}
     finally:

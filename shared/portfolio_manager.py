@@ -184,7 +184,17 @@ class PortfolioManager:
                 return result
 
             tiger_cash: float = float(tiger_account.get("cash", 0.0) or 0.0)
-            tiger_total: float = float(tiger_account.get("total_value", 0.0) or 0.0)
+            tiger_total: float = float(
+                tiger_account.get("total_value", 0.0)
+                or tiger_account.get("nav", 0.0)
+                or tiger_account.get("net_liquidation", 0.0)
+                or 0.0
+            )
+            tiger_bp: float = float(
+                tiger_account.get("buying_power", 0.0)
+                or tiger_account.get("available_funds", 0.0)
+                or 0.0
+            )
             tiger_pos_count: int = len(tiger_positions or [])
 
             # Safety net: Tiger returned 0 positions but we have many locally.
@@ -207,6 +217,7 @@ class PortfolioManager:
             tiger_empty = (
                 tiger_cash <= self._ZERO_NAV_EPS
                 and tiger_total <= self._ZERO_NAV_EPS
+                and tiger_bp <= self._ZERO_NAV_EPS
                 and tiger_pos_count == 0
             )
             if (
@@ -232,7 +243,9 @@ class PortfolioManager:
             # Overwrite local state from Tiger.
             self.positions.clear()
             self.avg_costs.clear()
-            self.cash = tiger_cash
+            self.cash = tiger_cash if tiger_cash > self._ZERO_NAV_EPS else (
+                tiger_bp if tiger_bp > self._ZERO_NAV_EPS else tiger_cash
+            )
 
             # ── initial_capital anchoring ──────────────────────
             if tiger_total > 0:
