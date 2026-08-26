@@ -1,5 +1,5 @@
 ﻿# Smart CD deploy for Lightsail Windows (ASCII-only for PS 5.1)
-# DeployScriptVersion: 5
+# DeployScriptVersion: 6
 # Usage:
 #   .\scripts\windows_cd_deploy.ps1 -Branch main
 #   .\scripts\windows_cd_deploy.ps1 -Branch main -Smart
@@ -146,6 +146,30 @@ if (-not $ok) {
 }
 
 Write-Log "[ok] CD complete - gateway healthy"
+
+# Non-fatal Tiger SDK probe so CD logs show connect vs silent zeros
+Write-Log "[..] tiger SDK probe"
+$env:PYTHONPATH = $RepoRoot
+$env:QAT_PROJECT_ROOT = $RepoRoot
+$pyProbe = @'
+import json
+from shared.tiger_sdk import connect, last_error, is_sandbox_requested, resolve_private_key_path
+try:
+    trade, quote = connect(force=True)
+    print("[ok] tiger sdk connected sandbox=%s key=%s trade=%s quote=%s" % (
+        is_sandbox_requested(), resolve_private_key_path(), type(trade).__name__, type(quote).__name__))
+except Exception as exc:
+    print("[warn] tiger sdk connect failed: %s" % (last_error() or exc))
+'@
+$probeFile = Join-Path $RepoRoot "cache\tiger_sdk_probe.py"
+New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "cache") | Out-Null
+Set-Content -Path $probeFile -Value $pyProbe -Encoding ASCII
+try {
+    $probeOut = & python $probeFile 2>&1
+    $probeOut | ForEach-Object { Write-Log $_ }
+} catch {
+    Write-Log ("[warn] tiger sdk probe: {0}" -f $_.Exception.Message)
+}
 
 # Ensure trading pipeline stays up (must survive GHA orphan cleanup)
 Write-Log "[..] pipeline watchdog"

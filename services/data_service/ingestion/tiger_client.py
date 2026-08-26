@@ -11,8 +11,6 @@ Provides:
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 from datetime import date, datetime
 from typing import Any, Optional
 
@@ -41,54 +39,46 @@ class TigerClient:
         self._rate_limit = data_config.TIGER_RATE_LIMIT_SECONDS
         self._last_request: float = 0.0
         self._client: Any = None
+        self._trade_client: Any = None
+        self._quote_client: Any = None
         self._initialized: bool = False
+        self._init_error: Optional[str] = None
 
     def _ensure_initialized(self) -> None:
-        """Lazy-initialize the Tiger client."""
+        """Lazy-initialize TradeClient + QuoteClient via shared.tiger_sdk."""
         if self._initialized:
             return
 
         try:
-            from tigeropen.tiger_open_config import TigerOpenClientConfig
-            from tigeropen.common.consts import Language
+            from shared.tiger_sdk import connect, last_error
 
-            client_config = TigerOpenClientConfig()
-            client_config.private_key = self._load_private_key()
-            client_config.tiger_id = self._tiger_id
-            client_config.account = self._account
-            client_config.language = Language.en_US
-            client_config.license = self._license
-            client_config.tiger_client_version = settings.TIGER_CLIENT_VERSION
-
-            from tigeropen.trade.trade_client import TradeClient
-            from tigeropen.quote.quote_client import QuoteClient
-
-            self._trade_client = TradeClient(client_config)
-            self._quote_client = QuoteClient(client_config)
+            trade, quote = connect(account=self._account)
+            self._trade_client = trade
+            self._quote_client = quote
+            self._client = trade
             self._initialized = True
+            self._init_error = None
             logger.info(f"Tiger client initialized (account={self._account})")
         except ImportError:
+            self._init_error = "tigeropen not installed"
             logger.warning("tigeropen SDK not installed — Tiger client unavailable")
             self._initialized = False
         except Exception as e:
-            logger.error(f"Failed to initialize Tiger client: {e}")
+            from shared.tiger_sdk import last_error
+
+            self._init_error = last_error() or str(e)
+            logger.error(f"Failed to initialize Tiger client: {self._init_error}")
             self._initialized = False
 
     def _load_private_key(self) -> str:
-        """Load the Tiger RSA private key from file path.
+        """Load the Tiger RSA private key (shared resolver)."""
+        try:
+            from shared.tiger_sdk import load_private_key
 
-        Returns:
-            Private key content as string.
-
-        Raises:
-            FileNotFoundError: If the key file does not exist.
-        """
-        path = os.path.expanduser(self._private_key_path)
-        if not os.path.exists(path):
-            logger.warning(f"Tiger private key not found at {path}")
+            return load_private_key()
+        except Exception as exc:
+            logger.warning(f"Tiger private key not found: {exc}")
             return ""
-        with open(path, "r") as f:
-            return f.read()
 
     async def _rate_limit_wait(self) -> None:
         """Enforce rate limit between Tiger API calls."""
@@ -122,7 +112,7 @@ class TigerClient:
         """
         self._ensure_initialized()
         if not self._initialized:
-            return {"ticker": ticker, "error": "Tiger client not initialized"}
+            return {"ticker": ticker, "error": self._init_error or "Tiger client not initialized"}
 
         await self._rate_limit_wait()
         try:
@@ -161,7 +151,8 @@ class TigerClient:
         """
         self._ensure_initialized()
         if not self._initialized:
-            return [{"ticker": t, "error": "Tiger client not initialized"} for t in tickers]
+            err = self._init_error or "Tiger client not initialized"
+            return [{"ticker": t, "error": err} for t in tickers]
 
         await self._rate_limit_wait()
         try:
@@ -227,7 +218,7 @@ class TigerClient:
         """
         self._ensure_initialized()
         if not self._initialized:
-            return {"error": "Tiger client not initialized"}
+            return {"error": self._init_error or "Tiger client not initialized", "account": self._account}
 
         await self._rate_limit_wait()
         try:

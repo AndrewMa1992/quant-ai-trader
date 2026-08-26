@@ -107,7 +107,9 @@ jobs:
               }
             }
             if (-not $replaced) { $next += ('{0}={1}' -f $Key, $Value) }
-            Set-Content -LiteralPath $envFile -Value $next -Encoding utf8
+            # PS 5.1 utf8 encoding writes a BOM that breaks python-dotenv
+            $utf8 = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllLines($envFile, $next, $utf8)
             Write-Host ("Upserted {0} in .env" -f $Key)
           }
 
@@ -115,15 +117,28 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($tigerId)) { $tigerId = '20159337' }
           $tigerAcct = $env:TIGER_ACCOUNT
           if ([string]::IsNullOrWhiteSpace($tigerAcct)) { $tigerAcct = '21837535188693626' }
+          $tigerLic = $env:TIGER_LICENSE
+          if ([string]::IsNullOrWhiteSpace($tigerLic)) { $tigerLic = 'TBSG' }
 
           Set-DotEnvValue 'QAT_TIGER_ID' $tigerId
           Set-DotEnvValue 'QAT_TIGER_ACCOUNT' $tigerAcct
           Set-DotEnvValue 'QAT_EXEC_TIGER_ACCOUNT' $tigerAcct
-          Set-DotEnvValue 'QAT_TIGER_LICENSE' $env:TIGER_LICENSE
-          Set-DotEnvValue 'QAT_TIGER_PRIVATE_KEY_PATH' './certs/tiger_private_key.pem'
+          Set-DotEnvValue 'QAT_TIGER_LICENSE' $tigerLic
+          Set-DotEnvValue 'QAT_TIGER_PRIVATE_KEY_PATH' $pemPath
           Set-DotEnvValue 'QAT_TIGER_PAPER_TRADING' 'true'
+          Set-DotEnvValue 'QAT_TIGER_SANDBOX' 'false'
           Set-DotEnvValue 'QAT_TRADING_SIMULATION_MODE' 'true'
           Set-DotEnvValue 'QAT_EXECUTION_MODE' 'paper'
+
+          $propsPath = Join-Path $certs 'tiger_openapi_config.properties'
+          $props = @(
+            ('tiger_id={0}' -f $tigerId),
+            ('account={0}' -f $tigerAcct),
+            ('private_key_path={0}' -f $pemPath),
+            ('license={0}' -f $tigerLic)
+          )
+          Set-Content -LiteralPath $propsPath -Value $props -Encoding ascii
+          Write-Host ("Wrote Tiger properties {0}" -f $propsPath)
 
 
       - name: Deploy paper stack
