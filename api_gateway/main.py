@@ -16,9 +16,11 @@ import time
 from contextlib import asynccontextmanager
 
 import httpx
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from loguru import logger
 from sqlalchemy import text
 
@@ -34,6 +36,25 @@ from shared.service_discovery import SERVICE_PORT_MAP, service_base_url, service
 
 # Application startup time for uptime tracking
 _START_TIME: float = time.time()
+_FRONTEND_DIST = Path("frontend/dist")
+
+
+def _spa_index_response() -> FileResponse | None:
+    """Return built Vue index.html when present (public UI on :8001/)."""
+    index_path = _FRONTEND_DIST / "index.html"
+    if index_path.is_file():
+        return FileResponse(str(index_path), media_type="text/html")
+    return None
+
+
+def _api_info_payload() -> dict:
+    return {
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "env": settings.ENV,
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 @asynccontextmanager
@@ -252,15 +273,26 @@ async def health_check(request: Request) -> HealthResponse:
 
 # ── Root ─────────────────────────────────────────────────────
 @app.get("/", tags=["System"])
-async def root() -> dict:
-    """Root endpoint returning API information."""
-    return {
-        "app": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "env": settings.ENV,
-        "docs": "/docs",
-        "health": "/health",
-    }
+async def root(request: Request):
+    """Public UI: serve the Vue SPA at / when frontend/dist exists.
+
+    Browsers hitting http://<host>:8001/ must get HTML, not JSON.
+    JSON API info remains at GET /api.
+    """
+    accept = (request.headers.get("accept") or "").lower()
+    spa = _spa_index_response()
+    # Prefer SPA for browsers; keep JSON only when explicitly asked and SPA missing
+    if spa is not None and "text/html" in accept:
+        return spa
+    if spa is not None and "application/json" not in accept:
+        return spa
+    return _api_info_payload()
+
+
+@app.get("/api", tags=["System"])
+async def api_info() -> dict:
+    """Machine-readable gateway info (JSON)."""
+    return _api_info_payload()
 
 
 # ── API v2 Status ───────────────────────────────────────────
@@ -484,19 +516,15 @@ async def proxy_to_service(service: str, path: str, request: Request) -> Respons
         )
 
 # ── Frontend static assets + SPA (must be after API routes) ─
-from pathlib import Path as _Path
-
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-_FRONTEND_DIST = _Path("frontend/dist")
 _FRONTEND_ASSETS = _FRONTEND_DIST / "assets"
 if _FRONTEND_ASSETS.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_FRONTEND_ASSETS)), name="frontend-assets")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
-async def favicon() -> Any:
+async def favicon():
     icon = _FRONTEND_DIST / "favicon.ico"
     if icon.exists():
         return FileResponse(str(icon))
@@ -504,7 +532,7 @@ async def favicon() -> Any:
 
 
 @app.get("/{full_path:path}", tags=["SPA"])
-async def spa_catchall(full_path: str) -> Any:
+async def spa_catchall(full_path: str):
     """SPA fallback: return index.html for client routes only.
 
     Never return HTML for missing /assets/* (that breaks ES modules).
@@ -512,9 +540,9 @@ async def spa_catchall(full_path: str) -> Any:
     if full_path.startswith("assets/") or full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail=f"Not found: {full_path}")
 
-    index_path = _FRONTEND_DIST / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path), media_type="text/html")
+    spa = _spa_index_response()
+    if spa is not None:
+        return spa
     raise HTTPException(
         status_code=404,
         detail="Frontend not built. Run 'cd frontend && npm run build'.",
