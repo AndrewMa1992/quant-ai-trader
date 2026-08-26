@@ -319,17 +319,14 @@ class TigerAdvancedClient:
         try:
             summary = await self.broker.get_account_summary()
 
-            # Build comprehensive response
-            account_info: dict[str, Any] = {
-                "account": self.account,
-                "status": "active",
-                "nav": summary.get("nav", 0),
-                "cash": summary.get("cash", 0),
-                "buying_power": summary.get("buying_power", 0),
-                "currency": "USD",
-                "margin_enabled": summary.get("buying_power", 0) > summary.get("cash", 0),
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+            account_info: dict[str, Any] = dict(summary or {})
+            account_info["account"] = account_info.get("account") or self.account
+            account_info["status"] = "error" if account_info.get("error") else "active"
+            account_info.setdefault("nav", account_info.get("net_liquidation") or 0)
+            account_info.setdefault("cash", 0)
+            account_info.setdefault("buying_power", account_info.get("available_funds") or 0)
+            account_info.setdefault("currency", "USD")
+            account_info["timestamp"] = datetime.utcnow().isoformat()
 
             # Try to get additional details from Tiger SDK
             self.broker._ensure_client()

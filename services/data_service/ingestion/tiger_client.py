@@ -231,21 +231,23 @@ class TigerClient:
 
         await self._rate_limit_wait()
         try:
-            account = await asyncio.to_thread(
-                self._trade_client.get_accounts
-            )
-            if account and len(account) > 0:
-                acc = account[0]
-                # Tiger SDK: account fields live under acc.summary (e.g. summary.net_liquidation)
-                summary = getattr(acc, "summary", acc)
-                return {
-                    "account_id": getattr(acc, "account", self._account),
-                    "nav": getattr(summary, "net_liquidation", 0.0),
-                    "cash": getattr(summary, "cash", 0.0),
-                    "margin_used": getattr(summary, "margin", 0.0),
-                    "buying_power": getattr(summary, "buying_power", 0.0),
-                }
-            return {"error": "No account data"}
+            raw = None
+            try:
+                raw = await asyncio.to_thread(
+                    self._trade_client.get_assets, account=self._account
+                )
+            except TypeError:
+                raw = await asyncio.to_thread(self._trade_client.get_assets)
+            except Exception:
+                try:
+                    raw = await asyncio.to_thread(self._trade_client.get_accounts)
+                except Exception:
+                    raw = None
+            from shared.tiger_assets import parse_account_summary
+
+            parsed = parse_account_summary(raw, account=self._account)
+            parsed["account_id"] = parsed.get("account") or self._account
+            return parsed
         except Exception as e:
             logger.error(f"Tiger get_account_summary failed: {e}")
             return {"error": str(e)}

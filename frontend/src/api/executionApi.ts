@@ -18,6 +18,22 @@ export interface PortfolioSummary {
   unrealized_pnl: number
   realized_pnl: number
   total_pnl: number
+  cash?: number
+  buying_power?: number
+  source?: string
+}
+
+export interface TigerAccount {
+  account?: string
+  nav?: number
+  cash?: number
+  buying_power?: number
+  currency?: string
+  status?: string
+  segments?: Array<Record<string, unknown>>
+  sandbox?: boolean | null
+  paper?: boolean
+  [key: string]: unknown
 }
 
 export interface Alert {
@@ -118,6 +134,21 @@ export const executionApi = {
   async getTradeLogs(date?: string) {
     const { data } = await apiClient.get(`${BASE}/orders`, { params: { since: date } })
     return data.data
+  },
+
+  async getTigerAccount(): Promise<TigerAccount> {
+    const { data } = await apiClient.get(`${BASE}/tiger/account`)
+    return (data.data ?? data ?? {}) as TigerAccount
+  },
+
+  async getTigerSnapshot(): Promise<Record<string, unknown>> {
+    const { data } = await apiClient.get(`${BASE}/tiger/snapshot`)
+    return (data.data ?? data ?? {}) as Record<string, unknown>
+  },
+
+  async syncTiger(): Promise<Record<string, unknown>> {
+    const { data } = await apiClient.post(`${BASE}/tiger/sync`)
+    return (data.data ?? data ?? {}) as Record<string, unknown>
   },
 
   // Rollback

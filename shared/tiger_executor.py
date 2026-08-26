@@ -491,11 +491,21 @@ class TigerExecutor:
                         acct = self.tiger.get_account_info()
                         if acct is not None:
                             tc = float(acct.get("cash", 0) or 0)
-                            tv = float(acct.get("total_value", 0) or 0)
-                            if tc <= 1.0 and tv <= 1.0 and side.upper() == "BUY":
+                            tv = float(
+                                acct.get("total_value", 0)
+                                or acct.get("nav", 0)
+                                or acct.get("net_liquidation", 0)
+                                or 0
+                            )
+                            bp = float(
+                                acct.get("buying_power", 0)
+                                or acct.get("available_funds", 0)
+                                or 0
+                            )
+                            if max(tc, tv, bp) <= 1.0 and side.upper() == "BUY":
                                 tiger_cash_ok = False
                                 logger.info(
-                                    f"Tiger paper cash≈0 — skip broker BUY for {ticker}, local sim only"
+                                    f"Tiger paper cash/NAV/BP≈0 — skip broker BUY for {ticker}, local sim only"
                                 )
                 except Exception:
                     tiger_cash_ok = True

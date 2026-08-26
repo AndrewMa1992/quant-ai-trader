@@ -8,7 +8,9 @@ from api_gateway.middleware.auth import PUBLIC_PATHS
 from shared.tiger_account import (
     LIVE_ACCOUNT_DEFAULT,
     PAPER_ACCOUNT_DEFAULT,
+    is_paper_account_id,
     resolve_tiger_account,
+    should_use_paper_account,
 )
 
 
@@ -29,6 +31,18 @@ def test_live_account_when_sim_off(monkeypatch):
 def test_explicit_account_wins(monkeypatch):
     monkeypatch.setenv("QAT_TRADING_SIMULATION_MODE", "true")
     assert resolve_tiger_account("999") == "999"
+
+
+def test_paper_account_helpers(monkeypatch):
+    assert is_paper_account_id(PAPER_ACCOUNT_DEFAULT)
+    assert not is_paper_account_id(LIVE_ACCOUNT_DEFAULT)
+    monkeypatch.setenv("QAT_TRADING_SIMULATION_MODE", "true")
+    assert should_use_paper_account() is True
+    monkeypatch.setenv("QAT_TRADING_SIMULATION_MODE", "false")
+    monkeypatch.delenv("QAT_TIGER_ACCOUNT", raising=False)
+    monkeypatch.delenv("QAT_EXEC_TIGER_ACCOUNT", raising=False)
+    assert should_use_paper_account() is False
+    assert should_use_paper_account(PAPER_ACCOUNT_DEFAULT) is True
 
 
 def test_root_path_normalization_for_auth():

@@ -12,8 +12,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const error = ref('')
   const liveSource = ref('')
   const lastLiveAt = ref('')
+  const buyingPower = ref(0)
+  const tigerAccount = ref('')
 
-  // Computed: positions with color coding (green = positive PnL, red = negative)
   const positionsWithColors = computed(() => {
     return positions.value.map(p => ({
       ...p,
@@ -24,11 +25,10 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     }))
   })
 
-  // Computed: total portfolio metrics
   const totalValue = computed(() => summary.value?.total_market_value ?? 0)
   const totalPnl = computed(() => summary.value?.total_pnl ?? 0)
   const unrealizedPnl = computed(() => summary.value?.unrealized_pnl ?? 0)
-  const cash = computed(() => (summary.value as PortfolioSummary & { cash?: number } | null)?.cash ?? 0)
+  const cash = computed(() => summary.value?.cash ?? 0)
 
   /** Apply Tiger/local paper WS snapshot immediately (no HTTP round-trip). */
   function applyTigerSnapshot(snap: Record<string, unknown>) {
@@ -49,21 +49,28 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       }
     }).filter((p) => p.ticker)
 
-    const nav = Number(snap.nav ?? snap.total_value ?? 0)
-    const cashAmt = Number(
-      (snap.cash as number | undefined)
-      ?? (snap.account as Record<string, unknown> | undefined)?.cash
-      ?? 0,
-    )
+    const acct = (typeof snap.account === 'object' && snap.account)
+      ? snap.account as Record<string, unknown>
+      : {}
+    const nav = Number(snap.nav ?? snap.total_value ?? acct.nav ?? acct.net_liquidation ?? 0)
+    const cashAmt = Number(snap.cash ?? acct.cash ?? 0)
+    const bpAmt = Number(snap.buying_power ?? acct.buying_power ?? cashAmt)
     const pnlSum = positions.value.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0)
     summary.value = {
       position_count: positions.value.length,
-      total_market_value: nav || positions.value.reduce((s, p) => s + Math.abs(p.market_value || 0), 0),
+      total_market_value: nav || positions.value.reduce((s, p) => s + Math.abs(p.market_value || 0), 0) || cashAmt,
       unrealized_pnl: pnlSum,
-      realized_pnl: 0,
+      realized_pnl: Number(acct.realized_pnl ?? 0),
       total_pnl: pnlSum,
-      ...( { cash: cashAmt } as Partial<PortfolioSummary> ),
-    } as PortfolioSummary
+      cash: cashAmt,
+      buying_power: bpAmt,
+      source: String(snap.source || 'tiger'),
+    }
+    buyingPower.value = bpAmt
+    const acctId = acct.account ?? snap.account
+    if (acctId && typeof acctId !== 'object') {
+      tigerAccount.value = String(acctId)
+    }
     liveSource.value = String(snap.source || 'tiger')
     lastLiveAt.value = String(snap.timestamp || new Date().toISOString())
   }
@@ -75,10 +82,48 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       const data = await executionApi.getPositions()
       positions.value = data.positions ?? []
       summary.value = data.summary
+      const s = data.summary
+      buyingPower.value = Number(s?.buying_power ?? s?.cash ?? buyingPower.value)
+      if (s?.source) liveSource.value = s.source
+      lastLiveAt.value = new Date().toISOString()
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Positions fetch failed'
     } finally {
       loading.value = false
+    }
+  }
+
+  async function fetchTigerAccount() {
+    try {
+      const acct = await executionApi.getTigerAccount()
+      tigerAccount.value = String(acct.account || tigerAccount.value)
+      const cashAmt = Number(acct.cash ?? 0)
+      const navAmt = Number(acct.nav ?? acct.net_liquidation ?? 0)
+      const bpAmt = Number(acct.buying_power ?? cashAmt)
+      buyingPower.value = bpAmt
+      if (summary.value) {
+        summary.value = {
+          ...summary.value,
+          cash: cashAmt || summary.value.cash,
+          total_market_value: navAmt || summary.value.total_market_value,
+          buying_power: bpAmt,
+        }
+      } else {
+        summary.value = {
+          position_count: positions.value.length,
+          total_market_value: navAmt,
+          unrealized_pnl: 0,
+          realized_pnl: 0,
+          total_pnl: 0,
+          cash: cashAmt,
+          buying_power: bpAmt,
+          source: 'tiger',
+        }
+      }
+      liveSource.value = 'tiger'
+      lastLiveAt.value = new Date().toISOString()
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Tiger account fetch failed'
     }
   }
 
@@ -128,8 +173,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
 
   return {
     positions, summary, optimizeResult, backtestResult, loading, error,
-    liveSource, lastLiveAt,
+    liveSource, lastLiveAt, buyingPower, tigerAccount,
     positionsWithColors, totalValue, totalPnl, unrealizedPnl, cash,
-    fetchPositions, applyTigerSnapshot, optimize, optimizeBL, optimizeRiskParity, runBacktest,
+    fetchPositions, fetchTigerAccount, applyTigerSnapshot, optimize, optimizeBL, optimizeRiskParity, runBacktest,
   }
 })
