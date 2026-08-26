@@ -77,6 +77,33 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _id_kind(conn: sqlite3.Connection, table: str) -> str:
+    """How this SQLite table generates ``id``.
+
+    SQLAlchemy models use a UUID string PK (no default at the DB layer),
+    so INSERT without ``id`` raises ``NOT NULL constraint failed: *.id``.
+    The lightweight ``ensure_tables`` schema uses INTEGER AUTOINCREMENT.
+    """
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    except sqlite3.Error:
+        return "auto"
+    for row in rows:
+        name = str(row[1] or "")
+        if name != "id":
+            continue
+        typ = str(row[2] or "").upper()
+        pk = int(row[5] or 0)
+        if pk and ("INT" in typ or typ in ("", "INTEGER")):
+            return "auto"
+        return "uuid"
+    return "none"
+
+
+def _maybe_id(conn: sqlite3.Connection, table: str) -> Optional[str]:
+    return uuid.uuid4().hex if _id_kind(conn, table) == "uuid" else None
+
+
 def ensure_tables(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
@@ -166,38 +193,75 @@ def persist_tiger_snapshot(
             px = float(p["market_price"] or (p["market_value"] / abs(p["shares"]) if p["shares"] else 0))
             weight = (abs(p["market_value"]) / nav) if nav > 0 else 0.0
             unreal = (px - p["avg_cost"]) * qty if p["avg_cost"] else 0.0
+            pos_id = _maybe_id(conn, "positions")
+            if pos_id:
+                conn.execute(
+                    """INSERT INTO positions
+                       (id, ticker, position_date, market, quantity, avg_cost, market_price,
+                        market_value, unrealized_pnl, realized_pnl, weight, currency, fx_rate,
+                        created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'USD', 1, ?, ?)""",
+                    (
+                        pos_id, p["ticker"], today, p["market"], qty, p["avg_cost"], px,
+                        p["market_value"], unreal, weight, now, now,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO positions
+                       (ticker, position_date, market, quantity, avg_cost, market_price,
+                        market_value, unrealized_pnl, realized_pnl, weight, currency, fx_rate,
+                        created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'USD', 1, ?, ?)""",
+                    (
+                        p["ticker"], today, p["market"], qty, p["avg_cost"], px,
+                        p["market_value"], unreal, weight, now, now,
+                    ),
+                )
+
+        port_id = _maybe_id(conn, "portfolios")
+        if port_id:
             conn.execute(
-                """INSERT INTO positions
-                   (ticker, position_date, market, quantity, avg_cost, market_price,
-                    market_value, unrealized_pnl, realized_pnl, weight, currency, fx_rate,
+                """INSERT INTO portfolios
+                   (id, snapshot_date, nav, gross_exposure, net_exposure, long_exposure, short_exposure,
+                    cash, daily_pnl, daily_return, cumulative_return, num_positions, leverage,
                     created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'USD', 1, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 1, ?, ?)
+                   ON CONFLICT(snapshot_date) DO UPDATE SET
+                     nav=excluded.nav, cash=excluded.cash,
+                     gross_exposure=excluded.gross_exposure,
+                     net_exposure=excluded.net_exposure,
+                     long_exposure=excluded.long_exposure,
+                     short_exposure=excluded.short_exposure,
+                     num_positions=excluded.num_positions,
+                     updated_at=excluded.updated_at
+                """,
                 (
-                    p["ticker"], today, p["market"], qty, p["avg_cost"], px,
-                    p["market_value"], unreal, weight, now, now,
+                    port_id, today, nav, long_exp + short_exp, long_exp - short_exp,
+                    long_exp, short_exp, cash, len(norm_pos), now, now,
                 ),
             )
-
-        conn.execute(
-            """INSERT INTO portfolios
-               (snapshot_date, nav, gross_exposure, net_exposure, long_exposure, short_exposure,
-                cash, daily_pnl, daily_return, cumulative_return, num_positions, leverage,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 1, ?, ?)
-               ON CONFLICT(snapshot_date) DO UPDATE SET
-                 nav=excluded.nav, cash=excluded.cash,
-                 gross_exposure=excluded.gross_exposure,
-                 net_exposure=excluded.net_exposure,
-                 long_exposure=excluded.long_exposure,
-                 short_exposure=excluded.short_exposure,
-                 num_positions=excluded.num_positions,
-                 updated_at=excluded.updated_at
-            """,
-            (
-                today, nav, long_exp + short_exp, long_exp - short_exp,
-                long_exp, short_exp, cash, len(norm_pos), now, now,
-            ),
-        )
+        else:
+            conn.execute(
+                """INSERT INTO portfolios
+                   (snapshot_date, nav, gross_exposure, net_exposure, long_exposure, short_exposure,
+                    cash, daily_pnl, daily_return, cumulative_return, num_positions, leverage,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 1, ?, ?)
+                   ON CONFLICT(snapshot_date) DO UPDATE SET
+                     nav=excluded.nav, cash=excluded.cash,
+                     gross_exposure=excluded.gross_exposure,
+                     net_exposure=excluded.net_exposure,
+                     long_exposure=excluded.long_exposure,
+                     short_exposure=excluded.short_exposure,
+                     num_positions=excluded.num_positions,
+                     updated_at=excluded.updated_at
+                """,
+                (
+                    today, nav, long_exp + short_exp, long_exp - short_exp,
+                    long_exp, short_exp, cash, len(norm_pos), now, now,
+                ),
+            )
 
         orders_written = 0
         for o in orders or []:
@@ -208,23 +272,31 @@ def persist_tiger_snapshot(
             side = str(o.get("side") or o.get("action") or "").upper()
             qty = int(float(o.get("quantity") or o.get("qty") or 0))
             status = str(o.get("status") or "SUBMITTED")
+            row_id = _maybe_id(conn, "orders")
+            cols = """order_id, ticker, side, order_type, quantity, filled_quantity,
+                    avg_fill_price, status, market, is_paper, submitted_at, created_at, updated_at"""
+            vals: list[Any] = [
+                oid, ticker, side, str(o.get("order_type") or "MKT"),
+                qty, int(float(o.get("filled_quantity") or qty if status == "FILLED" else 0)),
+                float(o.get("avg_fill_price") or o.get("price") or 0),
+                status, _market_of(ticker), 1, now, now, now,
+            ]
+            if row_id:
+                cols = "id, " + cols
+                vals = [row_id, *vals]
+                placeholders = ", ".join("?" * len(vals))
+            else:
+                placeholders = ", ".join("?" * len(vals))
             conn.execute(
-                """INSERT INTO orders
-                   (order_id, ticker, side, order_type, quantity, filled_quantity,
-                    avg_fill_price, status, market, is_paper, submitted_at, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                f"""INSERT INTO orders ({cols})
+                   VALUES ({placeholders})
                    ON CONFLICT(order_id) DO UPDATE SET
                      status=excluded.status,
                      filled_quantity=excluded.filled_quantity,
                      avg_fill_price=excluded.avg_fill_price,
                      updated_at=excluded.updated_at
                 """,
-                (
-                    oid, ticker, side, str(o.get("order_type") or "MKT"),
-                    qty, int(float(o.get("filled_quantity") or qty if status == "FILLED" else 0)),
-                    float(o.get("avg_fill_price") or o.get("price") or 0),
-                    status, _market_of(ticker), now, now, now,
-                ),
+                vals,
             )
             orders_written += 1
 
@@ -314,47 +386,62 @@ def persist_fill(
     conn = _connect()
     ensure_tables(conn)
     try:
-        conn.execute(
-            """INSERT INTO orders
-               (order_id, ticker, side, order_type, quantity, filled_quantity,
+        order_pk = _maybe_id(conn, "orders")
+        order_cols = """order_id, ticker, side, order_type, quantity, filled_quantity,
                 avg_fill_price, status, market, strategy, is_paper,
-                submitted_at, filled_at, created_at, updated_at)
-               VALUES (?, ?, ?, 'MKT', ?, ?, ?, 'FILLED', ?, ?, ?, ?, ?, ?, ?)
+                submitted_at, filled_at, created_at, updated_at"""
+        order_vals: list[Any] = [
+            oid, ticker, side.upper(), "MKT", qty, qty, price, "FILLED", market, strategy,
+            1 if is_paper else 0, now.isoformat(), now.isoformat(),
+            now.isoformat(), now.isoformat(),
+        ]
+        if order_pk:
+            order_cols = "id, " + order_cols
+            order_vals = [order_pk, *order_vals]
+        conn.execute(
+            f"""INSERT INTO orders ({order_cols})
+               VALUES ({', '.join('?' * len(order_vals))})
                ON CONFLICT(order_id) DO UPDATE SET
                  status='FILLED', filled_quantity=excluded.filled_quantity,
                  avg_fill_price=excluded.avg_fill_price, filled_at=excluded.filled_at,
                  updated_at=excluded.updated_at
             """,
-            (
-                oid, ticker, side.upper(), qty, qty, price, market, strategy,
-                1 if is_paper else 0, now.isoformat(), now.isoformat(),
-                now.isoformat(), now.isoformat(),
-            ),
+            order_vals,
         )
+        exec_pk = _maybe_id(conn, "executions")
+        exec_cols = """execution_id, order_id, ticker, side, quantity, price, notional,
+                commission, executed_at, market, is_paper, created_at, updated_at"""
+        exec_vals: list[Any] = [
+            eid, oid, ticker, side.upper(), qty, price, notional, 0,
+            now.isoformat(), market, 1 if is_paper else 0,
+            now.isoformat(), now.isoformat(),
+        ]
+        if exec_pk:
+            exec_cols = "id, " + exec_cols
+            exec_vals = [exec_pk, *exec_vals]
         conn.execute(
-            """INSERT INTO executions
-               (execution_id, order_id, ticker, side, quantity, price, notional,
-                commission, executed_at, market, is_paper, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+            f"""INSERT INTO executions ({exec_cols})
+               VALUES ({', '.join('?' * len(exec_vals))})
             """,
-            (
-                eid, oid, ticker, side.upper(), qty, price, notional,
-                now.isoformat(), market, 1 if is_paper else 0,
-                now.isoformat(), now.isoformat(),
-            ),
+            exec_vals,
         )
-        conn.execute(
-            """INSERT INTO trades
-               (ticker, trade_date, trade_time, side, quantity, price, commission,
+        trade_pk = _maybe_id(conn, "trades")
+        trade_cols = """ticker, trade_date, trade_time, side, quantity, price, commission,
                 slippage_bps, notional, order_id, execution_id, market, currency,
-                strategy, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, 'USD', ?, ?, ?)
+                strategy, created_at, updated_at"""
+        trade_vals: list[Any] = [
+            ticker, today, now.isoformat(), side.upper(), qty, price, 0, 0,
+            notional, oid, eid, market, "USD", strategy,
+            now.isoformat(), now.isoformat(),
+        ]
+        if trade_pk:
+            trade_cols = "id, " + trade_cols
+            trade_vals = [trade_pk, *trade_vals]
+        conn.execute(
+            f"""INSERT INTO trades ({trade_cols})
+               VALUES ({', '.join('?' * len(trade_vals))})
             """,
-            (
-                ticker, today, now.isoformat(), side.upper(), qty, price,
-                notional, oid, eid, market, strategy,
-                now.isoformat(), now.isoformat(),
-            ),
+            trade_vals,
         )
         conn.commit()
         return {"order_id": oid, "execution_id": eid, "ticker": ticker, "quantity": qty}

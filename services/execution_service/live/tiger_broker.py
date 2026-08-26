@@ -389,6 +389,7 @@ class TigerBroker:
                 "cash": 0,
                 "buying_power": 0,
                 "paper": self._paper,
+                "error": "sdk_unavailable",
             }
 
         try:
