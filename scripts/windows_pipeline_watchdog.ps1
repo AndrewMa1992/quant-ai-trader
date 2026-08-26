@@ -18,6 +18,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 if (-not (Test-Path $RepoRoot)) { throw "Missing $RepoRoot" }
 Set-Location $RepoRoot
+. (Join-Path $PSScriptRoot "windows_hidden_start.ps1")
 $logDir = Join-Path $RepoRoot "logs"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
 $log = Join-Path $logDir "pipeline-watchdog.log"
@@ -55,22 +56,14 @@ function Test-PipelineAlive {
     return [bool]$procs
 }
 
-function Start-Detached([string]$CommandLine) {
-    try {
-        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-            CommandLine = $CommandLine
-            CurrentDirectory = $RepoRoot
-        }
-        if ($r.ReturnValue -eq 0) {
-            Write-Log ("detached pid={0}" -f $r.ProcessId)
-            return $true
-        }
-        Write-Log ("Win32_Process.Create failed rc={0}" -f $r.ReturnValue)
-    } catch {
-        Write-Log ("Win32_Process.Create error: {0}" -f $_.Exception.Message)
+function Start-DetachedBat([string]$BatPath, [string]$CommandMatch) {
+    $pidVal = Start-QatHiddenBat -BatPath $BatPath -WorkingDirectory $RepoRoot -CommandMatch $CommandMatch
+    if ($pidVal) {
+        Write-Log ("hidden pid={0}" -f $pidVal)
+        return $true
     }
     try {
-        Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $CommandLine) -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
+        Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $BatPath) -WorkingDirectory $RepoRoot -WindowStyle Hidden | Out-Null
         return $true
     } catch {
         Write-Log ("Start-Process fallback failed: {0}" -f $_.Exception.Message)
@@ -117,8 +110,7 @@ function Start-Pipeline {
     )
     Set-Content -Path $bat -Value ($envLines -join "`r`n") -Encoding ASCII
 
-    $cmd = 'cmd.exe /c "{0}"' -f $bat
-    $ok = Start-Detached $cmd
+    $ok = Start-DetachedBat $bat "run_pipeline.py"
     Start-Sleep -Seconds 4
     return $ok
 }
