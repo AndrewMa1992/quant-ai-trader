@@ -1,5 +1,5 @@
 # Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 7
+# DeployScriptVersion: 8
 # Services start hidden (no cmd.exe popup per process). Logs: logs\*.log
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -24,7 +24,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 Write-Host "============================================"
 Write-Host "  Quant AI Trader - Windows Paper Deploy"
-Write-Host "  DeployScriptVersion: 7"
+Write-Host "  DeployScriptVersion: 8"
 Write-Host "  Root: $Root"
 Write-Host "============================================"
 
@@ -85,12 +85,20 @@ function Set-EnvLine([string]$Key, [string]$Value) {
         } else { $line }
     }
     if (-not $found) { $out += ("{0}={1}" -f $Key, $Value) }
-    Set-Content ".env" -Value $out -Encoding utf8
+    # PS 5.1 -Encoding utf8 writes a BOM that can break python-dotenv
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllLines((Join-Path $Root ".env"), $out, $utf8)
 }
 Set-EnvLine "QAT_TIGER_ACCOUNT" "21837535188693626"
 Set-EnvLine "QAT_EXEC_TIGER_ACCOUNT" "21837535188693626"
 Set-EnvLine "QAT_TIGER_PAPER_TRADING" "true"
+Set-EnvLine "QAT_TIGER_SANDBOX" "false"
 if ($joined -notmatch '(?m)^QAT_TIGER_ID=') { Set-EnvLine "QAT_TIGER_ID" "20159337" }
+$pemAbs = Join-Path $Root "certs\tiger_private_key.pem"
+if (Test-Path $pemAbs) {
+    Set-EnvLine "QAT_TIGER_PRIVATE_KEY_PATH" $pemAbs
+}
+if ($joined -notmatch '(?m)^QAT_TIGER_LICENSE=.+') { Set-EnvLine "QAT_TIGER_LICENSE" "TBSG" }
 
 New-Item -ItemType Directory -Force -Path "data", "data\daily", "data\models", "cache", "logs" | Out-Null
 
@@ -127,13 +135,33 @@ if (-not $SkipInstall) {
         "numpy>=1.26" "pandas>=2.2" "scipy>=1.12" "pyarrow>=15" `
         "aiosqlite>=0.20" "sqlalchemy[asyncio]>=2.0" "alembic>=1.13" `
         "redis>=5.0" "httpx>=0.27" "loguru>=0.7" "pydantic>=2" "pydantic-settings>=2" `
-        "python-dotenv>=1.0" "scikit-learn>=1.4" "joblib>=1.3" "yfinance>=0.2"
+        "python-dotenv>=1.0" "scikit-learn>=1.4" "joblib>=1.3" "yfinance>=0.2" `
+        "tigeropen>=3.5.8"
     try {
         & $PythonExe -m pip install "torch" --index-url https://download.pytorch.org/whl/cpu
     } catch {
         Write-Host "[warn] torch install skipped"
     }
     Write-Host "[ok] Python packages ready"
+}
+
+# Always ensure tigeropen (CD uses -SkipInstall and previously never installed the SDK)
+Write-Host "[..] ensuring tigeropen SDK..."
+$tigeropenOk = $false
+try {
+    & $PythonExe -c "import tigeropen; print(getattr(tigeropen, '__version__', 'ok'))"
+    if ($LASTEXITCODE -eq 0) { $tigeropenOk = $true }
+} catch { }
+if (-not $tigeropenOk) {
+    Write-Host "[..] pip install tigeropen>=3.5.8"
+    & $PythonExe -m pip install "tigeropen>=3.5.8"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[warn] tigeropen install failed - Tiger account will stay at zero until SDK is present"
+    } else {
+        Write-Host "[ok] tigeropen installed"
+    }
+} else {
+    Write-Host "[ok] tigeropen present"
 }
 
 $hasNode = $false
@@ -167,6 +195,7 @@ function Start-QatService {
         "@echo off",
         ("set PYTHONPATH={0}" -f $Root),
         ("set QAT_PROJECT_ROOT={0}" -f $Root),
+        ("set QAT_TIGER_PRIVATE_KEY_PATH={0}" -f (Join-Path $Root "certs\tiger_private_key.pem")),
         ("cd /d {0}" -f $Root),
         $runLine
     )

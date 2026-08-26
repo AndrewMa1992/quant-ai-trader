@@ -131,7 +131,14 @@ class Settings(BaseSettings):
         default="./certs/tiger_private_key.pem", description="Path to Tiger RSA private key"
     )
     TIGER_CLIENT_VERSION: str = Field(default="3.0.0")
-    TIGER_LICENSE: str = Field(default="")
+    TIGER_LICENSE: str = Field(
+        default="TBSG",
+        description="Tiger OpenAPI license (TBSG/TBHK/TBNZ/TBAU). Paper trading uses production, not sandbox.",
+    )
+    TIGER_SANDBOX: bool = Field(
+        default=False,
+        description="Use Tiger sandbox OpenAPI (separate env/keys). Paper/demo trading must stay false.",
+    )
     TIGER_PAPER_TRADING: bool = Field(
         default=True,
         description="Route paper fills to Tiger paper account when connected",
@@ -503,3 +510,8 @@ class Settings(BaseSettings):
 # ── Singleton ────────────────────────────────────────────────────
 settings = Settings()
 settings.ensure_directories()
+
+
+def get_settings() -> Settings:
+    """Return the process-wide Settings singleton (import-safe for tests)."""
+    return settings

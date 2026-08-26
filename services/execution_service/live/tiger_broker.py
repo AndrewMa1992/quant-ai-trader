@@ -35,77 +35,57 @@ class TigerBroker:
         self.account = resolve_tiger_account(account or exec_config.TIGER_ACCOUNT or settings.TIGER_ACCOUNT)
         self.require_confirm = require_confirm if require_confirm is not None else exec_config.LIVE_TRADING_REQUIRE_CONFIRM
         self._client: Any = None
+        self._quote_client: Any = None
         self._initialized = False
         self._paper = should_use_paper_account(self.account)
-        self._sandbox_enabled: bool | None = None
+        self._sandbox_enabled: bool = False
+        self._init_error: str | None = None
 
     def _ensure_client(self, sandbox: bool | None = None) -> None:
-        """Lazy-initialize Tiger client.
+        """Lazy-initialize TradeClient + QuoteClient via shared.tiger_sdk.
 
-        Paper/sim uses ``sandbox_debug=True`` so virtual funds are read from
-        the sandbox book (the live book for a paper id often reports zeros).
+        Paper/demo trading uses the **production** OpenAPI with the paper
+        account id. Sandbox is a separate environment (QAT_TIGER_SANDBOX).
+        The ``sandbox`` argument is kept for call-site compatibility and ignored.
         """
-        want_sandbox = self._paper if sandbox is None else bool(sandbox)
+        from shared.tiger_sdk import connect, is_sandbox_requested, last_error
+
+        want_sandbox = is_sandbox_requested()
         if self._initialized and self._client is not None and self._sandbox_enabled == want_sandbox:
             return
 
         try:
-            from tigeropen.tiger_open_config import TigerOpenClientConfig
-            from tigeropen.trade.trade_client import TradeClient
-
-            try:
-                client_config = TigerOpenClientConfig(sandbox_debug=want_sandbox)
-            except TypeError:
-                client_config = TigerOpenClientConfig()
-            if hasattr(client_config, "sandbox_debug"):
-                try:
-                    client_config.sandbox_debug = want_sandbox
-                except Exception:
-                    pass
-            client_config.private_key = self._load_key()
-            client_config.tiger_id = settings.TIGER_ID
-            client_config.account = self.account
-            client_config.license = settings.TIGER_LICENSE
-
-            self._client = TradeClient(client_config)
+            trade, quote = connect(account=self.account)
+            self._client = trade
+            self._quote_client = quote
             self._initialized = True
             self._sandbox_enabled = want_sandbox
+            self._init_error = None
             logger.info(
                 f"Tiger broker initialized (account={self.account} sandbox={want_sandbox} paper={self._paper})"
             )
-
-        except ImportError:
+        except ImportError as e:
+            self._init_error = f"tigeropen not installed: {e}"
             logger.warning("tigeropen SDK not available — using paper broker")
             self._initialized = False
             self._client = None
+            self._quote_client = None
         except Exception as e:
-            logger.error(f"Tiger broker init failed: {e}")
+            self._init_error = last_error() or str(e)
+            logger.error(f"Tiger broker init failed: {self._init_error}")
             self._initialized = False
             self._client = None
+            self._quote_client = None
 
     def _load_key(self) -> str:
-        """Load RSA private key, stripped of PEM headers for Tiger SDK.
+        """Load RSA private key for callers that still use this helper."""
+        try:
+            from shared.tiger_sdk import load_private_key
 
-        Tiger SDK's ``load_private_key()`` expects raw base64 content, not PEM
-        format. If the key file has ``-----BEGIN …-----`` / ``-----END …-----``
-        wrapper lines, they are stripped before returning.
-
-        Returns:
-            Base64-encoded private key string, or empty string if file missing.
-        """
-        import os
-
-        path = os.path.expanduser(settings.TIGER_PRIVATE_KEY_PATH)
-        if os.path.exists(path):
-            with open(path) as f:
-                key = f.read().strip()
-            # Tiger SDK expects raw base64, not PEM format.
-            # Strip PEM header/footer lines if present.
-            if "BEGIN" in key:
-                lines = key.split("\n")
-                key = "".join(line.strip() for line in lines if not line.startswith("-----"))
-            return key
-        return ""
+            return load_private_key()
+        except Exception as exc:
+            logger.warning("Tiger private key load failed: %s", exc)
+            return ""
 
     async def place_order(
         self,
@@ -364,23 +344,19 @@ class TigerBroker:
         raw = self._fetch_assets_raw()
         parsed = parse_account_summary(raw, account=self.account)
         parsed["account"] = parsed.get("account") or self.account
-        parsed["sandbox"] = self._sandbox_enabled
+        parsed["sandbox"] = bool(self._sandbox_enabled)
         parsed["paper"] = self._paper
+        parsed["source"] = "tiger_sdk"
         return parsed
-
-    def _account_looks_empty(self, parsed: dict[str, Any]) -> bool:
-        cash = float(parsed.get("cash") or 0)
-        nav = float(parsed.get("nav") or parsed.get("net_liquidation") or 0)
-        bp = float(parsed.get("buying_power") or 0)
-        return cash <= 0 and nav <= 0 and bp <= 0
 
     async def get_account_summary(self) -> dict[str, Any]:
         """Get account summary via Tiger SDK ``get_assets(account=...)``.
 
-        Paper virtual funds often live on the sandbox book and/or in
-        ``segments`` rather than ``summary.cash``.  We parse every alias,
-        then retry the opposite sandbox flag if the preferred book is empty.
+        Paper virtual funds are on the production OpenAPI paper book, often
+        under ``segments`` rather than ``summary.cash``.
         """
+        from shared.tiger_sdk import last_error
+
         self._ensure_client()
         if not self._initialized:
             return {
@@ -389,24 +365,13 @@ class TigerBroker:
                 "cash": 0,
                 "buying_power": 0,
                 "paper": self._paper,
+                "sandbox": bool(self._sandbox_enabled),
+                "error": "sdk_unavailable",
+                "detail": self._init_error or last_error(),
             }
 
         try:
             parsed = await asyncio.to_thread(self._get_account_summary_sync)
-            if self._account_looks_empty(parsed) and self._sandbox_enabled is not None:
-                flipped = not bool(self._sandbox_enabled)
-                logger.info(
-                    "tiger_broker: empty book on sandbox=%s — retrying sandbox=%s",
-                    self._sandbox_enabled,
-                    flipped,
-                )
-                self._ensure_client(sandbox=flipped)
-                if self._initialized:
-                    parsed = await asyncio.to_thread(self._get_account_summary_sync)
-                    if self._account_looks_empty(parsed) and self._paper:
-                        # Restore sandbox so later paper orders still hit the sim book.
-                        self._ensure_client(sandbox=True)
-                        parsed["sandbox"] = self._sandbox_enabled
             logger.info(
                 "tiger_broker account=%s sandbox=%s cash=%.2f nav=%.2f bp=%.2f segs=%d",
                 parsed.get("account"),
@@ -419,5 +384,12 @@ class TigerBroker:
             return parsed
         except Exception as e:
             logger.error(f"Failed to get account: {e}")
-
-        return {"account": self.account, "nav": 0, "cash": 0, "buying_power": 0}
+            return {
+                "account": self.account,
+                "nav": 0,
+                "cash": 0,
+                "buying_power": 0,
+                "paper": self._paper,
+                "sandbox": bool(self._sandbox_enabled),
+                "error": str(e),
+            }
