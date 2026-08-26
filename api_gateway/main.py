@@ -345,6 +345,11 @@ from api_gateway.routes.rollback import router as rollback_router
 
 app.include_router(rollback_router, prefix="/api/v2", tags=["Execution"])
 
+# ── v2 Server Logs Router (web log viewer / remote agents) ───
+from api_gateway.routes.logs import router as logs_router
+
+app.include_router(logs_router, prefix="/api/v2", tags=["Logs"])
+
 # ── WebSocket Manager ────────────────────────────────────────
 from api_gateway.websocket_manager import websocket_manager
 
