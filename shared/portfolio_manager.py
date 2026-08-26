@@ -35,8 +35,11 @@ class PortfolioManager:
     """Investment portfolio state manager.
 
     Maintains the local mirror of positions, cash, and average costs.
-    The authoritative source of truth is **always** the Tiger broker;
-    this class serves as a fast local cache with metric computation.
+
+    In **live** mode Tiger is authoritative. In **paper/simulation** mode the
+    local book (``QAT_TRADING_INITIAL_CAPITAL``) is authoritative when the Tiger
+    paper account reports ~zero NAV/cash — an unfunded paper account must not
+    wipe local buying power and silently kill US orders.
 
     Attributes:
         initial_capital: Starting capital (USD).
@@ -45,6 +48,9 @@ class PortfolioManager:
         avg_costs: ticker → average cost per share (USD).
         total_value: Total portfolio value (cash + positions market value).
     """
+
+    # Treat Tiger cash/NAV at or below this as "empty / unfunded paper".
+    _ZERO_NAV_EPS: float = 1.0
 
     def __init__(self, initial_capital: float = 100000.0) -> None:
         self.initial_capital: float = initial_capital
@@ -68,6 +74,62 @@ class PortfolioManager:
     # Tiger Sync
     # ═══════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _is_paper_or_sim_mode() -> bool:
+        """True when we must protect local capital from an empty Tiger paper book."""
+        try:
+            from shared.execution_mode import is_simulation_mode, get_execution_mode
+
+            if is_simulation_mode():
+                return True
+            if get_execution_mode() == "paper":
+                return True
+        except Exception:
+            pass
+        try:
+            from configs.settings import settings
+
+            if bool(getattr(settings, "TIGER_PAPER_TRADING", False)):
+                return True
+        except Exception:
+            pass
+        # Default safe: treat as paper when env is unset
+        raw = os.getenv("QAT_TRADING_SIMULATION_MODE", "true").strip().lower()
+        return raw in ("1", "true", "yes", "on", "")
+
+    def ensure_buying_power(self, floor: Optional[float] = None) -> bool:
+        """Restore cash/NAV when a prior Tiger zero-sync wiped the local book.
+
+        Returns:
+            True if capital was restored.
+        """
+        if not self._is_paper_or_sim_mode():
+            return False
+        target = float(floor if floor is not None else self.initial_capital)
+        if target <= self._ZERO_NAV_EPS:
+            try:
+                from configs.settings import settings
+
+                target = float(getattr(settings, "TRADING_INITIAL_CAPITAL", 1700.0))
+            except Exception:
+                target = 1700.0
+        if self.cash > self._ZERO_NAV_EPS or self.total_value > self._ZERO_NAV_EPS:
+            return False
+        logger.warning(
+            f"💰 Restoring wiped paper capital: cash/NAV≈0 → "
+            f"${target:,.2f} (Tiger paper likely unfunded)"
+        )
+        self.initial_capital = target
+        self.cash = target
+        self.total_value = target
+        self._tiger_initial_capital_synced = False
+        if not self._value_history:
+            self._value_history = [target]
+        else:
+            self._value_history.append(target)
+        self.save_state()
+        return True
+
     def sync_from_tiger(
         self,
         tiger_bridge: Any,
@@ -77,6 +139,10 @@ class PortfolioManager:
 
         The tiger_bridge parameter is the ``shared.tiger_bridge`` module
         (or a compatible object exposing the same function signatures).
+
+        In paper/sim mode, an empty Tiger paper account (cash≈0 and NAV≈0)
+        does **not** overwrite local capital — that was wiping $1700 → $0 and
+        preventing all US order sizing.
 
         Args:
             tiger_bridge: Tiger bridge module (shared.tiger_bridge).
@@ -117,9 +183,13 @@ class PortfolioManager:
                 result["source"] = "tiger_account_error"
                 return result
 
+            tiger_cash: float = float(tiger_account.get("cash", 0.0) or 0.0)
+            tiger_total: float = float(tiger_account.get("total_value", 0.0) or 0.0)
+            tiger_pos_count: int = len(tiger_positions or [])
+
             # Safety net: Tiger returned 0 positions but we have many locally.
             old_pos_count: int = len(self.positions)
-            if len(tiger_positions) == 0 and old_pos_count > 5:
+            if tiger_pos_count == 0 and old_pos_count > 5:
                 logger.error(
                     f"🚨 Tiger returned 0 positions but local has {old_pos_count}! "
                     f"Tiger API may be anomalous — preserving local data"
@@ -131,13 +201,40 @@ class PortfolioManager:
                 result["total_value"] = self.total_value
                 return result
 
+            # Critical: unfunded Tiger paper (NAV/cash≈0) must not wipe local book.
+            # Otherwise rebalance sizes off total_value≈0 → zero US orders forever.
+            local_nav = max(float(self.total_value), float(self.cash), float(self.initial_capital))
+            tiger_empty = (
+                tiger_cash <= self._ZERO_NAV_EPS
+                and tiger_total <= self._ZERO_NAV_EPS
+                and tiger_pos_count == 0
+            )
+            if (
+                tiger_empty
+                and self._is_paper_or_sim_mode()
+                and local_nav > self._ZERO_NAV_EPS
+                and not force
+            ):
+                logger.warning(
+                    f"🛡️ Tiger paper empty (cash=${tiger_cash:,.2f}, NAV=${tiger_total:,.2f}) "
+                    f"— keeping local capital ${local_nav:,.2f}. "
+                    f"Fund/reset Tiger paper if you need broker-side fills."
+                )
+                result["synced"] = False
+                result["source"] = "tiger_zero_nav_preserved"
+                result["positions"] = old_pos_count
+                result["cash"] = self.cash
+                result["total_value"] = self.total_value
+                result["tiger_cash"] = tiger_cash
+                result["tiger_total"] = tiger_total
+                return result
+
             # Overwrite local state from Tiger.
             self.positions.clear()
             self.avg_costs.clear()
-            self.cash = float(tiger_account.get("cash", 0.0))
+            self.cash = tiger_cash
 
             # ── initial_capital anchoring ──────────────────────
-            tiger_total: float = float(tiger_account.get("total_value", 0.0))
             if tiger_total > 0:
                 need_reset: bool = (
                     force
@@ -176,7 +273,7 @@ class PortfolioManager:
                     if mv > 0 and abs(shares) > 0:
                         self._last_prices[ticker] = mv / abs(shares)
 
-            # Compute total_value — Tiger's is authoritative.
+            # Compute total_value — Tiger's is authoritative when positive.
             if tiger_total > 0:
                 self.total_value = tiger_total
             else:
@@ -184,6 +281,10 @@ class PortfolioManager:
                     float(pos.get("market_value", 0.0)) for pos in tiger_positions
                 )
                 self.total_value = self.cash + positions_value
+
+            # If force-synced an empty Tiger into a paper book, restore floor.
+            if tiger_empty and self._is_paper_or_sim_mode():
+                self.ensure_buying_power(local_nav if local_nav > self._ZERO_NAV_EPS else None)
 
             # Result.
             pos_count: int = sum(1 for s in self.positions.values() if s > 0)

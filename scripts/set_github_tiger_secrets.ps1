@@ -1,17 +1,18 @@
-# Set Tiger credentials as GitHub Actions repository secrets (local machine only).
-# Cloud agents cannot write secrets (token is read-only).
+# Set Tiger credentials as GitHub Environment secrets (recommended).
+# Environment name used by CD: "private key"
 #
-# Usage (PowerShell, from anywhere with gh auth):
+# Usage:
 #   .\scripts\set_github_tiger_secrets.ps1
-# Or with an existing PEM:
-#   .\scripts\set_github_tiger_secrets.ps1 -PemPath C:\quant-ai-trader\certs\tiger_private_key.pem
+#   .\scripts\set_github_tiger_secrets.ps1 -PemPath C:\path\to\key.pem
 
 param(
     [string]$Repo = "AndrewMa1992/quant-ai-trader",
+    [string]$Environment = "private key",
     [string]$PemPath = "",
     [string]$TigerId = "20159337",
     [string]$TigerAccount = "21837535188693626",
-    [string]$TigerLicense = ""
+    [string]$TigerLicense = "",
+    [string]$SecretName = "TIGER_PRIVATE_KEY"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,7 +26,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "Not logged in. Run: gh auth login"
 }
 
-# Resolve PEM body
 $keyBody = $null
 if ($PemPath -and (Test-Path $PemPath)) {
     $keyBody = (Get-Content -Raw $PemPath).Trim()
@@ -34,7 +34,7 @@ if ($PemPath -and (Test-Path $PemPath)) {
     $keyBody = (Get-Content -Raw "certs/tiger_private_key.pem").Trim()
     Write-Host "Using PEM from certs/tiger_private_key.pem"
 } else {
-    Write-Host "Paste RSA private key (PEM or raw base64), then Ctrl+Z Enter (Windows) / Ctrl+D (Unix):"
+    Write-Host "Paste RSA private key (PEM or raw base64), then Ctrl+Z Enter (Windows):"
     $keyBody = [Console]::In.ReadToEnd().Trim()
 }
 
@@ -42,25 +42,26 @@ if ([string]::IsNullOrWhiteSpace($keyBody)) {
     throw "Empty private key — abort"
 }
 
-# Strip accidental quotes/newlines at ends only for size check
 Write-Host "Key length: $($keyBody.Length) chars"
+Write-Host "Target environment: $Environment"
 
-gh secret set TIGER_PRIVATE_KEY -R $Repo --body $keyBody
-Write-Host "OK: TIGER_PRIVATE_KEY"
+gh api -X PUT "repos/$Repo/environments/$([uri]::EscapeDataString($Environment))" 2>$null | Out-Null
 
-gh secret set TIGER_ID -R $Repo --body $TigerId
+gh secret set $SecretName -R $Repo --env $Environment --body $keyBody
+Write-Host "OK: $SecretName (env=$Environment)"
+
+gh secret set TIGER_ID -R $Repo --env $Environment --body $TigerId
 Write-Host "OK: TIGER_ID=$TigerId"
 
-gh secret set TIGER_ACCOUNT -R $Repo --body $TigerAccount
+gh secret set TIGER_ACCOUNT -R $Repo --env $Environment --body $TigerAccount
 Write-Host "OK: TIGER_ACCOUNT=$TigerAccount"
 
 if (-not [string]::IsNullOrWhiteSpace($TigerLicense)) {
-    gh secret set TIGER_LICENSE -R $Repo --body $TigerLicense
+    gh secret set TIGER_LICENSE -R $Repo --env $Environment --body $TigerLicense
     Write-Host "OK: TIGER_LICENSE"
-} else {
-    Write-Host "SKIP: TIGER_LICENSE (empty) — set later if SDK requires it"
 }
 
 Write-Host ""
-Write-Host "Verify: https://github.com/$Repo/settings/secrets/actions"
-Write-Host "Next: merge PR / run workflow 'CD - Lightsail Windows Paper Deploy'"
+Write-Host "Verify: https://github.com/$Repo/settings/environments"
+Write-Host "Secret name must be one of: TIGER_PRIVATE_KEY | PRIVATE_KEY | KEY"
+Write-Host "Then merge PR / re-run workflow CD - Lightsail Windows Paper Deploy"

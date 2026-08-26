@@ -1,8 +1,7 @@
 """services/execution_service/live/tiger_broker.py – Live Tiger Broker integration.
 
-Account: 20874631.
-Supports: market/limit orders, cancel, position/order/account queries.
-Optional confirmation gate before live order submission.
+Paper account default: 21837535188693626 (sim lock).
+Live account: 20874631 when simulation is off.
 """
 
 from __future__ import annotations
@@ -14,13 +13,13 @@ from loguru import logger
 
 from configs.settings import settings
 from services.execution_service.config import exec_config
+from shared.tiger_account import resolve_tiger_account
 
 
 class TigerBroker:
-    """Live Tiger Broker API wrapper for order execution.
+    """Tiger Broker API wrapper for order execution.
 
-    Places real orders via Tiger Open API.
-    Account: 20874631 (configurable).
+    Places orders via Tiger Open API. Account resolves from paper/live policy.
 
     Attributes:
         account: Tiger account number.
@@ -32,7 +31,7 @@ class TigerBroker:
         account: str = "",
         require_confirm: bool | None = None,
     ) -> None:
-        self.account = account or exec_config.TIGER_ACCOUNT
+        self.account = resolve_tiger_account(account or exec_config.TIGER_ACCOUNT or settings.TIGER_ACCOUNT)
         self.require_confirm = require_confirm if require_confirm is not None else exec_config.LIVE_TRADING_REQUIRE_CONFIRM
         self._client: Any = None
         self._initialized = False

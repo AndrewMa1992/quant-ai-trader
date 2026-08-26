@@ -50,10 +50,15 @@ function Resolve-Git {
 
 function Test-GatewayHealthy {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health" -UseBasicParsing -TimeoutSec 3
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8001/health/live" -UseBasicParsing -TimeoutSec 3
         return ($r.StatusCode -eq 200)
     } catch {
-        return $false
+        try {
+            $r2 = Invoke-WebRequest -Uri "http://127.0.0.1:8001/api/v2/status" -UseBasicParsing -TimeoutSec 3
+            return ($r2.StatusCode -eq 200)
+        } catch {
+            return $false
+        }
     }
 }
 
@@ -141,4 +146,65 @@ if (-not $ok) {
 }
 
 Write-Log "[ok] CD complete - gateway healthy"
+
+# Ensure trading pipeline stays up (must survive GHA orphan cleanup)
+Write-Log "[..] pipeline watchdog"
+$watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
+if (Test-Path $watchdog) {
+    $wc = 0
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
+    $wc = $LASTEXITCODE
+    if ($wc -ne 0) {
+        Write-Log ("[ERR] pipeline watchdog InstallTask failed exit={0}" -f $wc)
+        exit 1
+    }
+    # Kick scheduled task so restart happens outside this job's process tree
+    try {
+        Start-ScheduledTask -TaskName "QAT-Pipeline-Watchdog" -ErrorAction SilentlyContinue
+        schtasks /Run /TN "QAT-Pipeline-Watchdog" 2>$null | Out-Null
+    } catch {
+        Write-Log ("[warn] schtasks run: {0}" -f $_.Exception.Message)
+    }
+    Start-Sleep -Seconds 5
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -Once
+    $wc = $LASTEXITCODE
+    if ($wc -ne 0) {
+        Write-Log ("[ERR] pipeline still down after watchdog exit={0}" -f $wc)
+        exit 1
+    }
+    Write-Log "[ok] pipeline watchdog armed"
+} else {
+    Write-Log "[warn] missing windows_pipeline_watchdog.ps1"
+}
+
+# Frontend / gateway SPA watchdog
+$fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
+if (Test-Path $fw) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+    $fwc = $LASTEXITCODE
+    if ($fwc -ne 0) {
+        Write-Log ("[warn] frontend watchdog InstallTask exit={0}" -f $fwc)
+    } else {
+        try {
+            Start-ScheduledTask -TaskName "QAT-Frontend-Watchdog" -ErrorAction SilentlyContinue
+            schtasks /Run /TN "QAT-Frontend-Watchdog" 2>$null | Out-Null
+        } catch {}
+        Write-Log "[ok] frontend watchdog armed"
+    }
+}
+
+# Frontend: prefer gateway SPA on :8001; also verify :5180
+try {
+    $fr = Invoke-WebRequest -Uri "http://127.0.0.1:8001/" -UseBasicParsing -TimeoutSec 5
+    Write-Log ("[ok] gateway SPA HTTP {0}" -f $fr.StatusCode)
+} catch {
+    Write-Log ("[warn] gateway SPA: {0}" -f $_.Exception.Message)
+}
+try {
+    $fr2 = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
+    Write-Log ("[ok] frontend :5180 HTTP {0}" -f $fr2.StatusCode)
+} catch {
+    Write-Log "[warn] frontend :5180 not responding (use http://<host>:8001/ if AWS SG blocks 5180)"
+}
+
 exit 0

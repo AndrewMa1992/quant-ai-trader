@@ -73,6 +73,23 @@ $joined = ($envLines -join "`n")
 if ($joined -notmatch '(?m)^QAT_EXECUTION_MODE=paper') { Add-Content ".env" "QAT_EXECUTION_MODE=paper" }
 if ($joined -notmatch '(?m)^QAT_TRADING_SIMULATION_MODE=true') { Add-Content ".env" "QAT_TRADING_SIMULATION_MODE=true" }
 if ($joined -notmatch '(?m)^QAT_USE_DOCKER=false') { Add-Content ".env" "QAT_USE_DOCKER=false" }
+# Force paper Tiger account (do not leave live 20874631 as active in sim)
+function Set-EnvLine([string]$Key, [string]$Value) {
+    $lines = @(Get-Content ".env" -ErrorAction SilentlyContinue)
+    $found = $false
+    $out = foreach ($line in $lines) {
+        if ($line -match ("^{0}=" -f [regex]::Escape($Key))) {
+            $found = $true
+            "{0}={1}" -f $Key, $Value
+        } else { $line }
+    }
+    if (-not $found) { $out += ("{0}={1}" -f $Key, $Value) }
+    Set-Content ".env" -Value $out -Encoding utf8
+}
+Set-EnvLine "QAT_TIGER_ACCOUNT" "21837535188693626"
+Set-EnvLine "QAT_EXEC_TIGER_ACCOUNT" "21837535188693626"
+Set-EnvLine "QAT_TIGER_PAPER_TRADING" "true"
+if ($joined -notmatch '(?m)^QAT_TIGER_ID=') { Set-EnvLine "QAT_TIGER_ID" "20159337" }
 
 New-Item -ItemType Directory -Force -Path "data", "data\daily", "data\models", "cache", "logs" | Out-Null
 
@@ -143,19 +160,31 @@ function Start-QatService {
     $logErr = Join-Path $Root "logs\$Name.err.log"
     # Launcher bat ensures PYTHONPATH is set even if Start-Process env is odd
     $bat = Join-Path $pidDir "start_$Name.bat"
-    $batBody = @"
-@echo off
-set PYTHONPATH=$Root
-set QAT_PROJECT_ROOT=$Root
-cd /d "$Root"
-"$PythonExe" -m uvicorn $Module --host 0.0.0.0 --port $Port
-"@
-    Set-Content -Path $bat -Value $batBody -Encoding ASCII
-    $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
-        -WorkingDirectory $Root -PassThru -WindowStyle Hidden `
-        -RedirectStandardOutput $logOut -RedirectStandardError $logErr
-    Set-Content (Join-Path $pidDir "$Name.pid") $p.Id
-    Write-Host ("[ok] {0,-16} :{1}  PID {2}" -f $Name, $Port, $p.Id)
+    $lines = @(
+        "@echo off",
+        "set PYTHONPATH=$Root",
+        "set QAT_PROJECT_ROOT=$Root",
+        "cd /d `"$Root`"",
+        "`"$PythonExe`" -m uvicorn $Module --host 0.0.0.0 --port $Port >> `"$logOut`" 2>> `"$logErr`""
+    )
+    Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
+    # Detach from GitHub Actions job object so CD cleanup does not kill services
+    $cmd = "cmd.exe /c `"$bat`""
+    $pidVal = $null
+    try {
+        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+            CommandLine = $cmd
+            CurrentDirectory = $Root
+        }
+        if ($r.ReturnValue -eq 0) { $pidVal = $r.ProcessId }
+    } catch { }
+    if (-not $pidVal) {
+        $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
+            -WorkingDirectory $Root -PassThru -WindowStyle Hidden
+        $pidVal = $p.Id
+    }
+    Set-Content (Join-Path $pidDir "$Name.pid") $pidVal
+    Write-Host ("[ok] {0,-16} :{1}  PID {2}" -f $Name, $Port, $pidVal)
     Start-Sleep -Seconds 2
 }
 
@@ -169,18 +198,25 @@ Start-QatService "risk-service"   "services.risk_service.main:app"         8015
 Start-QatService "execution"       "services.execution_service.main:app"     8016
 
 if (-not $SkipFrontend) {
-    Write-Host "[..] frontend npm install + build..."
+    Write-Host "[..] frontend build..."
     Push-Location (Join-Path $Root "frontend")
     if (-not $SkipInstall) {
         & $NpmCmd install
     }
     $distIndex = Join-Path $Root "frontend\dist\index.html"
     $built = $false
-    try {
-        & $NpmCmd run build
-        if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
-    } catch {
-        Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
+    # CD uses -SkipInstall often — reuse dist to cut downtime (gateway serves SPA)
+    if ((Test-Path $distIndex) -and $SkipInstall) {
+        Write-Host "[ok] reuse existing frontend\dist (faster CD)"
+        $built = $true
+    }
+    if (-not $built) {
+        try {
+            & $NpmCmd run build
+            if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
+        } catch {
+            Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
+        }
     }
     if (-not $built) {
         Write-Host "[..] retry with npx vite build (skip vue-tsc)..."
@@ -197,16 +233,27 @@ if (-not $SkipFrontend) {
         $frontLogErr = Join-Path $Root "logs\frontend.err.log"
         $frontBat = Join-Path $pidDir "start_frontend.bat"
         # Reliable static server (Python) instead of vite preview
-        $batBody = @"
-@echo off
-cd /d "$Root"
-"$PythonExe" scripts\windows_frontend_server.py --root "$Root" --port 5180 >> "$frontLogOut" 2>> "$frontLogErr"
-"@
-        Set-Content -Path $frontBat -Value $batBody -Encoding ASCII
-        $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
-            -WorkingDirectory $Root -PassThru -WindowStyle Minimized
-        Set-Content (Join-Path $pidDir "frontend.pid") $front.Id
-        Write-Host "[ok] frontend        :5180  PID $($front.Id) (python static+proxy)"
+        $frontLines = @(
+            "@echo off",
+            "cd /d `"$Root`"",
+            "`"$PythonExe`" scripts\windows_frontend_server.py --root `"$Root`" --port 5180 >> `"$frontLogOut`" 2>> `"$frontLogErr`""
+        )
+        Set-Content -Path $frontBat -Value ($frontLines -join "`r`n") -Encoding ASCII
+        $frontPid = $null
+        try {
+            $frc = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+                CommandLine = "cmd.exe /c `"$frontBat`""
+                CurrentDirectory = $Root
+            }
+            if ($frc.ReturnValue -eq 0) { $frontPid = $frc.ProcessId }
+        } catch { }
+        if (-not $frontPid) {
+            $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
+                -WorkingDirectory $Root -PassThru -WindowStyle Minimized
+            $frontPid = $front.Id
+        }
+        Set-Content (Join-Path $pidDir "frontend.pid") $frontPid
+        Write-Host "[ok] frontend        :5180  PID $frontPid (python static+proxy)"
         Start-Sleep -Seconds 3
         try {
             $fr = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
@@ -277,8 +324,9 @@ Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
 Write-Host "  API:      http://127.0.0.1:8001/health"
-Write-Host "  Frontend: http://127.0.0.1:5180"
-Write-Host "  Public:   http://3.106.139.233:5180"
+Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
+Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA — preferred)"
+Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"

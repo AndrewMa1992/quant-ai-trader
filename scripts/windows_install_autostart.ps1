@@ -129,6 +129,23 @@ Write-Host "  3) Within ~$IntervalMinutes min AutoCD pulls models / redeploys"
 Write-Host "  4) Reboot also auto-starts paper mode"
 Write-Host "Logs: $RepoRoot\logs\cd-deploy.log"
 
+# Keep trading pipeline alive
+$watchdog = Join-Path $RepoRoot "scripts\windows_pipeline_watchdog.ps1"
+if (Test-Path $watchdog) {
+    Write-Host "[..] installing QAT pipeline watchdog..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $watchdog -InstallTask
+    Write-Host "[ok] pipeline watchdog"
+} else {
+    Write-Host "[warn] missing $watchdog"
+}
+
+$fw = Join-Path $RepoRoot "scripts\windows_frontend_watchdog.ps1"
+if (Test-Path $fw) {
+    Write-Host "[..] installing QAT frontend watchdog..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $fw -InstallTask
+    Write-Host "[ok] frontend watchdog"
+}
+
 if ($RunNow) {
     Write-Host "[..] RunNow: deploying once..."
     & powershell -ExecutionPolicy Bypass -File $cdScript -Branch $Branch -Force

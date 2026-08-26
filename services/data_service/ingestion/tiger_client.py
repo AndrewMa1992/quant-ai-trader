@@ -28,11 +28,13 @@ class TigerClient:
     """Tiger Broker API client for live trading and real-time data.
 
     Uses tigeropen SDK with RSA private key authentication.
-    Account: 20874631
+    Paper account default under sim lock.
     """
 
     def __init__(self) -> None:
-        self._account = settings.TIGER_ACCOUNT or "20874631"
+        from shared.tiger_account import resolve_tiger_account
+
+        self._account = resolve_tiger_account(settings.TIGER_ACCOUNT)
         self._tiger_id = settings.TIGER_ID
         self._private_key_path = settings.TIGER_PRIVATE_KEY_PATH
         self._license = settings.TIGER_LICENSE

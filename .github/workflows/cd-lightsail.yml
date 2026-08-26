@@ -5,11 +5,12 @@ name: CD - Lightsail Windows Paper Deploy
 # One-time setup on the server: scripts/windows_install_runner.ps1
 # Docs: DEPLOY_WINDOWS.md section "CI/CD"
 #
-# Optional GitHub Actions secrets (repo Settings → Secrets and variables → Actions):
-#   TIGER_PRIVATE_KEY  – PEM or raw base64 RSA private key
-#   TIGER_ID           – e.g. 20159337
-#   TIGER_ACCOUNT      – paper account
-#   TIGER_LICENSE      – e.g. TBSG / TBHK (if required)
+# Tiger credentials:
+# Prefer GitHub Environment secrets under environment name: "private key"
+# (Settings → Environments → private key → Environment secrets).
+# Supported secret names (first non-empty wins): TIGER_PRIVATE_KEY, PRIVATE_KEY, KEY
+# Optional: TIGER_ID, TIGER_ACCOUNT, TIGER_LICENSE
+# Repo-level Actions secrets with the same names also work once this job binds the env.
 
 on:
   push:
@@ -32,6 +33,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, windows, lightsail]
+    # Bind Environment so Environment secrets under "private key" are available.
+    environment: private key
     timeout-minutes: 45
     steps:
       - name: Refresh PATH
@@ -45,54 +48,83 @@ jobs:
           node --version
 
       - name: Materialize Tiger credentials from Actions secrets
-        if: ${{ secrets.TIGER_PRIVATE_KEY != '' }}
         shell: powershell
         env:
           TIGER_PRIVATE_KEY: ${{ secrets.TIGER_PRIVATE_KEY }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          KEY: ${{ secrets.KEY }}
           TIGER_ID: ${{ secrets.TIGER_ID }}
           TIGER_ACCOUNT: ${{ secrets.TIGER_ACCOUNT }}
           TIGER_LICENSE: ${{ secrets.TIGER_LICENSE }}
         run: |
-          $root = "C:\quant-ai-trader"
-          $certs = Join-Path $root "certs"
-          New-Item -ItemType Directory -Force -Path $certs | Out-Null
-          $pemPath = Join-Path $certs "tiger_private_key.pem"
-          $raw = $env:TIGER_PRIVATE_KEY
-          if ($raw -notmatch "BEGIN") {
-            $lines = @()
-            for ($i = 0; $i -lt $raw.Length; $i += 64) {
-              $len = [Math]::Min(64, $raw.Length - $i)
-              $lines += $raw.Substring($i, $len)
-            }
-            $raw = "-----BEGIN RSA PRIVATE KEY-----`n" + ($lines -join "`n") + "`n-----END RSA PRIVATE KEY-----`n"
+          # Do not gate this step with secrets.* in YAML `if:` (GitHub rejects it).
+          $rawKey = $env:TIGER_PRIVATE_KEY
+          if ([string]::IsNullOrWhiteSpace($rawKey)) { $rawKey = $env:PRIVATE_KEY }
+          if ([string]::IsNullOrWhiteSpace($rawKey)) { $rawKey = $env:KEY }
+          if ([string]::IsNullOrWhiteSpace($rawKey)) {
+            Write-Host 'No Tiger private key in Environment/repo secrets (tried TIGER_PRIVATE_KEY, PRIVATE_KEY, KEY) - skip materialize'
+            exit 0
           }
-          Set-Content -Path $pemPath -Value $raw -Encoding ascii -NoNewline:$false
-          Write-Host "Wrote Tiger PEM to $pemPath ($((Get-Item $pemPath).Length) bytes)"
 
-          $envFile = Join-Path $root ".env"
-          if (-not (Test-Path $envFile)) {
-            Copy-Item (Join-Path $root ".env.windows") $envFile -ErrorAction SilentlyContinue
-          }
-          function Upsert-Env([string]$key, [string]$value) {
-            if ([string]::IsNullOrWhiteSpace($value)) { return }
-            if (-not (Test-Path $envFile)) { New-Item -ItemType File -Path $envFile | Out-Null }
-            $lines = Get-Content $envFile -ErrorAction SilentlyContinue
-            $found = $false
-            $out = foreach ($line in $lines) {
-              if ($line -match "^$([regex]::Escape($key))=") {
-                $found = $true
-                "$key=$value"
-              } else { $line }
+          $root = 'C:\quant-ai-trader'
+          $certs = Join-Path $root 'certs'
+          New-Item -ItemType Directory -Force -Path $certs | Out-Null
+          $pemPath = Join-Path $certs 'tiger_private_key.pem'
+          $raw = $rawKey.Trim()
+
+          if ($raw -notmatch 'BEGIN') {
+            $chunks = for ($i = 0; $i -lt $raw.Length; $i += 64) {
+              $raw.Substring($i, [Math]::Min(64, $raw.Length - $i))
             }
-            if (-not $found) { $out += "$key=$value" }
-            Set-Content -Path $envFile -Value $out -Encoding utf8
-            Write-Host "Upserted $key in .env"
+            $body = ($chunks -join "`n")
+            $raw = "-----BEGIN RSA PRIVATE KEY-----`n$body`n-----END RSA PRIVATE KEY-----"
           }
-          Upsert-Env "QAT_TIGER_ID" $env:TIGER_ID
-          Upsert-Env "QAT_TIGER_ACCOUNT" $env:TIGER_ACCOUNT
-          Upsert-Env "QAT_TIGER_LICENSE" $env:TIGER_LICENSE
-          Upsert-Env "QAT_TIGER_PRIVATE_KEY_PATH" "./certs/tiger_private_key.pem"
-          Upsert-Env "QAT_TIGER_PAPER_TRADING" "true"
+
+          Set-Content -Path $pemPath -Value $raw -Encoding ascii
+          $bytes = (Get-Item -LiteralPath $pemPath).Length
+          Write-Host ("Wrote Tiger PEM to {0} ({1} bytes)" -f $pemPath, $bytes)
+
+          $envFile = Join-Path $root '.env'
+          if (-not (Test-Path $envFile)) {
+            $template = Join-Path $root '.env.windows'
+            if (Test-Path $template) { Copy-Item $template $envFile }
+          }
+          if (-not (Test-Path $envFile)) {
+            New-Item -ItemType File -Path $envFile | Out-Null
+          }
+
+          function Set-DotEnvValue([string]$Key, [string]$Value) {
+            if ([string]::IsNullOrWhiteSpace($Value)) { return }
+            $content = @(Get-Content -LiteralPath $envFile -ErrorAction SilentlyContinue)
+            $pattern = '^{0}=' -f [regex]::Escape($Key)
+            $replaced = $false
+            $next = foreach ($line in $content) {
+              if ($line -match $pattern) {
+                $replaced = $true
+                '{0}={1}' -f $Key, $Value
+              } else {
+                $line
+              }
+            }
+            if (-not $replaced) { $next += ('{0}={1}' -f $Key, $Value) }
+            Set-Content -LiteralPath $envFile -Value $next -Encoding utf8
+            Write-Host ("Upserted {0} in .env" -f $Key)
+          }
+
+          $tigerId = $env:TIGER_ID
+          if ([string]::IsNullOrWhiteSpace($tigerId)) { $tigerId = '20159337' }
+          $tigerAcct = $env:TIGER_ACCOUNT
+          if ([string]::IsNullOrWhiteSpace($tigerAcct)) { $tigerAcct = '21837535188693626' }
+
+          Set-DotEnvValue 'QAT_TIGER_ID' $tigerId
+          Set-DotEnvValue 'QAT_TIGER_ACCOUNT' $tigerAcct
+          Set-DotEnvValue 'QAT_EXEC_TIGER_ACCOUNT' $tigerAcct
+          Set-DotEnvValue 'QAT_TIGER_LICENSE' $env:TIGER_LICENSE
+          Set-DotEnvValue 'QAT_TIGER_PRIVATE_KEY_PATH' './certs/tiger_private_key.pem'
+          Set-DotEnvValue 'QAT_TIGER_PAPER_TRADING' 'true'
+          Set-DotEnvValue 'QAT_TRADING_SIMULATION_MODE' 'true'
+          Set-DotEnvValue 'QAT_EXECUTION_MODE' 'paper'
+
 
       - name: Deploy paper stack
         shell: powershell
@@ -100,16 +132,30 @@ jobs:
           $branch = "${{ github.event.inputs.branch }}"
           if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
           $full = "${{ github.event.inputs.full_install }}"
-          $script = "C:\quant-ai-trader\scripts\windows_cd_deploy.ps1"
-          if (-not (Test-Path $script)) {
-            throw "Missing $script - clone repo to C:\quant-ai-trader and pull once manually first"
+          $root = "C:\quant-ai-trader"
+          if (-not (Test-Path $root)) {
+            throw "Missing $root - clone repo once manually first"
           }
+          # Pull BEFORE invoking deploy script so CD logic itself is fresh
+          # (running an already-loaded old windows_cd_deploy.ps1 skips new checks).
+          Set-Location $root
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                       [System.Environment]::GetEnvironmentVariable("Path","User")
+          git fetch origin $branch
+          if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+          git checkout $branch
+          git reset --hard "origin/$branch"
+          if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
+          git log -1 --oneline
+          $script = Join-Path $root "scripts\windows_cd_deploy.ps1"
+          if (-not (Test-Path $script)) { throw "Missing $script" }
           if ($full -eq "true") {
             & powershell -ExecutionPolicy Bypass -File $script -Branch $branch -FullInstall
           } else {
             & powershell -ExecutionPolicy Bypass -File $script -Branch $branch
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not $?) { exit 1 }
 
       - name: Verify public health (localhost)
         shell: powershell
