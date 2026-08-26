@@ -1,5 +1,6 @@
-﻿# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 6
+# Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
+# DeployScriptVersion: 7
+# Services start hidden (no cmd.exe popup per process). Logs: logs\*.log
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\scripts\windows_deploy.ps1 -OpenFirewall
@@ -23,7 +24,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 Write-Host "============================================"
 Write-Host "  Quant AI Trader - Windows Paper Deploy"
-Write-Host "  DeployScriptVersion: 4"
+Write-Host "  DeployScriptVersion: 7"
 Write-Host "  Root: $Root"
 Write-Host "============================================"
 
@@ -154,38 +155,31 @@ $pidDir = Join-Path $Root "cache\windows_pids"
 New-Item -ItemType Directory -Force -Path $pidDir | Out-Null
 Get-ChildItem $pidDir -Filter "*.pid" -ErrorAction SilentlyContinue | Remove-Item -Force
 
+. (Join-Path $PSScriptRoot "windows_hidden_start.ps1")
+
 function Start-QatService {
     param([string]$Name, [string]$Module, [int]$Port)
     $logOut = Join-Path $Root "logs\$Name.out.log"
     $logErr = Join-Path $Root "logs\$Name.err.log"
-    # Launcher bat ensures PYTHONPATH is set even if Start-Process env is odd
     $bat = Join-Path $pidDir "start_$Name.bat"
+    $runLine = '"{0}" -m uvicorn {1} --host 0.0.0.0 --port {2} >> "{3}" 2>> "{4}"' -f $PythonExe, $Module, $Port, $logOut, $logErr
     $lines = @(
         "@echo off",
-        "set PYTHONPATH=$Root",
-        "set QAT_PROJECT_ROOT=$Root",
-        "cd /d `"$Root`"",
-        "`"$PythonExe`" -m uvicorn $Module --host 0.0.0.0 --port $Port >> `"$logOut`" 2>> `"$logErr`""
+        ("set PYTHONPATH={0}" -f $Root),
+        ("set QAT_PROJECT_ROOT={0}" -f $Root),
+        ("cd /d {0}" -f $Root),
+        $runLine
     )
     Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
-    # Detach from GitHub Actions job object so CD cleanup does not kill services
-    $cmd = "cmd.exe /c `"$bat`""
-    $pidVal = $null
-    try {
-        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-            CommandLine = $cmd
-            CurrentDirectory = $Root
-        }
-        if ($r.ReturnValue -eq 0) { $pidVal = $r.ProcessId }
-    } catch { }
+    $pidVal = Start-QatHiddenBat -BatPath $bat -WorkingDirectory $Root -CommandMatch ("uvicorn {0}" -f $Module)
     if (-not $pidVal) {
-        $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$bat`"") `
+        $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $bat) `
             -WorkingDirectory $Root -PassThru -WindowStyle Hidden
-        $pidVal = $p.Id
+        if ($p) { $pidVal = $p.Id }
     }
     Set-Content (Join-Path $pidDir "$Name.pid") $pidVal
-    Write-Host ("[ok] {0,-16} :{1}  PID {2}" -f $Name, $Port, $pidVal)
-    Start-Sleep -Seconds 2
+    Write-Host ("[ok] {0,-16} :{1}  PID {2} (hidden)" -f $Name, $Port, $pidVal)
+    Start-Sleep -Seconds 1
 }
 
 Write-Host "[..] starting backend services..."
@@ -205,7 +199,7 @@ if (-not $SkipFrontend) {
     }
     $distIndex = Join-Path $Root "frontend\dist\index.html"
     $built = $false
-    # CD uses -SkipInstall often — reuse dist to cut downtime (gateway serves SPA)
+    # CD uses -SkipInstall often - reuse dist to cut downtime (gateway serves SPA)
     if ((Test-Path $distIndex) -and $SkipInstall) {
         Write-Host "[ok] reuse existing frontend\dist (faster CD)"
         $built = $true
@@ -232,28 +226,21 @@ if (-not $SkipFrontend) {
         $frontLogOut = Join-Path $Root "logs\frontend.out.log"
         $frontLogErr = Join-Path $Root "logs\frontend.err.log"
         $frontBat = Join-Path $pidDir "start_frontend.bat"
-        # Reliable static server (Python) instead of vite preview
+        $frontRun = '"{0}" scripts\windows_frontend_server.py --root "{1}" --port 5180 >> "{2}" 2>> "{3}"' -f $PythonExe, $Root, $frontLogOut, $frontLogErr
         $frontLines = @(
             "@echo off",
-            "cd /d `"$Root`"",
-            "`"$PythonExe`" scripts\windows_frontend_server.py --root `"$Root`" --port 5180 >> `"$frontLogOut`" 2>> `"$frontLogErr`""
+            ("cd /d {0}" -f $Root),
+            $frontRun
         )
         Set-Content -Path $frontBat -Value ($frontLines -join "`r`n") -Encoding ASCII
-        $frontPid = $null
-        try {
-            $frc = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-                CommandLine = "cmd.exe /c `"$frontBat`""
-                CurrentDirectory = $Root
-            }
-            if ($frc.ReturnValue -eq 0) { $frontPid = $frc.ProcessId }
-        } catch { }
+        $frontPid = Start-QatHiddenBat -BatPath $frontBat -WorkingDirectory $Root -CommandMatch "windows_frontend_server.py"
         if (-not $frontPid) {
-            $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$frontBat`"") `
-                -WorkingDirectory $Root -PassThru -WindowStyle Minimized
-            $frontPid = $front.Id
+            $front = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $frontBat) `
+                -WorkingDirectory $Root -PassThru -WindowStyle Hidden
+            if ($front) { $frontPid = $front.Id }
         }
         Set-Content (Join-Path $pidDir "frontend.pid") $frontPid
-        Write-Host "[ok] frontend        :5180  PID $frontPid (python static+proxy)"
+        Write-Host "[ok] frontend        :5180  PID $frontPid (hidden)"
         Start-Sleep -Seconds 3
         try {
             $fr = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 5
@@ -325,7 +312,7 @@ Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
 Write-Host "  API:      http://127.0.0.1:8001/health"
 Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
-Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA — preferred)"
+Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA - preferred)"
 Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"

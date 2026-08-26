@@ -1,5 +1,5 @@
-﻿# DeployScriptVersion: 4
 # Stop Windows-native QAT services started by windows_deploy.ps1
+# DeployScriptVersion: 7
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $pidDir = Join-Path $Root "cache\windows_pids"
@@ -16,6 +16,33 @@ if (Test-Path $pidDir) {
             } catch { }
         }
         Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Hidden wscript launchers may not own the python child - kill by command line too
+$patterns = @(
+    "uvicorn api_gateway.main:app",
+    "uvicorn services.data_service.main:app",
+    "uvicorn services.factor_service.main:app",
+    "uvicorn services.model_train_service.main:app",
+    "uvicorn services.model_infer_service.main:app",
+    "uvicorn services.risk_service.main:app",
+    "uvicorn services.execution_service.main:app",
+    "windows_frontend_server.py",
+    "run_pipeline.py",
+    "trading_pipeline.py"
+)
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
+    $cl = $_.CommandLine
+    if (-not $cl) { return }
+    foreach ($pat in $patterns) {
+        if ($cl -like ("*{0}*" -f $pat)) {
+            try {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+                Write-Host ("[ok] stopped PID {0} ({1})" -f $_.ProcessId, $pat)
+            } catch { }
+            break
+        }
     }
 }
 
