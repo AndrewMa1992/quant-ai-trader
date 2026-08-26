@@ -123,3 +123,88 @@ def test_persist_snapshot_uuid_pk_schema(tiger_db):
     assert api["summary"]["cash"] == 1480
     assert api["positions"][0]["ticker"] == "AAPL"
 
+
+def test_persist_snapshot_notnull_without_db_default(tiger_db):
+    """SQLAlchemy declares defaults in Python, so DDL has bare NOT NULL columns."""
+    conn = tiger_db._connect()
+    try:
+        conn.executescript(
+            """
+            DROP TABLE IF EXISTS orders;
+            CREATE TABLE orders (
+                id VARCHAR(32) NOT NULL PRIMARY KEY,
+                order_id VARCHAR(64) NOT NULL UNIQUE,
+                ticker VARCHAR(20) NOT NULL,
+                side VARCHAR(10) NOT NULL,
+                order_type VARCHAR(20) NOT NULL,
+                quantity INTEGER NOT NULL,
+                filled_quantity INTEGER NOT NULL,
+                avg_fill_price FLOAT,
+                status VARCHAR(20) NOT NULL,
+                time_in_force VARCHAR(10) NOT NULL,
+                is_paper BOOLEAN NOT NULL,
+                retry_count INTEGER NOT NULL,
+                market VARCHAR(10),
+                submitted_at DATETIME,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snap = tiger_db.persist_tiger_snapshot(
+        positions=[],
+        account={"nav": 1046120.4, "cash": 698537.08},
+        orders=[{"order_id": "t-2", "ticker": "NVDA", "side": "BUY", "quantity": 3,
+                 "status": "FILLED", "avg_fill_price": 180.0}],
+    )
+    assert snap.get("error") is None
+    assert snap["orders_synced"] == 1
+
+    orders = tiger_db.load_orders_for_api(limit=5, ticker="NVDA")
+    assert orders[0]["order_id"] == "t-2"
+
+    conn = tiger_db._connect()
+    try:
+        tif, retry = conn.execute(
+            "SELECT time_in_force, retry_count FROM orders WHERE order_id = 't-2'"
+        ).fetchone()
+        assert tif == "DAY"
+        assert retry == 0
+    finally:
+        conn.close()
+
+
+def test_persist_drops_columns_the_schema_lacks(tiger_db):
+    conn = tiger_db._connect()
+    try:
+        conn.executescript(
+            """
+            DROP TABLE IF EXISTS orders;
+            CREATE TABLE orders (
+                id VARCHAR(32) NOT NULL PRIMARY KEY,
+                order_id VARCHAR(64) NOT NULL UNIQUE,
+                ticker VARCHAR(20) NOT NULL,
+                side VARCHAR(10),
+                quantity INTEGER,
+                status VARCHAR(20),
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snap = tiger_db.persist_tiger_snapshot(
+        positions=[],
+        account={"nav": 100, "cash": 100},
+        orders=[{"order_id": "t-3", "ticker": "MSFT", "side": "SELL", "quantity": 1}],
+    )
+    assert snap.get("error") is None
+    assert snap["orders_synced"] == 1
+
