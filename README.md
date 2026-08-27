@@ -1,153 +1,110 @@
-# 🤖 Quant AI Trader — 量化AI美股交易系统
+# Quant AI Trader
 
-> 最前沿科技打造的量化AI美股交易系统，对标顶级量化基金标准。  
-> Python 全栈 + PyTorch/TensorFlow AI 引擎 + Vue 3 前端 + 老虎证券 API
+AI-powered multi-market paper trading system. FastAPI microservices, Vue 3 dashboard, PatchTST / GBDT / TCN / TFT models, and Tiger Brokers OpenAPI.
 
-## 🐳 Docker 一键部署（模拟盘 · Linux）
+Paper mode is the default. Live account `20874631` is not used in simulation.
+
+## Stack
+
+Python 3.11+ · FastAPI · Vue 3 + Vite · PyTorch · scikit-learn · Tiger OpenAPI (`tigeropen`) · SQLite
+
+## Docker (paper · Linux)
 
 ```bash
 chmod +x scripts/docker_deploy.sh
 ./scripts/docker_deploy.sh
-# API http://localhost:8001  |  Frontend http://localhost:5180
+# API + SPA  http://localhost:8001
+# Optional UI http://localhost:5180
 ```
 
-详见 [DEPLOY.md](./DEPLOY.md)。默认强制 `paper` 模拟模式。
+See [DEPLOY.md](./DEPLOY.md). Compose forces `QAT_EXECUTION_MODE=paper`.
 
-## 🪟 Windows Server / Lightsail 部署（原生 · 无 Docker）
+## Windows Server / Lightsail (native, no Docker)
 
 ```powershell
 git checkout cursor/quant-upgrade-a75f
 Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\windows_deploy.ps1 -OpenFirewall
-# 外网: http://<公网IP>:5180
+# Public UI: http://<public-ip>:8001/
 ```
 
-详见 [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md)（RDP、端口、启停、**开机自启 + 定时自动部署**）。  
-服务器执行一次 `windows_install_autostart.ps1 -RunNow` 即可自动运行、自动拉取部署。
+See [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md) for RDP, firewall ports, start/stop, boot autostart, and scheduled deploy. Run `windows_install_autostart.ps1 -RunNow` once on the server to keep the stack up and pull updates.
 
-## 🚀 核心功能
+Current paper box: `http://3.106.139.233:8001/` (gateway SPA). Paper Tiger account: `21837535188693626`.
 
-| 模块 | 技术 | 功能 |
-|------|------|------|
-| **Transformer 价格预测** | PyTorch PatchTST | 60天回看，多尺度预测（1/5/20天），分位数回归置信区间 |
-| **PPO 强化学习** | Stable-Baselines3 | 端到端交易决策，Sharpe Ratio 优化，连续仓位控制 |
-| **FinBERT 情绪分析** | HuggingFace Transformers | 财经新闻情绪评分，市场情绪追踪 |
-| **信号融合 Ensemble** | 自适应加权投票 | 多模型信号动态权重，凯利公式仓位计算 |
-| **风控系统** | VaR / 最大回撤 / 仓位限制 | 对标顶级量化基金的完整风控链 |
-| **回测引擎** | 历史数据模拟 | Walk-Forward 验证，完整绩效报告 |
-| **Vue 3 前端** | ECharts + Pinia | 实时仪表盘、K线图、信号面板、回测分析 |
+## Capabilities
 
-## 🏗️ 项目结构
+| Module | Tech | What it does |
+|--------|------|----------------|
+| Price forecast | PyTorch PatchTST / TCN / TFT | Multi-horizon forecasts with quantile bands |
+| Tabular ensemble | LightGBM / XGBoost / CatBoost | Daily signal from engineered factors |
+| PPO (optional) | Stable-Baselines3 | Position sizing / Sharpe-oriented policy |
+| Sentiment | FinBERT | News / market-tone score |
+| Signal fusion | Weighted ensemble | Dynamic model weights, Kelly-style sizing |
+| Risk | VaR, drawdown, position caps | Hard limits before orders leave the book |
+| Execution | Paper broker + Tiger OpenAPI | Sync cash, positions, and fills from Tiger paper |
+| Backtest | Historical replay | Walk-forward reports |
+| Frontend | Vue 3, ECharts, Pinia | Live dashboard, orders, risk, data sync |
+
+## Layout
 
 ```
 quant-ai-trader/
-├── backend/
-│   ├── main.py                  # FastAPI 入口 + WebSocket
-│   ├── config.py                # 全局配置
-│   ├── data_engine/             # 数据引擎（yfinance + 老虎SDK适配层）
-│   │   ├── market_data.py       # 市场数据获取
-│   │   ├── data_pipeline.py     # 特征工程（30+技术指标）
-│   │   ├── historical_store.py  # 数据持久化
-│   │   └── realtime.py          # 实时行情推流
-│   ├── ai_models/               # AI模型层
-│   │   ├── predictor.py         # Transformer PatchTST
-│   │   ├── rl_agent.py          # PPO 强化学习
-│   │   ├── sentiment.py         # FinBERT 情绪分析
-│   │   ├── ensemble.py          # 信号融合
-│   │   └── trainer.py           # 训练管线
-│   ├── trading_engine/          # 交易引擎
-│   │   ├── risk_manager.py      # 风控（VaR/回撤/仓位）
-│   │   ├── executor.py          # Paper Trading 执行
-│   │   ├── portfolio.py         # 组合管理
-│   │   ├── backtester.py        # 回测引擎
-│   │   └── strategy.py          # 策略管理器
-│   └── api/                     # API路由
-├── frontend/                    # Vue 3 前端
-│   └── src/
-│       ├── views/              # Dashboard / Portfolio / Strategy / Backtest
-│       ├── stores/             # Pinia 状态管理
-│       └── components/         # 图表、信号、风控组件
-├── start.bat                   # Windows 一键启动
-├── start.sh                    # macOS/Linux 启动脚本
-└── README.md
+├── api_gateway/                 # FastAPI gateway :8001 (serves SPA + /api/v2)
+├── services/
+│   ├── data_service/            # quotes, ingest, Tiger quote client
+│   ├── factor_service/          # feature pipeline
+│   ├── model_train_service/     # training jobs
+│   ├── model_infer_service/     # live inference
+│   ├── risk_service/            # risk checks
+│   └── execution_service/       # orders, Tiger trade client, paper book
+├── shared/                      # Tiger SDK helper, persist, pipeline glue
+├── configs/                     # QAT_ settings (pydantic-settings)
+├── frontend/                    # Vue 3 app (built dist served by gateway)
+├── scripts/                     # Windows / Docker deploy and watchdogs
+├── data/                        # SQLite, daily bars, model checkpoints
+└── trading_pipeline.py          # paper trading loop
 ```
 
-## 🛠️ 快速开始
+## Quick start (dev)
 
-### 前提条件
-- Python 3.10+
-- Node.js 18+
-- （可选）老虎证券开发者 API 账号
+Requirements: Python 3.11+, Node.js 18+. Tiger credentials are optional for local paper.
 
-### 安装 & 运行
-
-**Windows:**
 ```bash
-双击 start.bat
-# 或命令行运行
-start.bat
+python -m pip install -e .
+cd frontend && npm install && npm run build && cd ..
+python -m uvicorn api_gateway.main:app --host 0.0.0.0 --port 8001
+# UI: http://localhost:8001/
 ```
 
-**macOS/Linux:**
-```bash
-chmod +x start.sh
-./start.sh
-```
+Windows one-shot: `scripts\windows_deploy.ps1`. Linux/macOS helper: `./start.sh` if present.
 
-**手动启动:**
-```bash
-# 1. 安装后端依赖
-pip install -r backend/requirements.txt
+## Tiger Brokers OpenAPI
 
-# 2. 预训练模型（首次运行）
-python backend/scripts/pretrain.py
+Paper / demo trading uses **production** OpenAPI with the paper account id (not the sandbox environment).
 
-# 3. 启动后端
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+1. Create an app on the [Tiger OpenAPI console](https://quantit.tigerfintech.com/openapi)
+2. Save the RSA private key as `certs/tiger_private_key.pem` (gitignored)
+3. Set in `.env`:
+   - `QAT_TIGER_ID`
+   - `QAT_TIGER_ACCOUNT` (paper: `21837535188693626`)
+   - `QAT_TIGER_PRIVATE_KEY_PATH`
+   - `QAT_TIGER_LICENSE=TBSG` (retry `TBHK` if connect fails)
+   - `QAT_TIGER_SANDBOX=false`
+   - `QAT_TIGER_PAPER_TRADING=true`
+   - `QAT_EXECUTION_MODE=paper`
+4. Install the SDK: `pip install "tigeropen>=3.5.8"`
 
-# 4. 启动前端（新终端）
-cd frontend
-npm install
-npm run dev
+Do not switch `QAT_EXECUTION_MODE` to live until promotion gates pass.
 
-# 5. 打开浏览器
-# http://localhost:5173
-```
-
-## 🔌 老虎证券 API 接入
-
-当前使用模拟模式（yfinance + 模拟行情），实盘接入步骤：
-
-1. 在 [老虎开发者平台](https://www.tigerbrokers.com/open/) 申请 API 账号
-2. 获取 TigerID、Private Key
-3. 在 `backend/config.py` 中填入配置
-4. 安装老虎 SDK：`pip install tiger-open-python-sdk`
-5. 切换 `SIMULATION_MODE = False`
-
-## 📊 AI 模型架构
+## Model path
 
 ```
-市场数据 → [Transformer 价格预测] ──┐
-市场数据 → [LSTM 趋势分类]     ──┼──→ [信号融合 Ensemble] → [交易决策]
-新闻/情绪 → [FinBERT 情绪分析]  ──┘                              ↓
-                                                        [PPO RL Agent] 微调决策
-                                                              ↓
-                                                        [风控模块] → 订单执行
+market data → PatchTST / TCN / TFT / GBDT ──┐
+news / tone  → FinBERT                     ──┼──→ ensemble → risk → Tiger / paper fill
+portfolio    → optional PPO fine-tune      ──┘
 ```
 
-## ⚙️ 技术栈
+## License
 
-| 层级 | 技术 |
-|------|------|
-| AI 框架 | PyTorch 2.x + TensorFlow |
-| 强化学习 | Stable-Baselines3 (PPO) |
-| 时间序列 | Transformer / PatchTST |
-| 自然语言 | FinBERT |
-| 后端 | FastAPI + WebSocket |
-| 前端 | Vue 3 + Vite + ECharts |
-| 数据 | yfinance + Simulated Market |
-| 存储 | SQLite + Parquet |
-
-## 📝 License
-
-MIT
+Proprietary (see `pyproject.toml`).
