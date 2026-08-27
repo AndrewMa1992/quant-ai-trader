@@ -1,6 +1,6 @@
 ' v2_daemon_launcher.vbs
-' 静默启动 daemon_forever.bat（无控制台窗口闪烁）
-' 由 setup_v2_boot.bat 注册到 Windows Startup 文件夹
+' Silently start daemon_forever.bat (no console flash)
+' Registered into the Windows Startup folder by setup_v2_boot.bat
 
 Dim strScriptPath
 strScriptPath = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)

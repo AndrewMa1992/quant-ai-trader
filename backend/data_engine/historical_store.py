@@ -1,6 +1,6 @@
 ﻿"""
-历史数据存储层 - SQLite + Parquet 混合存储
-支持增量更新、高效查询
+Historical data store - hybrid SQLite + Parquet persistence.
+Supports incremental updates and efficient queries.
 """
 import sqlite3
 from datetime import datetime, date
@@ -14,10 +14,10 @@ from configs.settings import settings
 
 class HistoricalStore:
     """
-    本地数据持久化
-    - SQLite 存储元数据与交易记录
-    - Parquet 存储历史行情数据（高效压缩）
-    - 增量更新策略
+    Local data persistence.
+    - SQLite for metadata and trade records
+    - Parquet for historical quotes (efficient compression)
+    - Incremental-update strategy
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -27,15 +27,15 @@ class HistoricalStore:
         self._init_db()
 
     # ================================================================
-    # 数据库初始化
+    # Database initialization
     # ================================================================
 
     def _init_db(self):
-        """初始化数据库表"""
+        """Initialize database tables."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
-        # 行情元数据表
+        # Quote metadata table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS market_metadata (
                 ticker TEXT PRIMARY KEY,
@@ -47,7 +47,7 @@ class HistoricalStore:
             )
         """)
 
-        # 交易记录表
+        # Trade records table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +65,7 @@ class HistoricalStore:
             )
         """)
 
-        # 组合快照表
+        # Portfolio snapshot table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,7 +80,7 @@ class HistoricalStore:
             )
         """)
 
-        # 信号记录表
+        # Signal records table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS signals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +93,7 @@ class HistoricalStore:
                 details TEXT
             )
         """)
-        # 实时价格缓存表（对冲基金级性能）
+        # Realtime price cache (hedge-fund-grade performance)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS price_ticks (
                 ticker TEXT NOT NULL,
@@ -105,7 +105,7 @@ class HistoricalStore:
             )
         """)
 
-        # 创建索引加速查询
+        # Indexes for faster queries
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_time ON trades(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_time ON signals(timestamp)")
@@ -114,70 +114,70 @@ class HistoricalStore:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_ticks_ticker ON price_ticks(ticker)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_ticks_time ON price_ticks(timestamp)")
 
-        # WAL 模式：写入性能提升 10x，支持并发读写
+        # WAL mode: ~10x write throughput, concurrent reads/writes
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-64000")  # 64MB 缓存
+        cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
         cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.execute("PRAGMA mmap_size=268435456")  # 256MB 内存映射
+        cursor.execute("PRAGMA mmap_size=268435456")  # 256MB memory map
 
         conn.commit()
         conn.close()
-        logger.info(f"数据库初始化完成: {self.db_path} (WAL模式, 64MB缓存)")
+        logger.info(f"Database initialized: {self.db_path} (WAL mode, 64MB cache)")
 
     # ================================================================
-    # 行情数据读写
+    # Quote data I/O
     # ================================================================
 
     def save_ohlcv(self, df: pd.DataFrame, ticker: str, interval: str = "1d"):
         """
-        保存OHLCV数据到Parquet
+        Persist OHLCV data to Parquet.
 
         Args:
-            df: OHLCV DataFrame（含技术指标）
-            ticker: 股票代码
-            interval: 数据周期
+            df: OHLCV DataFrame (including technical indicators)
+            ticker: stock symbol
+            interval: bar interval
         """
         if df.empty:
             return
 
         file_path = self.parquet_dir / f"{ticker}_{interval}.parquet"
 
-        # 检查已有数据，进行增量合并
+        # Merge incrementally if a file already exists
         if file_path.exists():
             existing = pd.read_parquet(file_path)
             combined = pd.concat([existing, df])
             combined = combined[~combined.index.duplicated(keep="last")]
             combined = combined.sort_index()
             combined.to_parquet(file_path)
-            logger.info(f"📝 {ticker} 增量更新: {len(df)} 新行 → 共 {len(combined)} 行")
+            logger.info(f"📝 {ticker} incremental update: {len(df)} new rows → {len(combined)} total")
         else:
             df.to_parquet(file_path)
-            logger.info(f"📝 {ticker} 新建存储: {len(df)} 行")
+            logger.info(f"📝 {ticker} new store: {len(df)} rows")
 
-        # 更新元数据
+        # Update metadata
         self._update_metadata(ticker, interval, df)
 
     def load_ohlcv(self, ticker: str, interval: str = "1d") -> pd.DataFrame:
-        """加载OHLCV数据"""
+        """Load OHLCV data."""
         file_path = self.parquet_dir / f"{ticker}_{interval}.parquet"
         if file_path.exists():
             return pd.read_parquet(file_path)
         return pd.DataFrame()
 
     def get_latest_date(self, ticker: str, interval: str = "1d") -> Optional[date]:
-        """获取最新数据日期"""
+        """Return the latest stored date."""
         df = self.load_ohlcv(ticker, interval)
         if not df.empty:
             return df.index[-1].date() if hasattr(df.index[-1], "date") else df.index[-1]
         return None
 
     # ================================================================
-    # 交易记录
+    # Trade records
     # ================================================================
 
     def save_trade(self, trade_data: Dict):
-        """保存交易记录"""
+        """Persist a trade record."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         cursor.execute("""
@@ -207,7 +207,7 @@ class HistoricalStore:
         limit: int = 100,
         since: Optional[str] = None
     ) -> pd.DataFrame:
-        """获取历史交易记录"""
+        """Return historical trade records."""
         conn = sqlite3.connect(str(self.db_path))
         query = "SELECT * FROM trades"
         conditions = []
@@ -230,11 +230,11 @@ class HistoricalStore:
         return df
 
     # ================================================================
-    # 组合快照
+    # Portfolio snapshots
     # ================================================================
 
     def save_snapshot(self, snapshot: Dict):
-        """保存组合快照"""
+        """Persist a portfolio snapshot."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         cursor.execute("""
@@ -256,7 +256,7 @@ class HistoricalStore:
         conn.close()
 
     def get_portfolio_history(self, limit: int = 500) -> pd.DataFrame:
-        """获取组合历史数据"""
+        """Return portfolio history."""
         conn = sqlite3.connect(str(self.db_path))
         df = pd.read_sql_query(
             "SELECT * FROM portfolio_snapshots ORDER BY timestamp DESC LIMIT ?",
@@ -266,11 +266,11 @@ class HistoricalStore:
         return df
 
     # ================================================================
-    # 信号记录
+    # Signal records
     # ================================================================
 
     def save_signal(self, signal: Dict):
-        """保存交易信号"""
+        """Persist a trading signal."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         cursor.execute("""
@@ -290,11 +290,11 @@ class HistoricalStore:
         conn.close()
 
     # ================================================================
-    # 实时数据方法（对冲基金级批量写入）
+    # Realtime helpers (hedge-fund-grade batch writes)
     # ================================================================
 
     def save_price_ticks_batch(self, prices: Dict[str, float]):
-        """批量保存实时价格（单事务，高性能）"""
+        """Batch-save realtime prices (single transaction, high throughput)."""
         now = datetime.now().isoformat()
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -309,7 +309,7 @@ class HistoricalStore:
         conn.close()
 
     def save_signals_batch(self, signals: Dict[str, Dict]):
-        """批量保存信号（单事务）"""
+        """Batch-save signals (single transaction)."""
         now = datetime.now().isoformat()
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -325,7 +325,7 @@ class HistoricalStore:
         conn.close()
 
     def save_trades_batch(self, trades: List[Dict]):
-        """批量保存交易"""
+        """Batch-save trades."""
         if not trades:
             return
         conn = sqlite3.connect(str(self.db_path))
@@ -340,10 +340,10 @@ class HistoricalStore:
             )
         conn.commit()
         conn.close()
-        logger.debug(f"已保存 {len(trades)} 笔交易")
+        logger.debug(f"Saved {len(trades)} trades")
 
     def get_latest_prices(self) -> Dict[str, float]:
-        """获取最新价格快照"""
+        """Return the latest price snapshot."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         cursor.execute("""
@@ -355,11 +355,11 @@ class HistoricalStore:
         return result
 
     # ================================================================
-    # 内部方法
+    # Internals
     # ================================================================
 
     def _update_metadata(self, ticker: str, interval: str, df: pd.DataFrame):
-        """更新数据元数据"""
+        """Update data metadata."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
@@ -383,7 +383,7 @@ class HistoricalStore:
         conn.close()
 
     def get_all_tickers(self) -> List[str]:
-        """获取所有已存储 ticker 列表"""
+        """Return all stored ticker symbols."""
         conn = sqlite3.connect(str(self.db_path))
         df = pd.read_sql_query(
             "SELECT DISTINCT ticker FROM market_metadata ORDER BY ticker", conn
@@ -392,7 +392,7 @@ class HistoricalStore:
         return df["ticker"].tolist() if not df.empty else []
 
     def get_storage_stats(self) -> Dict:
-        """获取存储统计"""
+        """Return storage statistics."""
         conn = sqlite3.connect(str(self.db_path))
 
         total_trades = pd.read_sql_query(
@@ -405,7 +405,7 @@ class HistoricalStore:
 
         tickers_count = len(self.get_all_tickers())
 
-        # Parquet 文件大小
+        # Parquet file size
         parquet_size = sum(f.stat().st_size for f in self.parquet_dir.glob("*.parquet"))
 
         conn.close()

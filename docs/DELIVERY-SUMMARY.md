@@ -1,66 +1,66 @@
-# Quant AI Trader v2 — 交付总结
+# Quant AI Trader v2 — Delivery Summary
 
-**日期**: 2026-06-01 | **标准**: 头部量化基金级 (Renaissance/Two Sigma/Citadel)
+**Date**: 2026-06-01 | **Standard**: Institutional quant-fund grade (Renaissance / Two Sigma / Citadel)
 
 ---
 
 ## TL;DR
 
-完成 quant-ai-trader v2 完整重写：155 个 Python 后端 + 40 个前端文件，六微服务架构，100+ 因子，多模型 AI 引擎 (GBDT+Transformer+TCN+TFT+RL)，Barra 风险模型，组合优化，事件驱动回测，TWAP/VWAP 执行算法，151/151 测试全部通过。
+Completed a full rewrite of quant-ai-trader v2: 155 Python backend files + 40 frontend files, six-microservice architecture, 100+ factors, multi-model AI engine (GBDT + Transformer + TCN + TFT + RL), Barra risk model, portfolio optimization, event-driven backtesting, TWAP / VWAP execution algorithms, 151/151 tests passing.
 
 ---
 
-## 交付概览
+## Delivery Overview
 
-| 指标 | 数值 |
+| Metric | Value |
 |------|------|
-| **后端文件** | 155 Python |
-| **前端文件** | 40 TypeScript/Vue |
-| **测试通过** | 151/151 (100%) |
-| **数据库** | 263 标的 + 113 因子 |
-| **模型已训练** | GBDT LightGBM (8标的) |
+| **Backend files** | 155 Python |
+| **Frontend files** | 40 TypeScript / Vue |
+| **Tests passing** | 151/151 (100%) |
+| **Database** | 263 names + 113 factors |
+| **Models trained** | GBDT LightGBM (8 names) |
 | **API Gateway** | http://localhost:8001 |
-| **前端** | http://localhost:5180 |
+| **Frontend** | http://localhost:5180 |
 
-## 系统架构
+## System Architecture
 
 ```
-Nginx → Vue 3 SPA (:5180) + API Gateway (:8001)
-  ├─ Data Service (:8011)     — yfinance/Tiger/FRED 多源数据
-  ├─ Factor Service (:8012)   — 113因子计算+评估
-  ├─ Model Train (:8013)      — GBDT/Transformer/TCN/TFT/RL
-  ├─ Model Infer (:8014)      — 多模型融合推理
-  ├─ Risk Service (:8015)     — Barra/VaR/压力测试
-  └─ Execution Service (:8016) — TWAP/VWAP/回测/实盘
+Nginx -> Vue 3 SPA (:5180) + API Gateway (:8001)
+  |- Data Service (:8011)     — yfinance / Tiger / FRED multi-source data
+  |- Factor Service (:8012)   — 113-factor computation + evaluation
+  |- Model Train (:8013)      — GBDT / Transformer / TCN / TFT / RL
+  |- Model Infer (:8014)      — multi-model fused inference
+  |- Risk Service (:8015)     — Barra / VaR / stress testing
+  |- Execution Service (:8016) — TWAP / VWAP / backtest / live
 ```
 
-## 关键交付物
+## Key Deliverables
 
-| 文档 | 路径 |
+| Document | Path |
 |------|------|
-| 产品需求 | `docs/PRD-v2.md` |
-| 架构设计 | `docs/ARCHITECTURE-v2.md` |
-| 类图 | `docs/class-diagram.mermaid` |
-| 时序图 | `docs/sequence-diagram.mermaid` |
+| Product requirements | `docs/PRD-v2.md` |
+| Architecture design | `docs/ARCHITECTURE-v2.md` |
+| Class diagram | `docs/class-diagram.mermaid` |
+| Sequence diagram | `docs/sequence-diagram.mermaid` |
 
-## 启动命令
+## Startup Commands
 
 ```bash
-# 后端
+# Backend
 cd G:\workbuddyspace\Claw\quant-ai-trader
 .\venv\Scripts\python.exe -m uvicorn api_gateway.main:app --port 8001
 
-# 前端
+# Frontend
 cd frontend && npm run dev
 
-# 训练
+# Training
 python -c "from services.model_train_service.trainers.gbdt_trainer import GBDTTrainer; ..."
 ```
 
-## 下一步建议
+## Next-Step Recommendations
 
-1. **下载全量数据**: 运行 `scripts/ingest_historical.py --market US --years 2` 获取 127 只美股历史行情
-2. **完整训练**: 训练 Transformer (d_model=128 CPU) + TCN + TFT 深度模型
-3. **Walk-Forward 验证**: 运行时间序列交叉验证，避免前视偏差
-4. **Docker 部署**: `docker-compose up -d` 启动 PostgreSQL + Redis + 全服务
-5. **实盘验证**: 通过老虎证券 API (account=20874631) 进行 Paper Trading 验证后上线
+1. **Download full history**: run `scripts/ingest_historical.py --market US --years 2` to fetch 127 US-equity historical quotes
+2. **Full training**: train Transformer (d_model=128 CPU) + TCN + TFT deep models
+3. **Walk-forward validation**: run time-series cross-validation to avoid look-ahead bias
+4. **Docker deploy**: `docker-compose up -d` to start PostgreSQL + Redis + all services
+5. **Live validation**: Paper Trading via Tiger Brokers API (account=20874631), then go live

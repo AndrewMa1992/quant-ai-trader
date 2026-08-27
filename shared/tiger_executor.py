@@ -197,7 +197,7 @@ class TigerExecutor:
                 )
                 return None
             if rounded != quantity:
-                logger.info(f"📐 {ticker} 整手对齐: {int(quantity)} → {int(rounded)} 股")
+                logger.info(f"📐 {ticker} lot-size aligned: {int(quantity)} → {int(rounded)} shares")
                 quantity = rounded
             # Lot may exceed cash — trim to affordable whole lots
             max_cash = float(getattr(self.risk, "cash", self.portfolio.cash)) * float(
@@ -217,7 +217,7 @@ class TigerExecutor:
         risk_report = self.risk.check_order(ticker, side_key, quantity, price)
         if not risk_report.passed:
             logger.warning(
-                f"🔴 风控拒绝: {ticker} {decision_upper} | {risk_report.reason}"
+                f"🔴 Risk rejected: {ticker} {decision_upper} | {risk_report.reason}"
             )
             return {
                 "ticker": ticker,
@@ -451,8 +451,8 @@ class TigerExecutor:
             )
 
             logger.info(
-                f"✅ 实盘 {side} {ticker}: {qty_int}股 @ ${price:.2f} | "
-                f"订单ID: {record.get('order_id')}"
+                f"✅ Live {side} {ticker}: {qty_int} shares @ ${price:.2f} | "
+                f"order ID: {record.get('order_id')}"
             )
             return record
 
@@ -533,7 +533,7 @@ class TigerExecutor:
                             or order_result.get("orderId")
                         )
                         logger.info(
-                            f"🐯 Tiger paper {side} {ticker}: {qty_int}股 | id={tiger_order_id}"
+                            f"🐯 Tiger paper {side} {ticker}: {qty_int} shares | id={tiger_order_id}"
                         )
                     else:
                         logger.warning(
@@ -571,7 +571,7 @@ class TigerExecutor:
             except Exception as exc:
                 logger.debug(f"persist_fill skipped: {exc}")
             logger.info(
-                f"📝 Paper {side} {ticker}: {quantity:.2f}股 @ ${price:.2f}"
+                f"📝 Paper {side} {ticker}: {quantity:.2f} shares @ ${price:.2f}"
             )
 
         return trade

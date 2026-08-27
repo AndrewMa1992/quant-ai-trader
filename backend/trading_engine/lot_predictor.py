@@ -1,13 +1,13 @@
 """
-Lot Predictor + Capital Filter — 整手预测器 + 资金过滤
+Lot Predictor + Capital Filter.
 
-功能:
-1. 提前查询/预测各市场最小交易单位 (lot size)
-2. 计算买入所需最低资金 (本地货币 + USD 等值)
-3. 资金不足的品种自动排除，不浪费 AI 推理时间
-4. 港股整手覆盖范围扩展 (已知列表 + Tiger API 动态查询)
+Capabilities:
+1. Look up / predict each market's minimum trade unit (lot size)
+2. Compute the minimum capital to buy (local currency + USD equivalent)
+3. Auto-exclude names that cannot be afforded, saving AI inference time
+4. Expanded HK lot coverage (known table + Tiger API lookup)
 
-P2: 全品种扫描 + 自动换汇 + 整手预测 + 资金过滤
+P2: universe scan + auto FX + lot prediction + capital filter
 """
 from __future__ import annotations
 
@@ -18,13 +18,13 @@ from configs.settings import settings
 
 
 class LotPredictor:
-    """整手预测 — 查询各个市场的最小交易单位"""
+    """Lot predictor — look up each market's minimum trade unit."""
 
     # ═══════════════════════════════════════════
-    # 港股整手对照表 (扩展版)
+    # HK lot-size table (extended)
     # ═══════════════════════════════════════════
     HK_LOT_SIZES: Dict[str, int] = {
-        # 大盘蓝筹 (成分股)
+        # Large-cap blue chips (index constituents)
         "00005": 400,  "00011": 100,  "00016": 1000, "00027": 500,
         "00175": 100,  "00241": 500,  "00267": 1000, "00268": 200,
         "00270": 1000, "00288": 500,  "00291": 2000, "00316": 500,
@@ -54,11 +54,11 @@ class LotPredictor:
         "09999": 20,   "09997": 100,  "09995": 100,
     }
 
-    # 默认整手大小
+    # Default lot sizes
     DEFAULT_LOT = {
         "US": 1,
-        "HK": 100,   # 港股默认 100 股
-        "SG": 100,   # 新加坡默认 100 股
+        "HK": 100,   # HK default 100 shares
+        "SG": 100,   # Singapore default 100 shares
         "AU": 1,
         "NZ": 1,
     }
@@ -67,7 +67,7 @@ class LotPredictor:
         self._tiger_lot_cache: Dict[str, int] = {}
         self._last_tiger_query: float = 0
 
-    # ── 主方法: 获取整手大小 ──
+    # ── Main: get lot size ──
     def get_lot_size(
         self,
         ticker: str,
@@ -75,57 +75,57 @@ class LotPredictor:
         tiger_client=None,
     ) -> int:
         """
-        获取股票最小交易单位。
+        Return the minimum trade unit for a ticker.
 
-        优先级:
-        1. 已知对照表 (HK_LOT_SIZES)
-        2. Tiger API 动态查询
-        3. 默认值 (按市场)
+        Priority:
+        1. Known table (HK_LOT_SIZES)
+        2. Tiger API lookup
+        3. Market default
 
         Args:
-            ticker: 如 '00700', 'AAPL', 'D05.SI'
+            ticker: e.g. '00700', 'AAPL', 'D05.SI'
             market: US/HK/SG/AU/NZ
-            tiger_client: TigerClient 实例
+            tiger_client: TigerClient instance
 
         Returns:
-            最小交易股数
+            Minimum share quantity
         """
-        # 美股/AU/NZ → 1股
+        # US/AU/NZ → 1 share
         if market in ("US", "AU", "NZ"):
             return 1
 
-        # 新加坡 → 默认100股
+        # Singapore → default 100 shares
         if market == "SG":
             return 100
 
-        # 港股 — 清理 ticker 前缀
+        # HK — strip ticker suffix
         clean = ticker.replace(".HK", "").replace(".hk", "")
 
-        # 1. 已知列表
+        # 1. Known table
         if clean in self.HK_LOT_SIZES:
             return self.HK_LOT_SIZES[clean]
 
-        # 2. Tiger API 动态查询
+        # 2. Tiger API lookup
         if tiger_client and tiger_client.is_connected():
             lot = self._query_tiger_lot(clean, tiger_client)
             if lot > 0:
                 self._tiger_lot_cache[clean] = lot
                 return lot
 
-        # 3. 默认
+        # 3. Default
         return self.DEFAULT_LOT.get(market, 100)
 
     def _query_tiger_lot(self, symbol: str, tiger_client) -> int:
-        """通过 Tiger API 查询合约信息获取整手大小"""
+        """Look up lot size from Tiger contract info."""
         import time
         now = time.time()
 
-        # 缓存 (30分钟)
+        # Cache (30 minutes)
         if symbol in self._tiger_lot_cache and (now - self._last_tiger_query) < 1800:
             return self._tiger_lot_cache[symbol]
 
         try:
-            # 尝试通过 contract 查询
+            # Query via contract
             from tigeropen.common.contract import Contract
             from tigeropen.common.util.contract_utils import stock_contract
 
@@ -136,9 +136,9 @@ class LotPredictor:
         except Exception:
             pass
 
-        return 0  # 查询失败
+        return 0  # Lookup failed
 
-    # ── 资金门槛计算 ──
+    # ── Capital threshold ──
     def calc_min_capital(
         self,
         ticker: str,
@@ -147,23 +147,23 @@ class LotPredictor:
         tiger_client=None,
     ) -> Dict:
         """
-        计算买入一只股票的最低资金需求。
+        Compute the minimum capital required to buy one lot.
 
         Args:
-            ticker: 股票代码
-            price: 当前价格 (本地货币)
-            market: 市场代码
-            tiger_client: Tiger 客户端
+            ticker: Symbol
+            price: Current price (local currency)
+            market: Market code
+            tiger_client: Tiger client
 
         Returns:
             {
                 "ticker": str,
-                "lot_size": int,         # 最小交易单位
-                "price_local": float,    # 单价(本地货币)
-                "min_local": float,      # 最低买入成本(本地货币)
-                "min_usd": float,        # 最低买入成本(USD)
-                "affordable": bool,      # 是否买得起
-                "currency": str,         # 币种
+                "lot_size": int,         # Minimum trade unit
+                "price_local": float,    # Unit price (local)
+                "min_local": float,      # Min buy cost (local)
+                "min_usd": float,        # Min buy cost (USD)
+                "affordable": bool,      # Whether it is affordable
+                "currency": str,         # Currency
             }
         """
         lot_size = self.get_lot_size(ticker, market, tiger_client)
@@ -171,7 +171,7 @@ class LotPredictor:
         fx_rate = settings.trading_currency_rates_dict.get(currency, 1.0)
 
         min_local = price * lot_size
-        # 加佣金缓冲 0.5%
+        # 0.5% commission buffer
         min_local *= 1.005
         min_usd = min_local * fx_rate
 
@@ -181,13 +181,13 @@ class LotPredictor:
             "price_local": round(price, 4),
             "min_local": round(min_local, 2),
             "min_usd": round(min_usd, 2),
-            "affordable": False,  # 调用方填充
+            "affordable": False,  # Filled by caller
             "currency": currency,
         }
 
     @staticmethod
     def _get_currency(ticker: str, market: str) -> str:
-        """根据 ticker 和市场确定币种"""
+        """Infer currency from ticker and market."""
         ticker_upper = ticker.upper()
         if ".HK" in ticker_upper or market == "HK":
             return "HKD"
@@ -199,7 +199,7 @@ class LotPredictor:
             return "NZD"
         return "USD"
 
-    # ── 批量资金过滤 ──
+    # ── Batch capital filter ──
     def filter_affordable(
         self,
         tickers: List[str],
@@ -209,14 +209,14 @@ class LotPredictor:
         tiger_client=None,
     ) -> Tuple[List[str], Dict, List[str]]:
         """
-        批量过滤 — 排除资金不足的品种。
+        Batch filter — drop names that cannot be afforded.
 
         Args:
-            tickers: 候选 ticker 列表
+            tickers: Candidate ticker list
             prices: {ticker: price_local}
-            available_cash_usd: 各币种可用现金 (USD 等价总和)
-            markets: {ticker: market} 市场映射
-            tiger_client: Tiger 客户端
+            available_cash_usd: Available cash across currencies (USD equivalent)
+            markets: {ticker: market} map
+            tiger_client: Tiger client
 
         Returns:
             (affordable_tickers, capital_detail, excluded_tickers)
@@ -237,7 +237,7 @@ class LotPredictor:
             market = markets.get(ticker, "US")
             detail = self.calc_min_capital(ticker, price, market, tiger_client)
 
-            # 同币种现金判断
+            # Same-currency cash check
             currency = detail["currency"]
             rate = settings.trading_currency_rates_dict.get(currency, 1.0)
             cash_in_ccy = available_cash_usd / rate if rate > 0 else 0
@@ -248,17 +248,17 @@ class LotPredictor:
             else:
                 detail["affordable"] = False
                 excluded.append(ticker)
-                logger.debug(f"  🚫 {ticker}: 需 {currency} {detail['min_local']:.0f}, "
-                           f"仅 {currency} {cash_in_ccy:.0f}")
+                logger.debug(f"  🚫 {ticker}: needs {currency} {detail['min_local']:.0f}, "
+                           f"only {currency} {cash_in_ccy:.0f}")
 
             capital_detail[ticker] = detail
 
         if excluded:
-            logger.info(f"💰 资金过滤: {len(affordable)} 只可买, {len(excluded)} 只钱不够排除")
+            logger.info(f"💰 Capital filter: {len(affordable)} affordable, {len(excluded)} excluded")
 
         return affordable, capital_detail, excluded
 
-    # ── AI 推理前预过滤 ──
+    # ── Pre-filter before AI inference ──
     def pre_filter_for_ai(
         self,
         universe: List[Dict],
@@ -266,46 +266,46 @@ class LotPredictor:
         n_top: int = 100,
     ) -> List[str]:
         """
-        AI 推理前预过滤 — 只保留买得起的 Top-N 品种。
+        Pre-filter before AI inference — keep only the affordable Top-N names.
 
-        减少 AI 推理开销，跳过注定无法交易的品种。
+        Cuts AI cost by skipping names that cannot be traded.
 
         Args:
-            universe: 全量扫描结果 (market_scanner 的 affordable 列表)
-            available_cash_usd: 可用现金 USD 等值
-            n_top: 最多返回数
+            universe: Full scan result (market_scanner affordable list)
+            available_cash_usd: Available cash in USD equivalent
+            n_top: Max names to return
 
         Returns:
-            过滤后的 ticker 列表 (按 priority 排序)
+            Filtered ticker list (priority-sorted)
         """
         candidates = []
 
         for entry in universe:
             min_cap = entry.get("min_capital_usd", 0)
             if min_cap <= 0:
-                # 无价格信息 → 保留
+                # No price info → keep
                 candidates.append(entry)
             elif available_cash_usd >= min_cap:
-                # 买得起
+                # Affordable
                 candidates.append(entry)
             else:
-                # 买不起 → 跳过
+                # Unaffordable → skip
                 pass
 
-        # 排序: benchmark_weight 降序
+        # Sort: benchmark_weight descending
         candidates.sort(
             key=lambda x: (x.get("benchmark_weight", 0), x.get("volume", 0)),
             reverse=True
         )
 
-        logger.info(f"🧹 AI预过滤: {len(universe)} → {len(candidates[:n_top])} 只 "
-                   f"(资金≥${available_cash_usd:,.0f})")
+        logger.info(f"🧹 AI pre-filter: {len(universe)} → {len(candidates[:n_top])} names "
+                   f"(cash≥${available_cash_usd:,.0f})")
 
         return [c["ticker"] for c in candidates[:n_top]]
 
-    # ── 港股整手覆盖统计 ──
+    # ── HK lot-coverage stats ──
     def get_hk_lot_coverage(self, tickers: List[str]) -> Dict:
-        """统计港股整手覆盖情况"""
+        """Summarize HK lot-size coverage."""
         total = 0
         known = 0
         unknown = 0
@@ -328,5 +328,5 @@ class LotPredictor:
         }
 
 
-# 全局单例
+# Global singleton
 lot_predictor = LotPredictor()

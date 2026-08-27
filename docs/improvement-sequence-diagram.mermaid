@@ -2,33 +2,33 @@ sequenceDiagram
     participant Pipeline as TradingPipeline
     participant DataSvc as Data Service (8011)
     participant FactorSvc as Factor Service (8012)
-    participant InferEng as InferenceEngine (本地)
+    participant InferEng as InferenceEngine (local)
     participant RiskSvc as Risk Service (8015)
-    participant CB as CircuitBreaker (本地)
+    participant CB as CircuitBreaker (local)
     participant ExecSvc as Execution Service (8016)
     participant MLflow as MLflow (5000)
-    participant AlertMgr as AlertManager (本地)
+    participant AlertMgr as AlertManager (local)
     participant DB as PostgreSQL
 
-    Note over Pipeline: === T+0 交易周期开始 (每5分钟) ===
+    Note over Pipeline: === T+0 cycle start (every 5 minutes) ===
 
-    Pipeline->>Pipeline: MarketStateDetector.fit() 判断市场状态
+    Pipeline->>Pipeline: MarketStateDetector.fit() classify market regime
 
     rect rgb(230, 245, 255)
-        Note over Pipeline,DataSvc: Step 1: 数据采集
+        Note over Pipeline,DataSvc: Step 1: Data ingest
         Pipeline->>DataSvc: GET /api/v2/data/realtime?tickers=AAPL,MSFT,...
         DataSvc-->>Pipeline: {ticker: {ohlcv, spreads, ...}}
     end
 
     rect rgb(255, 245, 230)
-        Note over Pipeline,FactorSvc: Step 2: 113因子计算
+        Note over Pipeline,FactorSvc: Step 2: Compute 113 factors
         Pipeline->>FactorSvc: POST /api/v2/factors/compute {tickers, factor_names: all}
         FactorSvc->>FactorSvc: FactorEngine.compute_all_multi(dfs, all_ids)
         FactorSvc-->>Pipeline: {ticker: DataFrame[113 factor cols]}
     end
 
     rect rgb(230, 255, 230)
-        Note over Pipeline,MLflow: Step 3: 模型推理
+        Note over Pipeline,MLflow: Step 3: Model inference
         Pipeline->>MLflow: get_latest_production_model("gbdt")
         MLflow-->>Pipeline: model_uri
         Pipeline->>InferEng: load_models() → generate_signals_batch(tickers)
@@ -36,18 +36,18 @@ sequenceDiagram
     end
 
     rect rgb(255, 230, 230)
-        Note over Pipeline,RiskSvc: Step 4: 四道风控关卡
+        Note over Pipeline,RiskSvc: Step 4: Four risk gates
 
         Pipeline->>CB: allow_order(ticker, quantity, price)
-        alt 熔断激活
-            CB-->>Pipeline: ❌ REJECT
-            Pipeline->>AlertMgr: send("熔断触发", severity=CRITICAL)
+        alt Circuit breaker active
+            CB-->>Pipeline: REJECT
+            Pipeline->>AlertMgr: send("circuit breaker tripped", severity=CRITICAL)
         else PASS
             CB-->>Pipeline: ✅
 
             Pipeline->>RiskSvc: GET /api/v2/risk/barra/exposure?ticker=AAPL
             RiskSvc-->>Pipeline: {beta:1.2, size:-0.5, momentum:2.1, ...}
-            Note over Pipeline: 检查风格暴露 <3σ
+            Note over Pipeline: Style exposure must stay within 3 sigma
 
             Pipeline->>RiskSvc: GET /api/v2/risk/var?tickers=...&weights=...
             RiskSvc-->>Pipeline: {var: 0.018, method: parametric}
@@ -63,16 +63,16 @@ sequenceDiagram
     end
 
     rect rgb(245, 230, 255)
-        Note over Pipeline,ExecSvc: Step 5: Black-Litterman 组合优化
+        Note over Pipeline,ExecSvc: Step 5: Black-Litterman portfolio optimization
         Pipeline->>Pipeline: signal_to_views(signals)
         Pipeline->>ExecSvc: POST /api/v2/optimizer/bl {tickers, views}
         ExecSvc->>ExecSvc: BL posterior → Markowitz max_sharpe
         ExecSvc-->>Pipeline: {weights: {AAPL:0.08,...}, sharpe:1.45}
-        Pipeline->>Pipeline: 计算 delta = target_weights - current_weights
+        Pipeline->>Pipeline: delta = target_weights - current_weights
     end
 
     rect rgb(255, 255, 230)
-        Note over Pipeline,AlertMgr: Step 6: 订单执行
+        Note over Pipeline,AlertMgr: Step 6: Order execution
         loop for each delta > threshold
             Pipeline->>CB: allow_order(ticker, qty, price)
             CB-->>Pipeline: ✅
@@ -85,9 +85,9 @@ sequenceDiagram
     end
 
     rect rgb(240, 240, 240)
-        Note over Pipeline,DB: Step 7: 绩效记录
+        Note over Pipeline,DB: Step 7: Performance record
         Pipeline->>DB: INSERT INTO cycle_performance (pnl, sharpe, turnover, ...)
         Pipeline->>Pipeline: portfolio.save_state()
     end
 
-    Note over Pipeline: === 休眠 300s → 下一周期 ===
+    Note over Pipeline: === Sleep 300s then next cycle ===

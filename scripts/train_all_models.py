@@ -1,19 +1,19 @@
 """
-scripts/train_all_models.py — 全量模型训练脚本 (v3)
+scripts/train_all_models.py — full-model training script (v3)
 ===================================================
-按顶级量化基金标准训练全部5个模型:
+Train all 5 models to top-tier quant-fund standards:
   GBDT (LightGBM) → Transformer (PatchTST) → TCN → TFT → RL (PPO)
 
-特性:
-  - 从 ParquetStore 加载49个ticker的日线数据
-  - FactorEngine 计算因子作为特征
-  - 多时间尺度预测 (1d, 5d, 21d horizon)
-  - Walk-Forward 交叉验证
-  - 每个模型训练完立即保存
-  - 失败跳过，继续下一个
-  - 更新 ModelRegistry 数据库
+Features:
+  - Load daily bars for 49 tickers from ParquetStore
+  - FactorEngine computes factors as features
+  - Multi-horizon forecasts (1d, 5d, 21d horizon)
+  - Walk-Forward cross-validation
+  - Save each model immediately after training
+  - Skip failures and continue to the next model
+  - Update the ModelRegistry database
 
-用法:
+Usage:
   cd E:\workbuddyspace\Claw\quant-ai-trader
   python scripts/train_all_models.py
 """
@@ -55,26 +55,26 @@ DEVICE = settings.TRAIN_DEVICE
 
 
 # ═══════════════════════════════════════════════════════════
-# Step 1: 构建训练数据集
+# Step 1: Build the training dataset
 # ═══════════════════════════════════════════════════════════
 def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
-    """从 data/daily/*.parquet 加载全部 ticker 数据，计算因子，构建监督学习数据集。
+    """Load all ticker data from data/daily/*.parquet, compute factors, and build a supervised training dataset.
 
     Returns:
         DataFrame with features + forward return targets, or None on failure.
     """
     logger.info("=" * 60)
-    logger.info("[Step 1] 构建训练数据集")
+    logger.info("[Step 1] Building training dataset")
     logger.info("=" * 60)
 
     daily_dir = PROJECT_ROOT / "data" / "daily"
     parquet_files = sorted(daily_dir.glob("*.parquet"))
 
     if not parquet_files:
-        logger.error(f"无 parquet 数据文件: {daily_dir}")
+        logger.error(f"No parquet data files: {daily_dir}")
         return None
 
-    logger.info(f"发现 {len(parquet_files)} 个 parquet 文件")
+    logger.info(f"Found {len(parquet_files)} parquet files")
 
     # ── FactorEngine ──────────────────────────────────────
     from services.factor_service.engine.factor_engine import FactorEngine
@@ -95,7 +95,7 @@ def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
             registered += 1
         except Exception:
             pass
-    logger.info(f"已注册 {registered}/{len(all_factor_classes)} 个因子")
+    logger.info(f"Registered {registered}/{len(all_factor_classes)} factors")
 
     # ── Process each ticker ───────────────────────────────
     all_frames: list[pd.DataFrame] = []
@@ -143,12 +143,12 @@ def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
             all_frames.append(result_df)
 
         except Exception as e:
-            logger.warning(f"跳过 {ticker}: {e}")
+            logger.warning(f"Skipping {ticker}: {e}")
             skipped += 1
             continue
 
     if not all_frames:
-        logger.error("所有 ticker 处理失败")
+        logger.error("All ticker processing failed")
         return None
 
     combined = pd.concat(all_frames, ignore_index=True)
@@ -159,8 +159,8 @@ def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
     combined = combined.dropna()
 
     logger.info(
-        f"训练数据集: {len(combined)} 行 × {combined.shape[1]} 列, "
-        f"{len(all_frames)} 标的, {skipped} 跳过"
+        f"Training dataset: {len(combined)} rows × {combined.shape[1]} cols, "
+        f"{len(all_frames)} tickers, {skipped} skipped"
     )
 
     # ── Feature/target column identification ──────────────
@@ -172,13 +172,13 @@ def build_training_dataset(min_bars: int = 100) -> Optional[pd.DataFrame]:
         c for c in combined.columns
         if c not in exclude_patterns and not c.startswith("fwd_ret")
     ]
-    logger.info(f"特征列: {len(feature_cols)}, 目标列: fwd_ret_1d, fwd_ret_5d, fwd_ret_21d")
+    logger.info(f"Feature cols: {len(feature_cols)}, targets: fwd_ret_1d, fwd_ret_5d, fwd_ret_21d")
 
     return combined
 
 
 # ═══════════════════════════════════════════════════════════
-# Step 2-6: 训练各个模型
+# Step 2-6: Train each model
 # ═══════════════════════════════════════════════════════════
 
 def prepare_xy(
@@ -240,7 +240,7 @@ def train_test_split_time(
 def train_gbdt(data: pd.DataFrame) -> bool:
     """Train LightGBM GBDT model with early stopping."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Step 2] 训练 GBDT (LightGBM)")
+    logger.info("[Step 2] Training GBDT (LightGBM)")
     logger.info("=" * 60)
 
     output_path = str(MODELS_DIR / "gbdt_v1.joblib")
@@ -267,13 +267,13 @@ def train_gbdt(data: pd.DataFrame) -> bool:
         }
 
         metrics = gbdt.fit(X_train, y_train, X_val, y_val)
-        logger.info(f"GBDT 训练完成: {metrics}")
+        logger.info(f"GBDT training complete: {metrics}")
 
         # Feature importance
         importance = gbdt.get_feature_importance()
         if len(importance) > 0:
             top5 = importance.head(5)
-            logger.info(f"Top 5 特征: {dict(top5)}")
+            logger.info(f"Top 5 features: {dict(top5)}")
 
         # Evaluate
         pred = gbdt.predict(X_test)
@@ -297,7 +297,7 @@ def train_gbdt(data: pd.DataFrame) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"GBDT 训练失败: {e}")
+        logger.error(f"GBDT training failed: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
@@ -307,7 +307,7 @@ def train_gbdt(data: pd.DataFrame) -> bool:
 def train_transformer(data: pd.DataFrame) -> bool:
     """Train PatchTST Transformer with d_model=256(CPU)."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Step 3] 训练 Transformer (PatchTST)")
+    logger.info("[Step 3] Training Transformer (PatchTST)")
     logger.info("=" * 60)
 
     output_path = str(MODELS_DIR / "transformer_v3.pt")
@@ -333,7 +333,7 @@ def train_transformer(data: pd.DataFrame) -> bool:
             X_train, y_train, X_val, y_val,
             epochs=200, batch_size=64, lr=0.001,
         )
-        logger.info(f"Transformer 训练完成: {metrics}")
+        logger.info(f"Transformer training complete: {metrics}")
 
         transformer.save(output_path)
 
@@ -353,7 +353,7 @@ def train_transformer(data: pd.DataFrame) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"Transformer 训练失败: {e}")
+        logger.error(f"Transformer training failed: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
@@ -363,7 +363,7 @@ def train_transformer(data: pd.DataFrame) -> bool:
 def train_tcn(data: pd.DataFrame) -> bool:
     """Train Temporal Convolutional Network."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Step 4] 训练 TCN")
+    logger.info("[Step 4] Training TCN")
     logger.info("=" * 60)
 
     output_path = str(MODELS_DIR / "tcn_v1.pt")
@@ -387,7 +387,7 @@ def train_tcn(data: pd.DataFrame) -> bool:
             X_train, y_train, X_val, y_val,
             epochs=200, batch_size=64, lr=0.001,
         )
-        logger.info(f"TCN 训练完成: {metrics}")
+        logger.info(f"TCN training complete: {metrics}")
 
         tcn.save(output_path)
 
@@ -407,7 +407,7 @@ def train_tcn(data: pd.DataFrame) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"TCN 训练失败: {e}")
+        logger.error(f"TCN training failed: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
@@ -417,7 +417,7 @@ def train_tcn(data: pd.DataFrame) -> bool:
 def train_tft(data: pd.DataFrame) -> bool:
     """Train Temporal Fusion Transformer."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Step 5] 训练 TFT (Temporal Fusion Transformer)")
+    logger.info("[Step 5] Training TFT (Temporal Fusion Transformer)")
     logger.info("=" * 60)
 
     output_path = str(MODELS_DIR / "tft_v1.pt")
@@ -442,7 +442,7 @@ def train_tft(data: pd.DataFrame) -> bool:
             X_train, y_train, X_val, y_val,
             epochs=200, batch_size=64, lr=0.001,
         )
-        logger.info(f"TFT 训练完成: {metrics}")
+        logger.info(f"TFT training complete: {metrics}")
 
         tft.save(output_path)
 
@@ -462,7 +462,7 @@ def train_tft(data: pd.DataFrame) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"TFT 训练失败: {e}")
+        logger.error(f"TFT training failed: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
@@ -472,7 +472,7 @@ def train_tft(data: pd.DataFrame) -> bool:
 def train_rl(data: pd.DataFrame) -> bool:
     """Train PPO RL agent on trading environment."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Step 6] 训练 RL (PPO)")
+    logger.info("[Step 6] Training RL (PPO)")
     logger.info("=" * 60)
 
     output_path = str(MODELS_DIR / "rl_v1.zip")
@@ -494,7 +494,7 @@ def train_rl(data: pd.DataFrame) -> bool:
             X_subset, y_subset,
             rl_timesteps=200000,
         )
-        logger.info(f"RL 训练完成: {metrics}")
+        logger.info(f"RL training complete: {metrics}")
 
         rl.save(output_path)
 
@@ -511,14 +511,14 @@ def train_rl(data: pd.DataFrame) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"RL 训练失败: {e}")
+        logger.error(f"RL training failed: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return False
 
 
 # ═══════════════════════════════════════════════════════════
-# Step 7: 更新 ModelRegistry 数据库
+# Step 7: Update the ModelRegistry database
 # ═══════════════════════════════════════════════════════════
 def _update_model_registry(
     model_name: str,
@@ -586,10 +586,10 @@ def _update_model_registry(
         conn.commit()
         conn.close()
 
-        logger.info(f"ModelRegistry 更新: {model_name} v{version} (production=True)")
+        logger.info(f"ModelRegistry updated: {model_name} v{version} (production=True)")
 
     except Exception as e:
-        logger.warning(f"ModelRegistry 更新失败 (non-critical): {e}")
+        logger.warning(f"ModelRegistry update failed (non-critical): {e}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -598,7 +598,7 @@ def _update_model_registry(
 def verify_models() -> dict:
     """Verify all trained models exist and can be loaded."""
     logger.info("\n" + "=" * 60)
-    logger.info("[Verification] 验证训练产出")
+    logger.info("[Verification] Verifying training outputs")
     logger.info("=" * 60)
 
     expected = {
@@ -624,7 +624,7 @@ def verify_models() -> dict:
         import torch
         import joblib
 
-        logger.info("\n[Load Test] 尝试加载模型...")
+        logger.info("\n[Load Test] Attempting to load models...")
 
         # GBDT
         if (MODELS_DIR / "gbdt_v1.joblib").exists():
@@ -688,16 +688,16 @@ def verify_models() -> dict:
 def main():
     start_time = datetime.now()
     logger.info("=" * 60)
-    logger.info(" Quant AI Trader v3 — 全量模型训练")
-    logger.info(f" 启动时间: {start_time.isoformat()}")
+    logger.info(" Quant AI Trader v3 — Full-model training")
+    logger.info(f" Start time: {start_time.isoformat()}")
     logger.info(f" DEVICE: {DEVICE}")
-    logger.info(f" 输出目录: {MODELS_DIR}")
+    logger.info(f" Output directory: {MODELS_DIR}")
     logger.info("=" * 60)
 
     # ── Step 1: Build dataset ──────────────────────────────
     data = build_training_dataset()
     if data is None:
-        logger.error("无法构建训练数据集，退出。")
+        logger.error("Unable to build training dataset; exiting.")
         sys.exit(1)
 
     # ── Track training results ─────────────────────────────
@@ -721,15 +721,15 @@ def main():
     # ── Summary ────────────────────────────────────────────
     elapsed = datetime.now() - start_time
     logger.info("\n" + "=" * 60)
-    logger.info(" 训练完成总结")
+    logger.info(" Training summary")
     logger.info("=" * 60)
-    logger.info(f" 总耗时: {elapsed}")
+    logger.info(f" Total elapsed: {elapsed}")
     for model, success in training_results.items():
         status = "✓ PASS" if success else "✗ FAIL"
         logger.info(f"  {model}: {status}")
 
     passed = sum(1 for v in training_results.values() if v)
-    logger.info(f" 通过: {passed}/{len(training_results)}")
+    logger.info(f" Passed: {passed}/{len(training_results)}")
 
     # ── Verification ───────────────────────────────────────
     verify_models()
@@ -739,10 +739,10 @@ def main():
     logger.info(f"\nModels directory contents: {[f.name for f in trained_files]}")
 
     if passed == 0:
-        logger.error("所有模型训练失败！")
+        logger.error("All model training failed!")
         sys.exit(1)
 
-    logger.info("\n训练完成！")
+    logger.info("\nTraining complete!")
 
 
 if __name__ == "__main__":

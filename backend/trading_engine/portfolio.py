@@ -1,9 +1,9 @@
 """
-投资组合管理器
-- 多标的持仓管理
-- 组合价值追踪
-- 收益/风险统计
-- 再平衡
+Portfolio manager.
+- Multi-name position tracking
+- NAV tracking
+- Return / risk statistics
+- Rebalancing
 """
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
@@ -15,9 +15,9 @@ from configs.settings import settings
 
 class PortfolioManager:
     """
-    投资组合管理器
-    追踪组合状态、计算各项指标
-    支持多币种自动兑换为 USD
+    Portfolio manager.
+    Tracks book state and computes metrics.
+    Auto-converts multi-currency amounts to USD.
     """
 
     def __init__(self, initial_capital: float = None):
@@ -28,21 +28,21 @@ class PortfolioManager:
         self.total_value = self.initial_capital
         self.trade_history: List[Dict] = []
 
-        # ★ Tiger 同步标记：首次同步后 initial_capital 以 Tiger 为准
+        # Tiger sync flag: after first sync, initial_capital follows Tiger
         self._tiger_initial_capital_synced = False
 
-        # 历史记录
+        # History
         self.value_history: List[Tuple[datetime, float]] = [
             (datetime.now(), self.initial_capital)
         ]
         self.daily_returns: List[float] = []
 
     # ================================================================
-    # 多币种兑换
+    # Multi-currency conversion
     # ================================================================
 
     def _get_currency(self, ticker: str) -> str:
-        """根据 ticker 判断币种"""
+        """Infer currency from ticker."""
         ticker_upper = ticker.upper()
         if ".HK" in ticker_upper:
             return "HKD"
@@ -52,24 +52,24 @@ class PortfolioManager:
             return "AUD"
         elif ".NZ" in ticker_upper:
             return "NZD"
-        # 纯数字 ticker (1-5位) = 港股
+        # Numeric ticker (1-5 digits) = HK equity
         clean = ticker_upper.replace(".HK", "").replace(".SI", "").strip()
         if clean.isdigit() and len(clean) <= 5:
             return "HKD"
         return "USD"
 
     def _to_usd(self, amount: float, currency: str) -> float:
-        """将任意币种金额转换为 USD"""
+        """Convert an amount in any currency to USD."""
         rate = settings.trading_currency_rates_dict.get(currency, 1.0)
         return amount * rate
 
     def _from_usd(self, amount_usd: float, currency: str) -> float:
-        """将 USD 转换为目标币种"""
+        """Convert a USD amount into the target currency."""
         rate = settings.trading_currency_rates_dict.get(currency, 1.0)
         return amount_usd / rate if rate > 0 else amount_usd
 
     # ================================================================
-    # 持仓操作
+    # Position operations
     # ================================================================
 
     def execute_trade(
@@ -81,7 +81,7 @@ class PortfolioManager:
         strategy: str = "ensemble",
     ) -> Optional[Dict]:
         """
-        执行一次交易
+        Execute a single trade.
 
         Returns:
             trade_record or None if not executed
@@ -95,21 +95,21 @@ class PortfolioManager:
     def _execute_buy(
         self, ticker: str, price: float, signal_strength: float, strategy: str
     ) -> Optional[Dict]:
-        """执行买入（price 为本地币种，内部自动兑换为 USD）"""
+        """Execute a buy (price is local currency; converted to USD internally)."""
         if self.cash <= 0:
             return None
 
         currency = self._get_currency(ticker)
 
-        # 仓位比例 = 信号强度
+        # Position weight = signal strength
         target_ratio = min(signal_strength, settings.TRADING_MAX_POSITION_SIZE)
         order_value_usd = self.cash * target_ratio
 
-        # 最小交易额
+        # Minimum notional
         if order_value_usd < settings.TRADING_MIN_TRADE_VALUE:
             return None
 
-        # 本地币种金额
+        # Local-currency notional
         order_value_local = self._from_usd(order_value_usd, currency)
         quantity = order_value_local / price if price > 0 else 0
 
@@ -120,13 +120,13 @@ class PortfolioManager:
 
         if total_cost_usd > self.cash * settings.TRADING_MAX_CASH_USAGE:
             logger.warning(
-                f"🚫 无杠杆原则拒绝: {ticker} buy | "
-                f"成本 ${total_cost_usd:,.2f} > 可用 ${self.cash * settings.TRADING_MAX_CASH_USAGE:,.2f} "
-                f"(自有资金 ${self.cash:,.2f} × {settings.TRADING_MAX_CASH_USAGE:.0%}) — 坚决不使用杠杆"
+                f"🚫 No-leverage reject: {ticker} buy | "
+                f"cost ${total_cost_usd:,.2f} > available ${self.cash * settings.TRADING_MAX_CASH_USAGE:,.2f} "
+                f"(own cash ${self.cash:,.2f} × {settings.TRADING_MAX_CASH_USAGE:.0%}) — leverage is never used"
             )
             return None
 
-        # 更新持仓（avg_cost 存 USD）
+        # Update position (avg_cost stored in USD)
         old_shares = self.positions.get(ticker, 0.0)
         old_cost = self.avg_costs.get(ticker, 0.0)
         price_usd = self._to_usd(price, currency)
@@ -137,7 +137,7 @@ class PortfolioManager:
         self.positions[ticker] = new_shares
         self.cash -= total_cost_usd
 
-        # 记录
+        # Record
         record = {
             "ticker": ticker,
             "side": "buy",
@@ -154,25 +154,25 @@ class PortfolioManager:
         }
         self.trade_history.append(record)
 
-        logger.info(f"📈 BUY  {ticker}: {quantity:.2f}股 @ {currency}${price:.2f} = ${quantity*price_usd:.2f} USD")
+        logger.info(f"📈 BUY  {ticker}: {quantity:.2f} sh @ {currency}${price:.2f} = ${quantity*price_usd:.2f} USD")
         return record
 
     def _execute_sell(
         self, ticker: str, price: float, signal_strength: float, strategy: str
     ) -> Optional[Dict]:
-        """执行卖出（price 为本地币种，收入自动兑换为 USD）"""
+        """Execute a sell (price is local currency; proceeds converted to USD)."""
         shares = self.positions.get(ticker, 0.0)
         if shares < settings.TRADING_MIN_SHARES:
             return None
 
         currency = self._get_currency(ticker)
 
-        # 卖出比例
+        # Sell ratio
         sell_ratio = min(abs(signal_strength), 1.0)
         quantity = shares * sell_ratio
 
         if quantity < settings.TRADING_MIN_SHARES:
-            quantity = shares  # 少于最小量则全卖
+            quantity = shares  # Sell all if below the minimum size
 
         value_local = quantity * price
         value_usd = self._to_usd(value_local, currency)
@@ -204,15 +204,15 @@ class PortfolioManager:
         }
         self.trade_history.append(record)
 
-        logger.info(f"📉 SELL {ticker}: {quantity:.2f}股 @ {currency}${price:.2f} = ${value_usd:.2f} USD")
+        logger.info(f"📉 SELL {ticker}: {quantity:.2f} sh @ {currency}${price:.2f} = ${value_usd:.2f} USD")
         return record
 
     # ================================================================
-    # 组合评估
+    # Portfolio valuation
     # ================================================================
 
     def update_value(self, prices: Dict[str, float]):
-        """更新组合总价值（prices 为各币种本地价格，自动兑换 USD）"""
+        """Update NAV (prices are local; auto-converted to USD)."""
         positions_value = 0.0
         for ticker, shares in self.positions.items():
             if ticker in prices:
@@ -223,14 +223,14 @@ class PortfolioManager:
         self.total_value = self.cash + positions_value
         self.value_history.append((datetime.now(), self.total_value))
 
-        # 计算日收益
+        # Daily return
         if len(self.value_history) >= 2:
             prev_value = self.value_history[-2][1]
             daily_return = (self.total_value - prev_value) / (prev_value + 1e-8)
             self.daily_returns.append(daily_return)
 
     def get_positions_summary(self, prices: Dict[str, float]) -> List[Dict]:
-        """获取持仓摘要（统一 USD）"""
+        """Return a position summary (unified USD)."""
         summary = []
         for ticker, shares in self.positions.items():
             local_price = prices.get(ticker, 0.0)
@@ -258,7 +258,7 @@ class PortfolioManager:
         return summary
 
     def get_metrics(self) -> Dict:
-        """获取组合指标"""
+        """Return portfolio metrics."""
         returns = np.array(self.daily_returns) if self.daily_returns else np.array([0.0])
 
         sharpe = 0.0
@@ -268,7 +268,7 @@ class PortfolioManager:
         total_pnl = self.total_value - self.initial_capital
         total_return_pct = (self.total_value / self.initial_capital - 1) * 100
 
-        # 最大回撤
+        # Max drawdown
         max_dd = 0.0
         if len(self.value_history) >= 2:
             values = [v[1] for v in self.value_history]
@@ -291,14 +291,14 @@ class PortfolioManager:
         }
 
     def get_value_history(self) -> List[Dict]:
-        """获取价值历史"""
+        """Return NAV history."""
         return [
             {"timestamp": t.isoformat(), "value": v}
             for t, v in self.value_history
         ]
 
     def reset(self):
-        """重置组合"""
+        """Reset the portfolio."""
         self.cash = self.initial_capital
         self.positions.clear()
         self.avg_costs.clear()
@@ -308,16 +308,16 @@ class PortfolioManager:
         self.daily_returns.clear()
 
     # ================================================================
-    # 持久化
+    # Persistence
     # ================================================================
 
     def save_state(self):
-        """保存组合状态到数据库"""
+        """Persist portfolio state to the database."""
         import sqlite3
         from configs.settings import settings
 
         conn = sqlite3.connect(str(DB_PATH))
-        # 创建 positions 表（如果不存在）
+        # Create the positions table if missing
         conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_positions (
                 ticker TEXT PRIMARY KEY,
@@ -325,9 +325,9 @@ class PortfolioManager:
                 avg_cost REAL NOT NULL
             )
         """)
-        # 清除旧数据
+        # Clear previous rows
         conn.execute("DELETE FROM portfolio_positions")
-        # 写入当前持仓
+        # Write current positions
         for ticker, shares in self.positions.items():
             avg_cost = self.avg_costs.get(ticker, 0.0)
             conn.execute(
@@ -335,7 +335,7 @@ class PortfolioManager:
                 (ticker, shares, avg_cost)
             )
 
-        # 保存交易记录
+        # Persist trades
         conn.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,7 +352,7 @@ class PortfolioManager:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        for trade in self.trade_history[-100:]:  # 只保存最近100笔
+        for trade in self.trade_history[-100:]:  # Keep the latest 100 fills
             conn.execute(
                 """INSERT OR IGNORE INTO trades (ticker, side, quantity, price, value, commission, timestamp, signal_strength, strategy)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -360,7 +360,7 @@ class PortfolioManager:
                  trade['value'], trade['commission'], trade['timestamp'],
                  trade['signal_strength'], trade['strategy'])
             )
-        # 保存账户状态
+        # Persist account state
         conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_account (
                 id INTEGER PRIMARY KEY,
@@ -375,27 +375,27 @@ class PortfolioManager:
         )
         conn.commit()
         conn.close()
-        logger.debug(f"组合状态已保存: {len(self.positions)} 持仓, 现金 ${self.cash:.2f}")
+        logger.debug(f"Portfolio saved: {len(self.positions)} positions, cash ${self.cash:.2f}")
 
     def load_state(self) -> bool:
-        """从数据库加载组合状态"""
+        """Load portfolio state from the database."""
         import sqlite3
         from configs.settings import settings
 
         conn = sqlite3.connect(str(DB_PATH))
         try:
-            # 检查是否有保存的账户状态
+            # Check for a saved account snapshot
             account = conn.execute(
                 "SELECT cash, initial_capital FROM portfolio_account WHERE id=1"
             ).fetchone()
             if account is None:
-                logger.info("无已保存的组合状态，使用默认初始资金")
+                logger.info("No saved portfolio; using default initial capital")
                 return False
 
             self.cash = account[0]
             self.initial_capital = account[1]
 
-            # 加载持仓
+            # Load positions
             rows = conn.execute("SELECT ticker, shares, avg_cost FROM portfolio_positions").fetchall()
             self.positions.clear()
             self.avg_costs.clear()
@@ -408,28 +408,28 @@ class PortfolioManager:
                 for ticker, shares in self.positions.items()
             )
 
-            logger.info(f"组合状态已恢复: {len(self.positions)} 持仓, 现金 ${self.cash:.2f}")
+            logger.info(f"Portfolio restored: {len(self.positions)} positions, cash ${self.cash:.2f}")
             for t, s in self.positions.items():
-                logger.info(f"  {t}: {s:.2f} 股, 均价 ${self.avg_costs.get(t, 0):.2f}")
+                logger.info(f"  {t}: {s:.2f} sh, avg cost ${self.avg_costs.get(t, 0):.2f}")
             return True
 
         except Exception as e:
-            logger.warning(f"加载组合状态失败: {e}")
+            logger.warning(f"Failed to load portfolio state: {e}")
             return False
         finally:
             conn.close()
 
     # ================================================================
-    # Tiger Brokers 实时同步
+    # Tiger Brokers live sync
     # ================================================================
 
     def sync_from_tiger(self, force: bool = False) -> Dict:
         """
-        从老虎证券 API 拉取实际持仓和账户信息，覆盖本地状态
-        ★ 这是唯一真实数据源
+        Pull live positions and account info from the Tiger API and overwrite local state.
+        This is the sole source of truth.
 
         Args:
-            force: 是否强制同步（即使本地已有数据）
+            force: Force a sync even if local data already exists
 
         Returns:
             {"synced": bool, "positions": int, "cash": float, "total_value": float, "source": str}
@@ -445,37 +445,37 @@ class PortfolioManager:
         }
 
         if not tiger_client.is_connected():
-            # 尝试重连
-            logger.info("🔄 Tiger 未连接，尝试重新连接...")
+            # Try reconnect
+            logger.info("🔄 Tiger not connected; retrying...")
             tiger_client.connect()
         
         if not tiger_client.is_connected():
-            logger.warning("⚠️ Tiger 未连接，无法同步持仓")
+            logger.warning("⚠️ Tiger not connected; cannot sync positions")
             result["source"] = "tiger_offline"
             return result
 
         try:
-            # ★ 确保 session 有效：强制重连再查询
+            # Ensure the session is valid: reconnect then query
             tiger_client.connect()
             
-            # 1. 拉取老虎实际持仓
+            # 1. Pull live Tiger positions
             tiger_positions = tiger_client.get_positions()
             tiger_account = tiger_client.get_account_info()
 
             if not tiger_account:
-                logger.warning("⚠️ 无法获取 Tiger 账户信息")
+                logger.warning("⚠️ Unable to fetch Tiger account info")
                 result["source"] = "tiger_account_error"
                 return result
 
-            # 2. 记录同步前的本地状态
+            # 2. Snapshot local state before overwrite
             old_pos_count = len(self.positions)
             old_cash = self.cash
 
-            # ★ 安全网：Tiger 返回 0 持仓但本地有大量持仓，说明 Tiger API 异常，保留本地
+            # Safety net: Tiger returned 0 positions while local has many — likely API fault; keep local
             if len(tiger_positions) == 0 and old_pos_count > 5:
                 logger.error(
-                    f"🚨 Tiger 返回 0 持仓但本地有 {old_pos_count} 只！"
-                    f"Tiger API 可能异常，保留本地数据不覆盖"
+                    f"🚨 Tiger returned 0 positions but local has {old_pos_count}!"
+                    f"Tiger API may be faulty; keeping local data"
                 )
                 result["synced"] = False
                 result["source"] = "tiger_empty_abnormal"
@@ -484,32 +484,32 @@ class PortfolioManager:
                 result["total_value"] = self.total_value
                 return result
 
-            # 3. 用老虎数据覆盖本地状态
+            # 3. Overwrite local state with Tiger data
             self.positions.clear()
             self.avg_costs.clear()
             self.cash = tiger_account.get("cash", 0.0)
 
-            # ★ 首次 Tiger 同步：用老虎实际总资产作为 initial_capital
+            # First Tiger sync: use Tiger NAV as initial_capital
             tiger_total = tiger_account.get("total_value", 0.0)
             if tiger_total > 0:
-                # 条件：从未同步过 OR 差距超过 5% OR 强制重置
+                # Reset if never synced, gap > 5%, or force=True
                 need_reset = (
                     force or
                     not self._tiger_initial_capital_synced or
                     abs(tiger_total - self.initial_capital) / max(self.initial_capital, 1) > 0.05
                 )
                 if need_reset:
-                    reset_reason = "强制重置" if force else (
-                        "首次同步" if not self._tiger_initial_capital_synced else
-                        f"差距 {abs(tiger_total-self.initial_capital)/max(self.initial_capital,1)*100:.1f}%"
+                    reset_reason = "forced reset" if force else (
+                        "first sync" if not self._tiger_initial_capital_synced else
+                        f"gap {abs(tiger_total-self.initial_capital)/max(self.initial_capital,1)*100:.1f}%"
                     )
                     logger.info(
-                        f"🔑 Tiger 同步 initial_capital ({reset_reason}): "
+                        f"🔑 Tiger synced initial_capital ({reset_reason}): "
                         f"${self.initial_capital:,.2f} → ${tiger_total:,.2f}"
                     )
                     self.initial_capital = tiger_total
                     self._tiger_initial_capital_synced = True
-                    # 重设 value_history 起点
+                    # Reset value_history origin
                     self.value_history = [(datetime.now(), tiger_total)]
 
             for pos in tiger_positions:
@@ -521,21 +521,21 @@ class PortfolioManager:
                         self.positions[ticker] = shares
                         self.avg_costs[ticker] = avg_cost
                     elif shares < 0:
-                        # 负持仓 = 空头，需要买回来修复
-                        self.positions[ticker] = shares  # 保留负数用于修复
+                        # Negative position = short; needs to be covered
+                        self.positions[ticker] = shares  # Keep the negative for repair
                         self.avg_costs[ticker] = avg_cost
 
-            # 4. 计算总价值 — 以 Tiger account.total_value 为权威数据
+            # 4. NAV — Tiger account.total_value is authoritative
             tiger_total = tiger_account.get("total_value", 0.0)
             if tiger_total > 0:
-                self.total_value = tiger_total  # Tiger 已经正确处理了多币种
+                self.total_value = tiger_total  # Tiger already handles multi-currency
             else:
                 positions_value = sum(
                     pos.get("market_value", 0.0) for pos in tiger_positions
                 )
                 self.total_value = self.cash + positions_value
 
-            # 5. 记录同步结果
+            # 5. Record sync result
             result["synced"] = True
             pos_count = sum(1 for s in self.positions.values() if s > 0)
             neg_count = sum(1 for s in self.positions.values() if s < 0)
@@ -546,32 +546,32 @@ class PortfolioManager:
             result["source"] = "tiger_api"
 
             logger.info(
-                f"🔄 Tiger 同步完成: "
-                f"持仓 {pos_count} 只, "
-                f"现金 ${old_cash:,.2f}→${self.cash:,.2f}, "
-                f"总资产 ${self.total_value:,.2f}"
+                f"🔄 Tiger sync complete: "
+                f"{pos_count} positions, "
+                f"cash ${old_cash:,.2f}→${self.cash:,.2f}, "
+                f"NAV ${self.total_value:,.2f}"
             )
             
             if neg_count > 0:
                 neg_list = [(t, s) for t, s in self.positions.items() if s < 0]
                 neg_tickers = [t for t, _ in neg_list[:10]]
-                logger.warning(f"⚠️ 发现 {neg_count} 个负持仓(空头): {neg_tickers}")
+                logger.warning(f"⚠️ Found {neg_count} short position(s): {neg_tickers}")
                 result["negative_tickers"] = neg_tickers
 
             if len(self.positions) > 0:
-                logger.info(f"  Tiger 持仓详情:")
-                for pos in tiger_positions[:40]:  # 最多显示40只
+                logger.info(f"  Tiger position details:")
+                for pos in tiger_positions[:40]:  # Cap at 40 names
                     logger.info(
-                        f"    {pos['ticker']:10s}: {pos['shares']:>10.2f} 股, "
-                        f"市值 ${pos.get('market_value', 0):>12,.2f}, "
-                        f"均价 ${pos.get('avg_cost', 0):>8.2f}"
+                        f"    {pos['ticker']:10s}: {pos['shares']:>10.2f} sh, "
+                        f"MV ${pos.get('market_value', 0):>12,.2f}, "
+                        f"avg ${pos.get('avg_cost', 0):>8.2f}"
                     )
 
-            # 6. 立即保存同步后的状态到本地数据库
+            # 6. Persist synced state to the local database immediately
             self.save_state()
-            logger.info("  📝 已保存 Tiger 同步状态到本地数据库")
+            logger.info("  📝 Tiger sync state saved to the local database")
 
-            # ★ 杠杆检测
+            # Leverage probe
             tiger_leverage = tiger_account.get("leverage", 1.0)
             if tiger_leverage > 1.001:
                 tiger_mkt = tiger_account.get("market_value", 0)
@@ -581,8 +581,8 @@ class PortfolioManager:
                 result["margin_amount"] = round(margin_amt, 2)
                 result["leverage"] = round(tiger_leverage, 4)
                 logger.warning(
-                    f"⚠️ Tiger 杠杆检测！杠杆率 {tiger_leverage:.4f} | "
-                    f"市值 ${tiger_mkt:,.0f} | 净资产 ${tiger_total:,.0f}"
+                    f"⚠️ Tiger leverage detected! Leverage {tiger_leverage:.4f} | "
+                    f"MV ${tiger_mkt:,.0f} | net assets ${tiger_total:,.0f}"
                 )
             else:
                 result["margin_detected"] = False
@@ -590,14 +590,14 @@ class PortfolioManager:
             return result
 
         except Exception as e:
-            logger.error(f"❌ Tiger 同步失败: {e}", exc_info=True)
+            logger.error(f"❌ Tiger sync failed: {e}", exc_info=True)
             result["source"] = "sync_error"
             return result
 
     def reconcile_with_tiger(self) -> Dict:
         """
-        与老虎证券对账：对比本地持仓与 Tiger 实际持仓
-        输出差异报告，但不自动修复（需要手动确认）
+        Reconcile with Tiger Brokers: compare local vs live positions.
+        Emits a diff report but does not auto-fix (manual confirmation required).
 
         Returns:
             {"matched": bool, "differences": [...], "local_count": int, "tiger_count": int}
@@ -614,16 +614,16 @@ class PortfolioManager:
         }
 
         if not tiger_client.is_connected():
-            # 尝试重连
+            # Try reconnect
             tiger_client.connect()
         
         if not tiger_client.is_connected():
             result["matched"] = False
-            result["differences"].append({"type": "connection", "msg": "Tiger 未连接"})
+            result["differences"].append({"type": "connection", "msg": "Tiger not connected"})
             return result
 
         try:
-            # ★ 确保 session 有效
+            # Ensure the session is valid
             tiger_client.connect()
             
             tiger_positions = tiger_client.get_positions()
@@ -632,7 +632,7 @@ class PortfolioManager:
             result["tiger_count"] = len(tiger_positions)
             result["tiger_cash"] = tiger_account.get("cash", 0.0) if tiger_account else 0.0
 
-            # 构建 Tiger 持仓字典（ticker -> shares）
+            # Build Tiger position map (ticker -> shares)
             tiger_dict = {}
             for pos in tiger_positions:
                 ticker = pos.get("ticker", "")
@@ -644,7 +644,7 @@ class PortfolioManager:
                         "market_value": pos.get("market_value", 0.0),
                     }
 
-            # 对比：本地有但 Tiger 没有
+            # Diff: local-only names
             local_tickers = set(self.positions.keys())
             tiger_tickers = set(tiger_dict.keys())
 
@@ -659,7 +659,7 @@ class PortfolioManager:
                         "type": "local_only",
                         "ticker": t,
                         "local_shares": self.positions.get(t, 0),
-                        "msg": f"本地有持仓但 Tiger 没有: {t}",
+                        "msg": f"Local has a position but Tiger does not: {t}",
                     })
 
             if only_tiger:
@@ -669,14 +669,14 @@ class PortfolioManager:
                         "type": "tiger_only",
                         "ticker": t,
                         "tiger_shares": tiger_dict[t]["shares"],
-                        "msg": f"Tiger 有持仓但本地没有: {t}",
+                        "msg": f"Tiger has a position but local does not: {t}",
                     })
 
-            # 对比：两边都有但数量不同
+            # Diff: both sides hold but quantity differs
             for t in both:
                 local_shares = self.positions.get(t, 0)
                 tiger_shares = tiger_dict[t]["shares"]
-                if abs(local_shares - tiger_shares) > 0.01:  # 允许 0.01 股误差
+                if abs(local_shares - tiger_shares) > 0.01:  # Allow 0.01-share tolerance
                     result["matched"] = False
                     result["differences"].append({
                         "type": "quantity_mismatch",
@@ -684,10 +684,10 @@ class PortfolioManager:
                         "local_shares": local_shares,
                         "tiger_shares": tiger_shares,
                         "diff": local_shares - tiger_shares,
-                        "msg": f"数量不一致: {t} 本地{local_shares:.2f} vs Tiger{tiger_shares:.2f}",
+                        "msg": f"Quantity mismatch: {t} local {local_shares:.2f} vs Tiger {tiger_shares:.2f}",
                     })
 
-            # 现金对比
+            # Cash comparison
             if abs(self.cash - result["tiger_cash"]) > 1.0:
                 result["matched"] = False
                 result["differences"].append({
@@ -695,20 +695,20 @@ class PortfolioManager:
                     "local_cash": self.cash,
                     "tiger_cash": result["tiger_cash"],
                     "diff": self.cash - result["tiger_cash"],
-                    "msg": f"现金不一致: 本地${self.cash:.2f} vs Tiger${result['tiger_cash']:.2f}",
+                    "msg": f"Cash mismatch: local ${self.cash:.2f} vs Tiger ${result['tiger_cash']:.2f}",
                 })
 
             if result["matched"]:
-                logger.info(f"✅ Tiger 对账通过: {len(both)} 只持仓一致, 现金 ${self.cash:.2f}")
+                logger.info(f"✅ Tiger reconcile passed: {len(both)} positions match, cash ${self.cash:.2f}")
             else:
-                logger.warning(f"⚠️ Tiger 对账发现 {len(result['differences'])} 处差异")
+                logger.warning(f"⚠️ Tiger reconcile found {len(result['differences'])} difference(s)")
                 for diff in result["differences"][:10]:
                     logger.warning(f"    {diff['msg']}")
 
             return result
 
         except Exception as e:
-            logger.error(f"❌ Tiger 对账失败: {e}")
+            logger.error(f"❌ Tiger reconcile failed: {e}")
             result["matched"] = False
             result["differences"].append({"type": "error", "msg": str(e)})
             return result

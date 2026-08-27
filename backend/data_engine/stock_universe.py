@@ -1,9 +1,9 @@
 """
-全市场股票扫描器 - Stock Universe Manager
-- 自动获取美股（S&P500 + Nasdaq100）+ 港股（恒生 + 国企）成分股
-- 按市值 / 成交量 / 波动率筛选
-- 维护本地股票池，支持增量更新
-- 为 AI 分析提供候选标的
+Cross-market stock scanner - Stock Universe Manager.
+- Auto-fetch US (S&P 500 + Nasdaq 100) + HK (Hang Seng + H-share) constituents
+- Screen by market cap / volume / volatility
+- Maintain a local universe with incremental updates
+- Supply candidate names for AI analysis
 """
 import json
 import threading
@@ -24,19 +24,19 @@ UNIVERSE_FILE = DATA_DIR / "stock_universe.json"
 
 class StockUniverse:
     """
-    全市场股票池管理器
+    Cross-market stock-universe manager.
 
-    数据来源:
-    - US: Wikipedia S&P 500 + Nasdaq 100 列表
-    - HK: 预置恒生指数 + 国企指数成分股
-    - SG: 预置海峡时报指数 (STI) 成分股
-    - AU: Wikipedia S&P/ASX 200 列表
-    - NZ: 预置 NZX 50 成分股
+    Data sources:
+    - US: Wikipedia S&P 500 + Nasdaq 100 lists
+    - HK: preset Hang Seng Index + H-share Index constituents
+    - SG: preset Straits Times Index (STI) constituents
+    - AU: Wikipedia S&P/ASX 200 list
+    - NZ: preset NZX 50 constituents
 
-    筛选条件（可配置）:
-    - 市值 > $500M
-    - 日均成交量 > 200K
-    - 排除仙股（价格 < $1）
+    Screening (configurable):
+    - Market cap > $500M
+    - Average daily volume > 200K
+    - Exclude penny stocks (price < $1)
     """
 
     def __init__(self):
@@ -51,11 +51,11 @@ class StockUniverse:
         self._load_cache()
 
     # ================================================================
-    # 股票池获取
+    # Universe fetch
     # ================================================================
 
     def fetch_us_universe(self, max_stocks: int = 1200) -> List[str]:
-        """获取美股池（S&P500 + Nasdaq100 + Russell 1000 去重）"""
+        """Fetch the US universe (S&P500 + Nasdaq100 + Russell 1000, de-duplicated)."""
         tickers: Set[str] = set()
 
         try:
@@ -65,9 +65,9 @@ class StockUniverse:
             )[0]
             for t in sp500["Symbol"].tolist():
                 tickers.add(str(t).replace(".", "-"))
-            logger.info(f"📊 S&P 500: {len(tickers)} 只")
+            logger.info(f"📊 S&P 500: {len(tickers)} names")
         except Exception as e:
-            logger.warning(f"⚠️ S&P 500 获取失败: {e}")
+            logger.warning(f"⚠️ S&P 500 fetch failed: {e}")
 
         try:
             # Nasdaq 100
@@ -76,66 +76,66 @@ class StockUniverse:
             )[4]
             for t in nasdaq["Ticker"].tolist():
                 tickers.add(str(t).replace(".", "-"))
-            logger.info(f"📊 +Nasdaq 100: {len(tickers)} 只")
+            logger.info(f"📊 +Nasdaq 100: {len(tickers)} names")
         except Exception as e:
-            logger.warning(f"⚠️ Nasdaq 100 获取失败: {e}")
+            logger.warning(f"⚠️ Nasdaq 100 fetch failed: {e}")
 
         try:
             # Russell 1000
             russell = pd.read_html(
                 "https://en.wikipedia.org/wiki/Russell_1000_Index"
-            )[2]  # 第3个表通常是成分股
+            )[2]  # the 3rd table is typically the constituents
             if "Ticker" in russell.columns:
                 for t in russell["Ticker"].tolist():
                     tickers.add(str(t).replace(".", "-"))
-            logger.info(f"📊 +Russell 1000: {len(tickers)} 只")
+            logger.info(f"📊 +Russell 1000: {len(tickers)} names")
         except Exception as e:
-            logger.warning(f"⚠️ Russell 1000 获取失败: {e}，使用扩展预置列表")
+            logger.warning(f"⚠️ Russell 1000 fetch failed: {e}; using extended preset list")
 
-        # 扩展预置列表（覆盖 Russell 1000 常见成分股 + 中概 + ETF）
+        # Extended preset (covers common Russell 1000 names + China ADRs + ETFs)
         if len(tickers) < 200:
             tickers = {
-                # 科技 (40)
+                # Tech (40)
                 "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","NFLX","ADBE","CRM",
                 "CSCO","INTC","AMD","QCOM","TXN","AVGO","ORCL","IBM","NOW","SNOW",
                 "MU","AMAT","LRCX","ADI","UBER","PYPL","SQ","SHOP","ZM","DDOG",
                 "CRWD","NET","PLTR","SNPS","CDNS","WDAY","TEAM","INTU","ADSK","FTNT",
-                # 科技扩展 (20)
+                # Tech extension (20)
                 "PANW","ZS","OKTA","MDB","DOCU","COUP","TWLO","RNG","SPLK","AKAM",
                 "ANET","DELL","HPQ","HPE","STX","WDC","NTAP","MRVL","KLAC","TER",
-                # 金融 (25)
+                # Financials (25)
                 "JPM","V","MA","BAC","WFC","GS","MS","AXP","BLK","SCHW",
                 "C","USB","PNC","COF","BK","TFC","AIG","MET","PRU","ICE",
                 "CME","CB","TRV","AFL","BX",
-                # 医疗 (25)
+                # Healthcare (25)
                 "UNH","JNJ","PFE","MRK","ABT","TMO","DHR","LLY","ABBV","BMY",
                 "AMGN","GILD","ISRG","REGN","VRTX","CI","HUM","ZTS","BDX","BSX",
                 "CVS","ANTM","HCA","MCK","EW",
-                # 消费 (25)
+                # Consumer (25)
                 "WMT","PG","COST","KO","PEP","HD","NKE","MCD","SBUX","DIS",
                 "LOW","TGT","TJX","ROST","DG","DLTR","ULTA","LULU","CMG","YUM",
                 "EL","CL","KMB","MDLZ","MNST",
-                # 工业/能源 (25)
+                # Industrials / energy (25)
                 "XOM","CVX","CAT","DE","BA","GE","HON","LMT","UPS","RTX",
                 "UNP","NSC","FDX","DAL","LUV","COP","EOG","SLB","PSX","VLO",
                 "MMM","EMR","ETN","ITW","ROK",
-                # 房地产/电信 (15)
+                # REITs / telecom (15)
                 "AMT","PLD","CCI","EQIX","SPG","O","VZ","T","TMUS","CHTR",
                 "CMCSA","SBAC","WELL","AVB","DLR",
                 # ETF (10)
                 "SPY","QQQ","IWM","DIA","XLF","XLE","XLK","XLV","XLI","XLY",
-                # 中概/国际 (15)
+                # China ADRs / international (15)
                 "BABA","JD","PDD","BIDU","NIO","LI","XPEV","BILI","TME",
                 "TSM","ASML","SAP","SONY","TM","BP",
             }
-            logger.warning(f"⚠️ 使用扩展预置美股池: {len(tickers)} 只")
+            logger.warning(f"⚠️ Using extended preset US universe: {len(tickers)} names")
 
         return list(tickers)[:max_stocks]
 
     def fetch_hk_universe(self) -> List[str]:
-        """获取港股池（恒生综合指数 + 国企 + 热门港股 ~250只）"""
+        """Fetch the HK universe (Hang Seng Composite + H-shares + popular HK names ~250)."""
         hk_stocks = [
-            # === 恒生指数成分股 (82只) ===
+            # === Hang Seng Index constituents (82) ===
             "00005","00011","00012","00016","00017","00019","00027","00066",
             "00101","00175","00241","00267","00268","00285","00288","00291",
             "00316","00322","00386","00388","00669","00688","00700","00762",
@@ -147,49 +147,49 @@ class StockUniverse:
             "02388","02601","02628","02688","02899","03690","03888","03968",
             "03988","06030","06160","06618","06862","09618","09633","09688",
             "09888","09901","09961","09988","09992","09999",
-            # === 国企指数额外 (20只) ===
+            # === Extra H-share Index names (20) ===
             "00728","01099","01171","01818","02039","02202","02618","03328",
             "03898","06098","06881","00136","00270","00392","01193","02696",
-            # === 生物医药 (15只) ===
+            # === Biotech (15) ===
             "02269","01801","06160","06855","02162","01548","02500","02196",
             "09926","02157","06990","06618","02096","02170","09966",
-            # === 科技/互联网 (20只) ===
+            # === Tech / internet (20) ===
             "02013","01833","01797","09923","01024","09899","09866","09868",
             "02423","06690","01347","00780","09990","03888","00777",
             "09626","09878","02518","09998","01020",
-            # === 消费/零售 (15只) ===
+            # === Consumer / retail (15) ===
             "00291","00168","02219","06808","02331","02020","06110",
             "01368","01773","01579","06837","09922","09987","09896",
-            # === 新能源/汽车 (10只) ===
+            # === New energy / auto (10) ===
             "01211","02015","09863","09868","02238","00175","00425",
             "01772","09696","09866",
-            # === 内地金融 (10只) ===
+            # === Mainland financials (10) ===
             "01339","02611","06066","06881","06886","06099","06178",
             "03908","06030","01776",
         ]
-        # 去重
+        # De-duplicate
         hk_stocks = list(dict.fromkeys(hk_stocks))
-        logger.info(f"📊 港股池: {len(hk_stocks)} 只")
+        logger.info(f"📊 HK universe: {len(hk_stocks)} names")
         return hk_stocks
 
     def fetch_sg_universe(self) -> List[str]:
-        """获取新加坡股票池（STI + 中大盘股 ~100只）"""
+        """Fetch the Singapore universe (STI + mid/large caps ~100)."""
         sg_stocks = [
-            # STI 30 成分股
+            # STI 30 constituents
             "D05.SI","O39.SI","U11.SI","Z74.SI","C52.SI","C6L.SI",
             "S58.SI","BS6.SI","U96.SI","C09.SI","F34.SI","U14.SI",
             "S68.SI","V03.SI","BN4.SI","T39.SI","G13.SI","H78.SI",
             "Y92.SI","C07.SI","C31.SI","S51.SI","N2IU.SI","J36.SI",
             "M44U.SI","A17U.SI","AU8U.SI","C38U.SI",
-            # REITs (20只)
+            # REITs (20)
             "C2PU.SI","C61U.SI","J69U.SI","K71U.SI","M1GU.SI",
             "N2IU.SI","SK6U.SI","T82U.SI","ACV.SI","BWCU.SI",
             "BUOU.SI","CRPU.SI","DCRU.SI","EDMU.SI","K2LU.SI",
             "ME8U.SI","ND8U.SI","OXMU.SI","RW0U.SI","UD1U.SI",
-            # 金融 (10只)
+            # Financials (10)
             "D01.SI","G07.SI","O10.SI","T14.SI","U06.SI",
             "A26.SI","F01.SI","P15.SI","S23.SI","S59.SI",
-            # 工业/消费/科技 (40只)
+            # Industrials / consumer / tech (40)
             "S63.SI","C70.SI","G18.SI","H02.SI","I07.SI",
             "J85.SI","K17.SI","L19.SI","M01.SI","N03.SI",
             "R01.SI","S08.SI","S10.SI","T12.SI","U04.SI",
@@ -200,11 +200,11 @@ class StockUniverse:
             "L02.SI","M05.SI","N01.SI","O01.SI","P01.SI",
         ]
         sg_stocks = list(dict.fromkeys(sg_stocks))
-        logger.info(f"📊 新加坡池: {len(sg_stocks)} 只")
+        logger.info(f"📊 Singapore universe: {len(sg_stocks)} names")
         return sg_stocks
 
     def fetch_au_universe(self) -> List[str]:
-        """获取澳洲股票池（S&P/ASX 200 成分股）"""
+        """Fetch the Australia universe (S&P/ASX 200 constituents)."""
         tickers: Set[str] = set()
 
         try:
@@ -217,11 +217,11 @@ class StockUniverse:
             elif "Ticker" in asx200.columns:
                 for t in asx200["Ticker"].tolist():
                     tickers.add(f"{str(t).strip()}.AX")
-            logger.info(f"📊 ASX 200: {len(tickers)} 只")
+            logger.info(f"📊 ASX 200: {len(tickers)} names")
         except Exception as e:
-            logger.warning(f"⚠️ ASX 200 获取失败: {e}")
+            logger.warning(f"⚠️ ASX 200 fetch failed: {e}")
 
-        # 兜底
+        # Fallback
         if len(tickers) < 20:
             tickers = {
                 "BHP.AX","CBA.AX","CSL.AX","NAB.AX","WBC.AX",
@@ -231,14 +231,14 @@ class StockUniverse:
                 "NCM.AX","RHC.AX","SHL.AX","CPU.AX","XRO.AX",
                 "REA.AX","SEK.AX","CAR.AX","TCL.AX","SCG.AX",
             }
-            logger.warning(f"⚠️ 使用预置澳股池: {len(tickers)} 只")
+            logger.warning(f"⚠️ Using preset AU universe: {len(tickers)} names")
 
         return list(tickers)
 
     def fetch_nz_universe(self) -> List[str]:
-        """获取新西兰股票池（NZX 50 成分股）"""
+        """Fetch the New Zealand universe (NZX 50 constituents)."""
         nz_stocks = [
-            # NZX 50 成分股 (yfinance .NZ 后缀)
+            # NZX 50 constituents (yfinance .NZ suffix)
             "FPH.NZ", "AIA.NZ", "MEL.NZ", "SPK.NZ",
             "ATM.NZ", "MCY.NZ", "IFT.NZ", "EBO.NZ",
             "SUM.NZ", "RYM.NZ", "CEN.NZ", "MEL.NZ",
@@ -248,50 +248,57 @@ class StockUniverse:
             "OCA.NZ", "ARG.NZ", "ARV.NZ", "GNE.NZ",
             "MCY.NZ", "ZEL.NZ",
         ]
-        logger.info(f"📊 新西兰池: {len(nz_stocks)} 只")
+        logger.info(f"📊 New Zealand universe: {len(nz_stocks)} names")
         return nz_stocks
 
     def _fetch_cn_stocks(self) -> List[str]:
-        """获取 A 股池（沪深 300 主要成分 + 创业板核心标的）。
+        """Fetch the A-share universe (CSI 300 core + ChiNext leaders).
 
-        通过 AkShare / efinance 动态获取，失败时使用硬编码预置列表。
-        ticker 格式: 600000.SH (上交所), 000001.SZ (深交所)
+        Dynamically fetched via AkShare / efinance; falls back to a hardcoded preset.
+        Ticker format: 600000.SH (SSE), 000001.SZ (SZSE)
         """
         tickers: List[str] = []
         try:
             import efinance as ef
-            # 尝试从 efinance 获取沪深 300 成分
+            # Try CSI 300 constituents via efinance
             df = ef.stock.get_realtime_quotes()
             if df is not None and not df.empty:
+                # efinance column "stock code" is returned in Chinese; keep the API key
+                code_col = "\u80a1\u7968\u4ee3\u7801"
+                if code_col not in df.columns:
+                    code_col = next(
+                        (c for c in df.columns if "code" in str(c).lower() or c == code_col),
+                        df.columns[0],
+                    )
                 tickers = [
                     f"{code}.{'SH' if code.startswith('6') else 'SZ'}"
-                    for code in df["股票代码"].astype(str).head(300)
+                    for code in df[code_col].astype(str).head(300)
                 ]
-                logger.info(f"📊 efinance A股: {len(tickers)} 只")
+                logger.info(f"📊 efinance A-shares: {len(tickers)} names")
         except Exception:
             pass
 
         if len(tickers) < 50:
-            # 预置列表：沪深300核心 + 创业板龙头 (ticker.SH / ticker.SZ)
+            # Preset: CSI 300 core + ChiNext leaders (ticker.SH / ticker.SZ)
             tickers = [
-                # 上证 50 核心
+                # SSE 50 core
                 "600519.SH", "601318.SH", "600036.SH", "601398.SH",
                 "600900.SH", "601166.SH", "600276.SH", "601012.SH",
                 "600030.SH", "601888.SH", "600887.SH", "600809.SH",
                 "600585.SH", "600690.SH", "601899.SH", "600048.SH",
                 "601088.SH", "600104.SH", "601668.SH", "600028.SH",
-                # 深证 / 创业板核心
+                # SZSE / ChiNext core
                 "000858.SZ", "000333.SZ", "002594.SZ", "300750.SZ",
                 "000651.SZ", "002415.SZ", "000568.SZ", "300059.SZ",
                 "002475.SZ", "000001.SZ", "000002.SZ", "002230.SZ",
                 "000725.SZ", "002142.SZ", "300124.SZ", "000063.SZ",
                 "002714.SZ", "000776.SZ", "300015.SZ", "002352.SZ",
             ]
-            logger.info(f"📊 预置 A 股池: {len(tickers)} 只")
+            logger.info(f"📊 Preset A-share universe: {len(tickers)} names")
         return tickers
 
     # ================================================================
-    # 筛选逻辑
+    # Screening
     # ================================================================
 
     def screen_stocks(
@@ -303,13 +310,13 @@ class StockUniverse:
         max_workers: int = 20,
     ) -> List[Dict]:
         """
-        对股票列表进行并行筛选
-        返回: [{ticker, name, market_cap, avg_volume, price, volatility, sector}, ...]
+        Screen a ticker list in parallel.
+        Returns: [{ticker, name, market_cap, avg_volume, price, volatility, sector}, ...]
         """
         results = []
         total = len(tickers)
 
-        logger.info(f"🔍 筛选 {total} 只股票...")
+        logger.info(f"🔍 Screening {total} stocks...")
 
         def _screen_one(ticker: str) -> Optional[Dict]:
             try:
@@ -321,11 +328,11 @@ class StockUniverse:
                 price = quote["price"]
                 name = quote.get("name", ticker)
 
-                # 简化筛选：无 market_cap 信息时用价格和名称代替
+                # Simplified screen: when market_cap is missing, use price + name
                 if price < min_price:
                     return None
 
-                # 获取短期波动率
+                # Short-horizon volatility
                 volatility = 0.3
                 try:
                     df = china_data_adapter.get_historical_data(ticker, period="1mo", interval="1d")
@@ -338,7 +345,7 @@ class StockUniverse:
                 return {
                     "ticker": ticker,
                     "name": name,
-                    "market_cap": 0,  # 中国 API 无此字段
+                    "market_cap": 0,  # China APIs do not provide this field
                     "avg_volume": quote.get("volume", 0),
                     "price": price,
                     "volatility": volatility,
@@ -358,11 +365,11 @@ class StockUniverse:
                 except Exception:
                     pass
                 if (i + 1) % 100 == 0:
-                    logger.info(f"   进度 {i+1}/{total}, 通过 {len(results)}")
+                    logger.info(f"   Progress {i+1}/{total}, passed {len(results)}")
                 elif (i + 1) % 500 == 0:
-                    logger.info(f"   进度 {i+1}/{total}, 通过 {len(results)}")
+                    logger.info(f"   Progress {i+1}/{total}, passed {len(results)}")
 
-        logger.info(f"✅ 筛选完成: {len(results)}/{total} 通过")
+        logger.info(f"✅ Screen complete: {len(results)}/{total} passed")
         return results
 
     def quick_screen(
@@ -371,8 +378,8 @@ class StockUniverse:
         max_workers: int = 30,
     ) -> List[str]:
         """
-        快速筛选（仅用基本信息，不回测波动率）
-        适合日常更新
+        Fast screen (basic info only, no volatility backtest).
+        Suitable for daily updates.
         """
         results = []
 
@@ -396,25 +403,25 @@ class StockUniverse:
                 except Exception:
                     pass
 
-        logger.info(f"⚡ 快速筛选: {len(results)}/{len(tickers)}")
+        logger.info(f"⚡ Fast screen: {len(results)}/{len(tickers)}")
         return results
 
     # ================================================================
-    # 缓存管理
+    # Cache
     # ================================================================
 
     def build(self, force: bool = False):
-        """构建/更新全市场股票池"""
-        # 检查缓存
+        """Build / refresh the cross-market universe."""
+        # Check cache
         if not force and self._last_update:
             age = (datetime.now() - self._last_update).total_seconds()
-            if age < 86400:  # 24小时内
-                logger.info(f"📦 使用缓存 ({len(self._all_stocks)} 只, {age/3600:.1f}h 前更新)")
+            if age < 86400:  # within 24 hours
+                logger.info(f"📦 Using cache ({len(self._all_stocks)} names, updated {age/3600:.1f}h ago)")
                 return
 
-        logger.info("🏗️ 构建全市场股票池...")
+        logger.info("🏗️ Building cross-market stock universe...")
 
-        # 1. 获取成分股
+        # 1. Fetch constituents
         us_raw = self.fetch_us_universe()
         hk_raw = self.fetch_hk_universe()
         sg_raw = self.fetch_sg_universe()
@@ -422,10 +429,10 @@ class StockUniverse:
         nz_raw = self.fetch_nz_universe()
         cn_raw = self._fetch_cn_stocks()
 
-        # 2. 筛选（首次全量，后续增量）
+        # 2. Screen (full pass first time, incremental afterwards)
         if not self._all_stocks or force:
             us_screened = self.screen_stocks(us_raw, max_workers=25)
-            # HK/SG/AU/NZ 用 yfinance 不可靠，直接从列表通过（market_data 用 tiger_open）
+            # yfinance is unreliable for HK/SG/AU/NZ; pass the list through (market_data uses tiger_open)
             hk_screened = [{"ticker": t, "name": t, "market_cap": 1e10, "avg_volume": 1e6, 
                            "price": 50, "volatility": 0.3, "beta": 1.0, "sector": "HK"}
                           for t in hk_raw]
@@ -453,7 +460,7 @@ class StockUniverse:
                            "price": 5, "volatility": 0.3, "beta": 1.0, "sector": "NZ"}
                           for t in nz_raw]
 
-        # 3. 组装
+        # 3. Assemble
         self._us_stocks = us_screened
         self._hk_stocks = hk_screened
         self._sg_stocks = sg_screened
@@ -468,9 +475,9 @@ class StockUniverse:
 
         self._save_cache()
 
-        logger.info(f"✅ 股票池构建完成: US {len(self._us_stocks)} + HK {len(self._hk_stocks)} "
+        logger.info(f"✅ Universe build complete: US {len(self._us_stocks)} + HK {len(self._hk_stocks)} "
                     f"+ SG {len(self._sg_stocks)} + AU {len(self._au_stocks)} + NZ {len(self._nz_stocks)} "
-                    f"+ CN {len(self._cn_stocks)} = {len(self._all_stocks)} 只")
+                    f"+ CN {len(self._cn_stocks)} = {len(self._all_stocks)} names")
 
     def _save_cache(self):
         data = {
@@ -504,15 +511,15 @@ class StockUniverse:
                 self._us_stocks = [s for s in self._all_stocks if s.get("ticker","") not in hk_sg_au_nz]
                 if data.get("last_update"):
                     self._last_update = datetime.fromisoformat(data["last_update"])
-                logger.info(f"📦 加载缓存: {len(self._all_stocks)} 只 "
+                logger.info(f"📦 Loaded cache: {len(self._all_stocks)} names "
                            f"({data.get('us_count',0)} US + {data.get('hk_count',0)} HK "
                            f"+ {data.get('sg_count',0)} SG + {data.get('au_count',0)} AU "
                            f"+ {data.get('nz_count',0)} NZ + {data.get('cn_count',0)} CN)")
             except Exception as e:
-                logger.warning(f"⚠️ 缓存加载失败: {e}")
+                logger.warning(f"⚠️ Cache load failed: {e}")
 
     # ================================================================
-    # 获取方法
+    # Accessors
     # ================================================================
 
     @property
@@ -538,7 +545,7 @@ class StockUniverse:
 
     @property
     def cn_tickers(self) -> List[str]:
-        """A 股 ticker，已包含 .SH/.SZ 后缀"""
+        """A-share tickers, already suffixed with .SH/.SZ."""
         return [s["ticker"] if isinstance(s, dict) else s for s in self._cn_stocks]
 
     @property
@@ -567,19 +574,19 @@ class StockUniverse:
         return out
 
     def get_top_by(self, key: str = "market_cap", n: int = 50) -> List[Dict]:
-        """按指标排序取 top N"""
+        """Return the top N names sorted by a metric."""
         dict_stocks = [s for s in self._all_stocks if isinstance(s, dict)]
         sorted_stocks = sorted(dict_stocks, key=lambda x: x.get(key, 0) or 0, reverse=True)
         return sorted_stocks[:n]
 
     def get_high_volatility(self, n: int = 50) -> List[Dict]:
-        """高波动率股票（交易机会多）"""
+        """High-volatility names (more trading opportunities)."""
         dict_stocks = [s for s in self._all_stocks if isinstance(s, dict)]
         sorted_stocks = sorted(dict_stocks, key=lambda x: x.get("volatility", 0) or 0, reverse=True)
         return sorted_stocks[:n]
 
     def summary(self) -> Dict:
-        """股票池摘要"""
+        """Universe summary."""
         return {
             "us_count": len(self._us_stocks),
             "hk_count": len(self._hk_stocks),
@@ -594,22 +601,22 @@ class StockUniverse:
         }
 
 
-# 全局单例
+# Global singleton
 stock_universe = StockUniverse()
 
 
 if __name__ == "__main__":
-    print("🏗️ 构建全市场股票池...")
+    print("🏗️ Building cross-market stock universe...")
     stock_universe.build(force=True)
     s = stock_universe.summary()
-    print(f"\n📊 股票池概览:")
-    print(f"   US: {s['us_count']} 只")
-    print(f"   HK: {s['hk_count']} 只")
-    print(f"   SG: {s['sg_count']} 只")
-    print(f"   AU: {s['au_count']} 只")
-    print(f"   NZ: {s['nz_count']} 只")
-    print(f"   总计: {s['total']} 只")
-    print(f"\n📈 Top 10 市值:")
+    print(f"\n📊 Universe overview:")
+    print(f"   US: {s['us_count']} names")
+    print(f"   HK: {s['hk_count']} names")
+    print(f"   SG: {s['sg_count']} names")
+    print(f"   AU: {s['au_count']} names")
+    print(f"   NZ: {s['nz_count']} names")
+    print(f"   Total: {s['total']} names")
+    print(f"\n📈 Top 10 by market cap:")
     for st in s["top_mcap"][:10]:
         cap_b = st.get("market_cap", 0) / 1e9 if st.get("market_cap") else 0
         print(f"   {st['ticker']:10s} {st.get('name',''):30s} ${cap_b:.1f}B")

@@ -9,7 +9,7 @@
   "stocks": [
     {
       "ticker": "AMAT",
-      "name": "应用材料",
+      "name": "Applied Materials",
       "market_cap": 0,
       "avg_volume": 16781180,
       "price": 617.11,
@@ -19,7 +19,7 @@
     },
     {
       "ticker": "TSLA",
-      "name": "特斯拉",
+      "name": "Tesla",
       "market_cap": 0,
       "avg_volume": 58384713,
       "price": 400.49,
@@ -49,7 +49,7 @@
     },
     {
       "ticker": "AVGO",
-      "name": "博通",
+      "name": "Broadcom",
       "market_cap": 0,
       "avg_volume": 45076052,
       "price": 411.35,
@@ -59,7 +59,7 @@
     },
     {
       "ticker": "REGN",
-      "name": "再生元制药公司",
+      "name": "Regeneron Pharmaceuticals",
       "market_cap": 0,
       "avg_volume": 2609258,
       "price": 609.94,
@@ -69,7 +69,7 @@
     },
     {
       "ticker": "SBUX",
-      "name": "星巴克",
+      "name": "Starbucks",
       "market_cap": 0,
       "avg_volume": 10603877,
       "price": 100.65,
@@ -79,7 +79,7 @@
     },
     {
       "ticker": "ROST",
-      "name": "罗斯百货",
+      "name": "Ross Stores",
       "market_cap": 0,
       "avg_volume": 4161561,
       "price": 232.8,
@@ -89,7 +89,7 @@
     },
     {
       "ticker": "INTC",
-      "name": "英特尔",
+      "name": "Intel",
       "market_cap": 0,
       "avg_volume": 233906555,
       "price": 133.99,
@@ -109,7 +109,7 @@
     },
     {
       "ticker": "MU",
-      "name": "美光科技",
+      "name": "Micron Technology",
       "market_cap": 0,
       "avg_volume": 64642538,
       "price": 1133.99,
@@ -119,7 +119,7 @@
     },
     {
       "ticker": "TER",
-      "name": "泰瑞达",
+      "name": "Teradyne",
       "market_cap": 0,
       "avg_volume": 17958153,
       "price": 437.92,
@@ -129,7 +129,7 @@
     },
     {
       "ticker": "DLTR",
-      "name": "美元树公司",
+      "name": "Dollar Tree",
       "market_cap": 0,
       "avg_volume": 4434186,
       "price": 111.65,
@@ -149,7 +149,7 @@
     },
     {
       "ticker": "MNST",
-      "name": "怪物饮料",
+      "name": "Monster Beverage",
       "market_cap": 0,
       "avg_volume": 12605489,
       "price": 91.34,
@@ -159,7 +159,7 @@
     },
     {
       "ticker": "ZM",
-      "name": "Zoom通讯",
+      "name": "Zoom Communications",
       "market_cap": 0,
       "avg_volume": 8136342,
       "price": 86.36,
@@ -169,7 +169,7 @@
     },
     {
       "ticker": "AMGN",
-      "name": "安进",
+      "name": "Amgen",
       "market_cap": 0,
       "avg_volume": 8151089,
       "price": 337.6,
@@ -179,7 +179,7 @@
     },
     {
       "ticker": "KLAC",
-      "name": "科磊",
+      "name": "KLA",
       "market_cap": 0,
       "avg_volume": 26167269,
       "price": 259.56,
@@ -199,7 +199,7 @@
     },
     {
       "ticker": "CI",
-      "name": "信诺",
+      "name": "Cigna",
       "market_cap": 0,
       "avg_volume": 2445956,
       "price": 279.27,
@@ -209,7 +209,7 @@
     },
     {
       "ticker": "GE",
-      "name": "GE航天航空",
+      "name": "GE Aerospace",
       "market_cap": 0,
       "avg_volume": 7763392,
       "price": 357.64,
@@ -219,7 +219,7 @@
     },
     {
       "ticker": "TME",
-      "name": "腾讯音乐",
+      "name": "Tencent Music",
       "market_cap": 0,
       "avg_volume": 18945303,
       "price": 8.73,
@@ -239,7 +239,7 @@
     },
     {
       "ticker": "XLF",
-      "name": "金融行业ETF",
+      "name": "Financial Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 37816814,
       "price": 53.57,
@@ -249,7 +249,7 @@
     },
     {
       "ticker": "LOW",
-      "name": "劳氏",
+      "name": "Lowe's",
       "market_cap": 0,
       "avg_volume": 6813321,
       "price": 222.2,
@@ -259,7 +259,7 @@
     },
     {
       "ticker": "PG",
-      "name": "宝洁",
+      "name": "Procter & Gamble",
       "market_cap": 0,
       "avg_volume": 17076435,
       "price": 150.38,
@@ -269,7 +269,7 @@
     },
     {
       "ticker": "BAC",
-      "name": "美国银行",
+      "name": "Bank of America",
       "market_cap": 0,
       "avg_volume": 70438836,
       "price": 56.2,
@@ -279,7 +279,7 @@
     },
     {
       "ticker": "SNPS",
-      "name": "新思科技",
+      "name": "Synopsys",
       "market_cap": 0,
       "avg_volume": 3227786,
       "price": 455.51,
@@ -289,7 +289,7 @@
     },
     {
       "ticker": "MDLZ",
-      "name": "亿滋",
+      "name": "Mondelez",
       "market_cap": 0,
       "avg_volume": 25599322,
       "price": 60.12,
@@ -299,7 +299,7 @@
     },
     {
       "ticker": "ITW",
-      "name": "伊利诺伊机械",
+      "name": "Illinois Tool Works",
       "market_cap": 0,
       "avg_volume": 2590005,
       "price": 264.09,
@@ -309,7 +309,7 @@
     },
     {
       "ticker": "BK",
-      "name": "纽约梅隆银行",
+      "name": "BNY Mellon",
       "market_cap": 0,
       "avg_volume": 0,
       "price": 137.16,
@@ -319,7 +319,7 @@
     },
     {
       "ticker": "NFLX",
-      "name": "奈飞",
+      "name": "Netflix",
       "market_cap": 0,
       "avg_volume": 91920414,
       "price": 77.38,
@@ -329,7 +329,7 @@
     },
     {
       "ticker": "ABT",
-      "name": "雅培",
+      "name": "Abbott",
       "market_cap": 0,
       "avg_volume": 41964841,
       "price": 88.41,
@@ -339,7 +339,7 @@
     },
     {
       "ticker": "NOW",
-      "name": "现在服务公司",
+      "name": "ServiceNow",
       "market_cap": 0,
       "avg_volume": 36337231,
       "price": 95.04,
@@ -349,7 +349,7 @@
     },
     {
       "ticker": "AMT",
-      "name": "美国电塔",
+      "name": "American Tower",
       "market_cap": 0,
       "avg_volume": 4453095,
       "price": 176.05,
@@ -369,7 +369,7 @@
     },
     {
       "ticker": "VLO",
-      "name": "瓦莱罗能源",
+      "name": "Valero Energy",
       "market_cap": 0,
       "avg_volume": 6141232,
       "price": 236.3,
@@ -379,7 +379,7 @@
     },
     {
       "ticker": "LLY",
-      "name": "礼来",
+      "name": "Eli Lilly",
       "market_cap": 0,
       "avg_volume": 4470535,
       "price": 1098.57,
@@ -389,7 +389,7 @@
     },
     {
       "ticker": "XLE",
-      "name": "能源指数ETF",
+      "name": "Energy Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 39645690,
       "price": 53.77,
@@ -399,7 +399,7 @@
     },
     {
       "ticker": "DHR",
-      "name": "丹纳赫",
+      "name": "Danaher",
       "market_cap": 0,
       "avg_volume": 7258518,
       "price": 177.17,
@@ -409,7 +409,7 @@
     },
     {
       "ticker": "ADI",
-      "name": "亚德诺",
+      "name": "Analog Devices",
       "market_cap": 0,
       "avg_volume": 11868962,
       "price": 434.46,
@@ -419,7 +419,7 @@
     },
     {
       "ticker": "ULTA",
-      "name": "犹他美容",
+      "name": "Ulta Beauty",
       "market_cap": 0,
       "avg_volume": 1409090,
       "price": 456.13,
@@ -429,7 +429,7 @@
     },
     {
       "ticker": "AXP",
-      "name": "美国运通",
+      "name": "American Express",
       "market_cap": 0,
       "avg_volume": 4490783,
       "price": 338.0,
@@ -439,7 +439,7 @@
     },
     {
       "ticker": "WFC",
-      "name": "富国银行",
+      "name": "Wells Fargo",
       "market_cap": 0,
       "avg_volume": 36738626,
       "price": 82.2,
@@ -459,7 +459,7 @@
     },
     {
       "ticker": "TRV",
-      "name": "旅行者财产险集团",
+      "name": "Travelers",
       "market_cap": 0,
       "avg_volume": 5783587,
       "price": 307.81,
@@ -469,7 +469,7 @@
     },
     {
       "ticker": "BX",
-      "name": "黑石",
+      "name": "Blackstone",
       "market_cap": 0,
       "avg_volume": 10280667,
       "price": 123.79,
@@ -479,7 +479,7 @@
     },
     {
       "ticker": "BMY",
-      "name": "施贵宝",
+      "name": "Bristol-Myers Squibb",
       "market_cap": 0,
       "avg_volume": 31700381,
       "price": 54.0,
@@ -489,7 +489,7 @@
     },
     {
       "ticker": "TGT",
-      "name": "塔吉特",
+      "name": "Target",
       "market_cap": 0,
       "avg_volume": 7529316,
       "price": 130.74,
@@ -499,7 +499,7 @@
     },
     {
       "ticker": "CMCSA",
-      "name": "康卡斯特",
+      "name": "Comcast",
       "market_cap": 0,
       "avg_volume": 74561805,
       "price": 22.43,
@@ -519,7 +519,7 @@
     },
     {
       "ticker": "COST",
-      "name": "好市多",
+      "name": "Costco",
       "market_cap": 0,
       "avg_volume": 3742885,
       "price": 951.45,
@@ -529,7 +529,7 @@
     },
     {
       "ticker": "PRU",
-      "name": "保德信金融",
+      "name": "Prudential Financial",
       "market_cap": 0,
       "avg_volume": 3582979,
       "price": 106.53,
@@ -539,7 +539,7 @@
     },
     {
       "ticker": "XLY",
-      "name": "消费品指数-SPDR",
+      "name": "Consumer Discretionary Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 8728589,
       "price": 117.16,
@@ -549,7 +549,7 @@
     },
     {
       "ticker": "TMO",
-      "name": "赛默飞世尔",
+      "name": "Thermo Fisher Scientific",
       "market_cap": 0,
       "avg_volume": 3358552,
       "price": 464.61,
@@ -559,7 +559,7 @@
     },
     {
       "ticker": "NVDA",
-      "name": "英伟达",
+      "name": "NVIDIA",
       "market_cap": 0,
       "avg_volume": 241272013,
       "price": 210.69,
@@ -569,7 +569,7 @@
     },
     {
       "ticker": "DIA",
-      "name": "道琼斯指数ETF",
+      "name": "SPDR Dow Jones Industrial Average ETF",
       "market_cap": 0,
       "avg_volume": 7134373,
       "price": 515.52,
@@ -579,7 +579,7 @@
     },
     {
       "ticker": "DLR",
-      "name": "数字房地产信托公司",
+      "name": "Digital Realty Trust",
       "market_cap": 0,
       "avg_volume": 5037345,
       "price": 188.15,
@@ -589,7 +589,7 @@
     },
     {
       "ticker": "MA",
-      "name": "万事达",
+      "name": "Mastercard",
       "market_cap": 0,
       "avg_volume": 6675004,
       "price": 489.79,
@@ -599,7 +599,7 @@
     },
     {
       "ticker": "TM",
-      "name": "丰田汽车",
+      "name": "Toyota Motor",
       "market_cap": 0,
       "avg_volume": 459437,
       "price": 173.94,
@@ -609,7 +609,7 @@
     },
     {
       "ticker": "BA",
-      "name": "波音",
+      "name": "Boeing",
       "market_cap": 0,
       "avg_volume": 8822530,
       "price": 222.72,
@@ -619,7 +619,7 @@
     },
     {
       "ticker": "XLV",
-      "name": "医疗保健精选行业指数ETF-SPDR",
+      "name": "Health Care Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 10879276,
       "price": 149.4,
@@ -629,7 +629,7 @@
     },
     {
       "ticker": "TSM",
-      "name": "台积电",
+      "name": "TSMC",
       "market_cap": 0,
       "avg_volume": 25817106,
       "price": 462.12,
@@ -649,7 +649,7 @@
     },
     {
       "ticker": "AVB",
-      "name": "阿湾物产",
+      "name": "AvalonBay Communities",
       "market_cap": 0,
       "avg_volume": 2821975,
       "price": 177.32,
@@ -659,7 +659,7 @@
     },
     {
       "ticker": "PDD",
-      "name": "拼多多",
+      "name": "PDD Holdings",
       "market_cap": 0,
       "avg_volume": 11026060,
       "price": 79.56,
@@ -669,7 +669,7 @@
     },
     {
       "ticker": "DE",
-      "name": "迪尔股份",
+      "name": "Deere & Company",
       "market_cap": 0,
       "avg_volume": 1436238,
       "price": 589.24,
@@ -679,7 +679,7 @@
     },
     {
       "ticker": "ASML",
-      "name": "阿斯麦",
+      "name": "ASML",
       "market_cap": 0,
       "avg_volume": 2406148,
       "price": 1929.68,
@@ -689,7 +689,7 @@
     },
     {
       "ticker": "T",
-      "name": "美国电话电报",
+      "name": "AT&T",
       "market_cap": 0,
       "avg_volume": 94242931,
       "price": 22.01,
@@ -699,7 +699,7 @@
     },
     {
       "ticker": "JD",
-      "name": "京东",
+      "name": "JD.com",
       "market_cap": 0,
       "avg_volume": 7942563,
       "price": 27.57,
@@ -709,7 +709,7 @@
     },
     {
       "ticker": "GS",
-      "name": "高盛",
+      "name": "Goldman Sachs",
       "market_cap": 0,
       "avg_volume": 4499162,
       "price": 1096.56,
@@ -719,7 +719,7 @@
     },
     {
       "ticker": "LRCX",
-      "name": "泛林集团",
+      "name": "Lam Research",
       "market_cap": 0,
       "avg_volume": 22686620,
       "price": 389.04,
@@ -729,7 +729,7 @@
     },
     {
       "ticker": "CRM",
-      "name": "赛富时",
+      "name": "Salesforce",
       "market_cap": 0,
       "avg_volume": 57940830,
       "price": 151.78,
@@ -739,7 +739,7 @@
     },
     {
       "ticker": "LUV",
-      "name": "西南航空",
+      "name": "Southwest Airlines",
       "market_cap": 0,
       "avg_volume": 11291363,
       "price": 47.97,
@@ -749,7 +749,7 @@
     },
     {
       "ticker": "EOG",
-      "name": "EOG能源",
+      "name": "EOG Resources",
       "market_cap": 0,
       "avg_volume": 12213411,
       "price": 129.98,
@@ -759,7 +759,7 @@
     },
     {
       "ticker": "XLK",
-      "name": "科技行业精选指数ETF",
+      "name": "Technology Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 12101594,
       "price": 191.44,
@@ -769,7 +769,7 @@
     },
     {
       "ticker": "WMT",
-      "name": "沃尔玛",
+      "name": "Walmart",
       "market_cap": 0,
       "avg_volume": 36526766,
       "price": 117.18,
@@ -779,7 +779,7 @@
     },
     {
       "ticker": "COF",
-      "name": "第一资本信贷",
+      "name": "Capital One",
       "market_cap": 0,
       "avg_volume": 8115466,
       "price": 201.53,
@@ -789,7 +789,7 @@
     },
     {
       "ticker": "PANW",
-      "name": "派拓网络",
+      "name": "Palo Alto Networks",
       "market_cap": 0,
       "avg_volume": 12194739,
       "price": 287.78,
@@ -799,7 +799,7 @@
     },
     {
       "ticker": "AAPL",
-      "name": "苹果",
+      "name": "Apple",
       "market_cap": 0,
       "avg_volume": 85962201,
       "price": 298.01,
@@ -809,7 +809,7 @@
     },
     {
       "ticker": "RTX",
-      "name": "雷神技术",
+      "name": "RTX",
       "market_cap": 0,
       "avg_volume": 8866358,
       "price": 185.6,
@@ -819,7 +819,7 @@
     },
     {
       "ticker": "BILI",
-      "name": "哔哩哔哩",
+      "name": "Bilibili",
       "market_cap": 0,
       "avg_volume": 2312631,
       "price": 17.2,
@@ -829,7 +829,7 @@
     },
     {
       "ticker": "WDC",
-      "name": "西部数据",
+      "name": "Western Digital",
       "market_cap": 0,
       "avg_volume": 16683882,
       "price": 746.23,
@@ -839,7 +839,7 @@
     },
     {
       "ticker": "KO",
-      "name": "可口可乐",
+      "name": "Coca-Cola",
       "market_cap": 0,
       "avg_volume": 46857949,
       "price": 79.39,
@@ -849,7 +849,7 @@
     },
     {
       "ticker": "UBER",
-      "name": "优步",
+      "name": "Uber",
       "market_cap": 0,
       "avg_volume": 27203330,
       "price": 71.64,
@@ -859,7 +859,7 @@
     },
     {
       "ticker": "NET",
-      "name": "科赋锐",
+      "name": "Cloudflare",
       "market_cap": 0,
       "avg_volume": 4440905,
       "price": 224.06,
@@ -869,7 +869,7 @@
     },
     {
       "ticker": "LULU",
-      "name": "露露乐蒙",
+      "name": "Lululemon",
       "market_cap": 0,
       "avg_volume": 6175520,
       "price": 111.77,
@@ -879,7 +879,7 @@
     },
     {
       "ticker": "SPY",
-      "name": "标普500指数ETF-SPDR",
+      "name": "SPDR S&P 500 ETF",
       "market_cap": 0,
       "avg_volume": 80875657,
       "price": 746.74,
@@ -889,7 +889,7 @@
     },
     {
       "ticker": "ISRG",
-      "name": "直觉外科公司",
+      "name": "Intuitive Surgical",
       "market_cap": 0,
       "avg_volume": 4404200,
       "price": 406.78,
@@ -899,7 +899,7 @@
     },
     {
       "ticker": "QCOM",
-      "name": "高通",
+      "name": "Qualcomm",
       "market_cap": 0,
       "avg_volume": 47081544,
       "price": 226.11,
@@ -909,7 +909,7 @@
     },
     {
       "ticker": "XPEV",
-      "name": "小鹏集团",
+      "name": "XPeng",
       "market_cap": 0,
       "avg_volume": 10074328,
       "price": 13.21,
@@ -919,7 +919,7 @@
     },
     {
       "ticker": "CB",
-      "name": "安达保险",
+      "name": "Chubb",
       "market_cap": 0,
       "avg_volume": 2960305,
       "price": 323.4,
@@ -929,7 +929,7 @@
     },
     {
       "ticker": "HCA",
-      "name": "HCA医疗",
+      "name": "HCA Healthcare",
       "market_cap": 0,
       "avg_volume": 2656836,
       "price": 375.17,
@@ -939,7 +939,7 @@
     },
     {
       "ticker": "GILD",
-      "name": "吉利德科学",
+      "name": "Gilead Sciences",
       "market_cap": 0,
       "avg_volume": 14348342,
       "price": 123.76,
@@ -959,7 +959,7 @@
     },
     {
       "ticker": "CDNS",
-      "name": "铿腾电子",
+      "name": "Cadence Design Systems",
       "market_cap": 0,
       "avg_volume": 7092233,
       "price": 387.39,
@@ -969,7 +969,7 @@
     },
     {
       "ticker": "FDX",
-      "name": "联邦快递",
+      "name": "FedEx",
       "market_cap": 0,
       "avg_volume": 2531818,
       "price": 326.2,
@@ -979,7 +979,7 @@
     },
     {
       "ticker": "AMZN",
-      "name": "亚马逊",
+      "name": "Amazon",
       "market_cap": 0,
       "avg_volume": 75624415,
       "price": 244.39,
@@ -989,7 +989,7 @@
     },
     {
       "ticker": "USB",
-      "name": "美国合众银行",
+      "name": "U.S. Bancorp",
       "market_cap": 0,
       "avg_volume": 22023998,
       "price": 58.14,
@@ -999,7 +999,7 @@
     },
     {
       "ticker": "BP",
-      "name": "英国石油",
+      "name": "BP",
       "market_cap": 0,
       "avg_volume": 14304712,
       "price": 39.1,
@@ -1009,7 +1009,7 @@
     },
     {
       "ticker": "CME",
-      "name": "芝加哥商品交易所",
+      "name": "CME Group",
       "market_cap": 0,
       "avg_volume": 6953865,
       "price": 246.38,
@@ -1019,7 +1019,7 @@
     },
     {
       "ticker": "MSFT",
-      "name": "微软",
+      "name": "Microsoft",
       "market_cap": 0,
       "avg_volume": 59714157,
       "price": 379.4,
@@ -1029,7 +1029,7 @@
     },
     {
       "ticker": "NTAP",
-      "name": "美国网存",
+      "name": "NetApp",
       "market_cap": 0,
       "avg_volume": 8151500,
       "price": 159.71,
@@ -1039,7 +1039,7 @@
     },
     {
       "ticker": "HPE",
-      "name": "慧与",
+      "name": "Hewlett Packard Enterprise",
       "market_cap": 0,
       "avg_volume": 53337786,
       "price": 47.41,
@@ -1049,7 +1049,7 @@
     },
     {
       "ticker": "CHTR",
-      "name": "特许通讯",
+      "name": "Charter Communications",
       "market_cap": 0,
       "avg_volume": 17934238,
       "price": 126.23,
@@ -1059,7 +1059,7 @@
     },
     {
       "ticker": "AFL",
-      "name": "美国家庭寿险",
+      "name": "Aflac",
       "market_cap": 0,
       "avg_volume": 6380129,
       "price": 115.47,
@@ -1079,7 +1079,7 @@
     },
     {
       "ticker": "CAT",
-      "name": "卡特彼勒",
+      "name": "Caterpillar",
       "market_cap": 0,
       "avg_volume": 6175042,
       "price": 985.82,
@@ -1099,7 +1099,7 @@
     },
     {
       "ticker": "LMT",
-      "name": "洛克希德马丁",
+      "name": "Lockheed Martin",
       "market_cap": 0,
       "avg_volume": 3978809,
       "price": 510.95,
@@ -1119,7 +1119,7 @@
     },
     {
       "ticker": "MRVL",
-      "name": "迈威尔科技",
+      "name": "Marvell Technology",
       "market_cap": 0,
       "avg_volume": 250989360,
       "price": 310.58,
@@ -1129,7 +1129,7 @@
     },
     {
       "ticker": "FTNT",
-      "name": "飞塔信息",
+      "name": "Fortinet",
       "market_cap": 0,
       "avg_volume": 18432871,
       "price": 144.73,
@@ -1139,7 +1139,7 @@
     },
     {
       "ticker": "BLK",
-      "name": "贝莱德",
+      "name": "BlackRock",
       "market_cap": 0,
       "avg_volume": 1032316,
       "price": 1050.09,
@@ -1149,7 +1149,7 @@
     },
     {
       "ticker": "PFE",
-      "name": "辉瑞",
+      "name": "Pfizer",
       "market_cap": 0,
       "avg_volume": 119614339,
       "price": 25.21,
@@ -1169,7 +1169,7 @@
     },
     {
       "ticker": "AIG",
-      "name": "美国国际集团",
+      "name": "American International Group",
       "market_cap": 0,
       "avg_volume": 5858354,
       "price": 74.02,
@@ -1179,7 +1179,7 @@
     },
     {
       "ticker": "PNC",
-      "name": "PNC金融",
+      "name": "PNC Financial",
       "market_cap": 0,
       "avg_volume": 4931983,
       "price": 232.04,
@@ -1189,7 +1189,7 @@
     },
     {
       "ticker": "C",
-      "name": "花旗集团",
+      "name": "Citigroup",
       "market_cap": 0,
       "avg_volume": 29331203,
       "price": 143.06,
@@ -1209,7 +1209,7 @@
     },
     {
       "ticker": "EMR",
-      "name": "艾默生电气",
+      "name": "Emerson Electric",
       "market_cap": 0,
       "avg_volume": 4090266,
       "price": 150.66,
@@ -1229,7 +1229,7 @@
     },
     {
       "ticker": "CMG",
-      "name": "奇波雷墨西哥烧烤",
+      "name": "Chipotle Mexican Grill",
       "market_cap": 0,
       "avg_volume": 31478893,
       "price": 32.49,
@@ -1239,7 +1239,7 @@
     },
     {
       "ticker": "CSCO",
-      "name": "思科",
+      "name": "Cisco",
       "market_cap": 0,
       "avg_volume": 52284353,
       "price": 119.54,
@@ -1249,7 +1249,7 @@
     },
     {
       "ticker": "VZ",
-      "name": "威瑞森通信",
+      "name": "Verizon",
       "market_cap": 0,
       "avg_volume": 66305278,
       "price": 45.37,
@@ -1259,7 +1259,7 @@
     },
     {
       "ticker": "BABA",
-      "name": "阿里巴巴",
+      "name": "Alibaba",
       "market_cap": 0,
       "avg_volume": 14602988,
       "price": 107.1,
@@ -1269,7 +1269,7 @@
     },
     {
       "ticker": "INTU",
-      "name": "财捷",
+      "name": "Intuit",
       "market_cap": 0,
       "avg_volume": 10059120,
       "price": 267.0,
@@ -1279,7 +1279,7 @@
     },
     {
       "ticker": "EQIX",
-      "name": "易昆尼克斯",
+      "name": "Equinix",
       "market_cap": 0,
       "avg_volume": 807852,
       "price": 1092.19,
@@ -1289,7 +1289,7 @@
     },
     {
       "ticker": "DAL",
-      "name": "达美航空",
+      "name": "Delta Air Lines",
       "market_cap": 0,
       "avg_volume": 14843814,
       "price": 84.18,
@@ -1299,7 +1299,7 @@
     },
     {
       "ticker": "CVX",
-      "name": "雪佛龙",
+      "name": "Chevron",
       "market_cap": 0,
       "avg_volume": 19146123,
       "price": 173.63,
@@ -1309,7 +1309,7 @@
     },
     {
       "ticker": "TJX",
-      "name": "TJX公司",
+      "name": "TJX Companies",
       "market_cap": 0,
       "avg_volume": 9069831,
       "price": 163.81,
@@ -1319,7 +1319,7 @@
     },
     {
       "ticker": "ABBV",
-      "name": "艾伯维公司",
+      "name": "AbbVie",
       "market_cap": 0,
       "avg_volume": 9646078,
       "price": 216.49,
@@ -1329,7 +1329,7 @@
     },
     {
       "ticker": "JNJ",
-      "name": "强生",
+      "name": "Johnson & Johnson",
       "market_cap": 0,
       "avg_volume": 18989761,
       "price": 228.39,
@@ -1339,7 +1339,7 @@
     },
     {
       "ticker": "SPG",
-      "name": "西蒙地产",
+      "name": "Simon Property Group",
       "market_cap": 0,
       "avg_volume": 3655356,
       "price": 211.33,
@@ -1349,7 +1349,7 @@
     },
     {
       "ticker": "BIDU",
-      "name": "百度",
+      "name": "Baidu",
       "market_cap": 0,
       "avg_volume": 2135238,
       "price": 111.76,
@@ -1359,7 +1359,7 @@
     },
     {
       "ticker": "MRK",
-      "name": "默沙东",
+      "name": "Merck",
       "market_cap": 0,
       "avg_volume": 29521620,
       "price": 113.87,
@@ -1369,7 +1369,7 @@
     },
     {
       "ticker": "MCD",
-      "name": "麦当劳",
+      "name": "McDonald's",
       "market_cap": 0,
       "avg_volume": 8106427,
       "price": 278.61,
@@ -1379,7 +1379,7 @@
     },
     {
       "ticker": "NKE",
-      "name": "耐克",
+      "name": "Nike",
       "market_cap": 0,
       "avg_volume": 32320291,
       "price": 45.2,
@@ -1389,7 +1389,7 @@
     },
     {
       "ticker": "PLD",
-      "name": "安博",
+      "name": "Prologis",
       "market_cap": 0,
       "avg_volume": 6701237,
       "price": 140.54,
@@ -1399,7 +1399,7 @@
     },
     {
       "ticker": "CCI",
-      "name": "冠城国际",
+      "name": "Crown Castle",
       "market_cap": 0,
       "avg_volume": 7437280,
       "price": 82.05,
@@ -1409,7 +1409,7 @@
     },
     {
       "ticker": "GOOGL",
-      "name": "谷歌-A",
+      "name": "Alphabet Class A",
       "market_cap": 0,
       "avg_volume": 44470070,
       "price": 368.03,
@@ -1419,7 +1419,7 @@
     },
     {
       "ticker": "VRTX",
-      "name": "福泰制药",
+      "name": "Vertex Pharmaceuticals",
       "market_cap": 0,
       "avg_volume": 2993021,
       "price": 451.63,
@@ -1429,7 +1429,7 @@
     },
     {
       "ticker": "HON",
-      "name": "霍尼韦尔",
+      "name": "Honeywell",
       "market_cap": 0,
       "avg_volume": 6654228,
       "price": 229.01,
@@ -1459,7 +1459,7 @@
     },
     {
       "ticker": "ADSK",
-      "name": "欧特克",
+      "name": "Autodesk",
       "market_cap": 0,
       "avg_volume": 9213532,
       "price": 193.82,
@@ -1479,7 +1479,7 @@
     },
     {
       "ticker": "BSX",
-      "name": "波士顿科学",
+      "name": "Boston Scientific",
       "market_cap": 0,
       "avg_volume": 30854998,
       "price": 45.29,
@@ -1489,7 +1489,7 @@
     },
     {
       "ticker": "DG",
-      "name": "美国达乐公司",
+      "name": "Dollar General",
       "market_cap": 0,
       "avg_volume": 5886213,
       "price": 113.45,
@@ -1499,7 +1499,7 @@
     },
     {
       "ticker": "JPM",
-      "name": "摩根大通",
+      "name": "JPMorgan Chase",
       "market_cap": 0,
       "avg_volume": 20111030,
       "price": 325.22,
@@ -1509,7 +1509,7 @@
     },
     {
       "ticker": "ZTS",
-      "name": "硕腾",
+      "name": "Zoetis",
       "market_cap": 0,
       "avg_volume": 17092116,
       "price": 78.71,
@@ -1519,7 +1519,7 @@
     },
     {
       "ticker": "MET",
-      "name": "大都会人寿",
+      "name": "MetLife",
       "market_cap": 0,
       "avg_volume": 8338284,
       "price": 85.58,
@@ -1529,7 +1529,7 @@
     },
     {
       "ticker": "XLI",
-      "name": "工业指数ETF",
+      "name": "Industrial Select Sector SPDR ETF",
       "market_cap": 0,
       "avg_volume": 8059187,
       "price": 180.91,
@@ -1539,7 +1539,7 @@
     },
     {
       "ticker": "COP",
-      "name": "康菲石油",
+      "name": "ConocoPhillips",
       "market_cap": 0,
       "avg_volume": 22893388,
       "price": 107.74,
@@ -1549,7 +1549,7 @@
     },
     {
       "ticker": "HUM",
-      "name": "哈门那",
+      "name": "Humana",
       "market_cap": 0,
       "avg_volume": 3571218,
       "price": 360.65,
@@ -1559,7 +1559,7 @@
     },
     {
       "ticker": "MS",
-      "name": "摩根士丹利",
+      "name": "Morgan Stanley",
       "market_cap": 0,
       "avg_volume": 11933213,
       "price": 223.17,
@@ -1579,7 +1579,7 @@
     },
     {
       "ticker": "HPQ",
-      "name": "惠普",
+      "name": "HP",
       "market_cap": 0,
       "avg_volume": 31304236,
       "price": 23.5,
@@ -1589,7 +1589,7 @@
     },
     {
       "ticker": "UNP",
-      "name": "联合太平洋",
+      "name": "Union Pacific",
       "market_cap": 0,
       "avg_volume": 3443156,
       "price": 256.88,
@@ -1599,7 +1599,7 @@
     },
     {
       "ticker": "CL",
-      "name": "高露洁",
+      "name": "Colgate-Palmolive",
       "market_cap": 0,
       "avg_volume": 11201312,
       "price": 89.48,
@@ -1609,7 +1609,7 @@
     },
     {
       "ticker": "DIS",
-      "name": "迪士尼",
+      "name": "Disney",
       "market_cap": 0,
       "avg_volume": 22943613,
       "price": 103.89,
@@ -1619,7 +1619,7 @@
     },
     {
       "ticker": "ETN",
-      "name": "伊顿",
+      "name": "Eaton",
       "market_cap": 0,
       "avg_volume": 3715592,
       "price": 421.77,
@@ -1629,7 +1629,7 @@
     },
     {
       "ticker": "XOM",
-      "name": "埃克森美孚",
+      "name": "Exxon Mobil",
       "market_cap": 0,
       "avg_volume": 48063443,
       "price": 137.81,
@@ -1639,7 +1639,7 @@
     },
     {
       "ticker": "ROK",
-      "name": "罗克韦尔自动化",
+      "name": "Rockwell Automation",
       "market_cap": 0,
       "avg_volume": 1154564,
       "price": 473.79,
@@ -1659,7 +1659,7 @@
     },
     {
       "ticker": "SONY",
-      "name": "索尼",
+      "name": "Sony",
       "market_cap": 0,
       "avg_volume": 5524897,
       "price": 20.33,
@@ -1669,7 +1669,7 @@
     },
     {
       "ticker": "IWM",
-      "name": "罗素2000指数ETF",
+      "name": "iShares Russell 2000 ETF",
       "market_cap": 0,
       "avg_volume": 32463155,
       "price": 295.59,
@@ -1689,7 +1689,7 @@
     },
     {
       "ticker": "ORCL",
-      "name": "甲骨文",
+      "name": "Oracle",
       "market_cap": 0,
       "avg_volume": 31386081,
       "price": 184.29,
@@ -1699,7 +1699,7 @@
     },
     {
       "ticker": "UPS",
-      "name": "联合包裹",
+      "name": "UPS",
       "market_cap": 0,
       "avg_volume": 13306355,
       "price": 104.86,
@@ -1719,7 +1719,7 @@
     },
     {
       "ticker": "MCK",
-      "name": "麦克森",
+      "name": "McKesson",
       "market_cap": 0,
       "avg_volume": 2477060,
       "price": 750.63,
@@ -1729,7 +1729,7 @@
     },
     {
       "ticker": "NIO",
-      "name": "蔚来",
+      "name": "NIO",
       "market_cap": 0,
       "avg_volume": 33400067,
       "price": 5.02,
@@ -1739,7 +1739,7 @@
     },
     {
       "ticker": "AMD",
-      "name": "超威半导体",
+      "name": "AMD",
       "market_cap": 0,
       "avg_volume": 43805645,
       "price": 537.37,
@@ -1749,7 +1749,7 @@
     },
     {
       "ticker": "EL",
-      "name": "雅诗兰黛",
+      "name": "Estee Lauder",
       "market_cap": 0,
       "avg_volume": 5699950,
       "price": 84.81,
@@ -1759,7 +1759,7 @@
     },
     {
       "ticker": "SCHW",
-      "name": "嘉信理财",
+      "name": "Charles Schwab",
       "market_cap": 0,
       "avg_volume": 27430151,
       "price": 91.7,
@@ -1769,7 +1769,7 @@
     },
     {
       "ticker": "TXN",
-      "name": "德州仪器",
+      "name": "Texas Instruments",
       "market_cap": 0,
       "avg_volume": 21929631,
       "price": 322.86,
@@ -1789,7 +1789,7 @@
     },
     {
       "ticker": "KMB",
-      "name": "金佰利",
+      "name": "Kimberly-Clark",
       "market_cap": 0,
       "avg_volume": 8851294,
       "price": 102.56,
@@ -1799,7 +1799,7 @@
     },
     {
       "ticker": "CVS",
-      "name": "西维斯健康",
+      "name": "CVS Health",
       "market_cap": 0,
       "avg_volume": 21578828,
       "price": 98.32,
@@ -1809,7 +1809,7 @@
     },
     {
       "ticker": "BDX",
-      "name": "碧迪医疗",
+      "name": "Becton Dickinson",
       "market_cap": 0,
       "avg_volume": 6231987,
       "price": 143.98,
@@ -1819,7 +1819,7 @@
     },
     {
       "ticker": "HD",
-      "name": "家得宝",
+      "name": "Home Depot",
       "market_cap": 0,
       "avg_volume": 10604443,
       "price": 334.28,
@@ -1829,7 +1829,7 @@
     },
     {
       "ticker": "NSC",
-      "name": "诺福克南方",
+      "name": "Norfolk Southern",
       "market_cap": 0,
       "avg_volume": 1885206,
       "price": 300.08,
@@ -1839,7 +1839,7 @@
     },
     {
       "ticker": "UNH",
-      "name": "联合健康",
+      "name": "UnitedHealth",
       "market_cap": 0,
       "avg_volume": 11896852,
       "price": 400.96,
@@ -1849,7 +1849,7 @@
     },
     {
       "ticker": "EW",
-      "name": "爱德华生命科学",
+      "name": "Edwards Lifesciences",
       "market_cap": 0,
       "avg_volume": 5550251,
       "price": 87.36,
@@ -1859,7 +1859,7 @@
     },
     {
       "ticker": "SLB",
-      "name": "斯伦贝谢",
+      "name": "Schlumberger",
       "market_cap": 0,
       "avg_volume": 41856505,
       "price": 48.09,
@@ -1869,7 +1869,7 @@
     },
     {
       "ticker": "STX",
-      "name": "希捷科技",
+      "name": "Seagate Technology",
       "market_cap": 0,
       "avg_volume": 8424509,
       "price": 1070.23,
@@ -1879,7 +1879,7 @@
     },
     {
       "ticker": "PEP",
-      "name": "百事可乐",
+      "name": "PepsiCo",
       "market_cap": 0,
       "avg_volume": 19130318,
       "price": 142.02,
@@ -1889,7 +1889,7 @@
     },
     {
       "ticker": "AKAM",
-      "name": "阿克迈",
+      "name": "Akamai",
       "market_cap": 0,
       "avg_volume": 6468424,
       "price": 124.91,
@@ -1899,7 +1899,7 @@
     },
     {
       "ticker": "DELL",
-      "name": "戴尔科技",
+      "name": "Dell Technologies",
       "market_cap": 0,
       "avg_volume": 15360635,
       "price": 409.5,
@@ -1909,7 +1909,7 @@
     },
     {
       "ticker": "SAP",
-      "name": "思爱普",
+      "name": "SAP",
       "market_cap": 0,
       "avg_volume": 3037137,
       "price": 155.22,
@@ -1939,7 +1939,7 @@
     },
     {
       "ticker": "ICE",
-      "name": "洲际交易所",
+      "name": "Intercontinental Exchange",
       "market_cap": 0,
       "avg_volume": 6109547,
       "price": 133.88,
@@ -1959,7 +1959,7 @@
     },
     {
       "ticker": "RNG",
-      "name": "铃盛",
+      "name": "RingCentral",
       "market_cap": 0,
       "avg_volume": 2081360,
       "price": 35.02,
@@ -1969,7 +1969,7 @@
     },
     {
       "ticker": "QQQ",
-      "name": "纳指100ETF",
+      "name": "Invesco QQQ Trust",
       "market_cap": 0,
       "avg_volume": 50154595,
       "price": 740.62,
@@ -1979,7 +1979,7 @@
     },
     {
       "ticker": "SBAC",
-      "name": "SBA通信公司",
+      "name": "SBA Communications",
       "market_cap": 0,
       "avg_volume": 1819291,
       "price": 186.87,
@@ -1989,7 +1989,7 @@
     },
     {
       "ticker": "LI",
-      "name": "理想汽车",
+      "name": "Li Auto",
       "market_cap": 0,
       "avg_volume": 3303384,
       "price": 13.21,

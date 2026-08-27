@@ -22,7 +22,7 @@ class ResearchReport(FPDF):
             return
         self.set_font("CN", "", 8)
         self.set_text_color(100,100,100)
-        self.cell(0, 5, "Quant AI Trader - 神经网络选股研究报告", align="L")
+        self.cell(0, 5, "Quant AI Trader - Neural Network Stock Selection Research Report", align="L")
         self.cell(0, 5, f"Page {self.page_no()}", align="R", new_x="LMARGIN", new_y="NEXT")
         self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
         self.ln(3)

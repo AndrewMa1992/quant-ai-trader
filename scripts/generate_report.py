@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成系统运行摘要报告"""
+"""Generate a system operations summary report."""
 import sqlite3, json, time
 from datetime import datetime
 from pathlib import Path
@@ -11,20 +11,20 @@ def generate():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     
-    # 账户
+    # Account
     acc = dict(conn.execute("SELECT * FROM portfolio_account WHERE id=1").fetchone())
     
-    # 持仓
+    # Positions
     positions = [dict(r) for r in conn.execute("SELECT * FROM portfolio_positions").fetchall()]
     
-    # 交易
+    # Trades
     trades = [dict(r) for r in conn.execute(
         "SELECT * FROM trades ORDER BY id DESC LIMIT 50"
     ).fetchall()]
     
     conn.close()
     
-    # 计算
+    # Compute
     mv = sum(p['shares'] * p['avg_cost'] for p in positions)
     tv = acc['cash'] + mv
     pnl = tv - acc['initial_capital']
@@ -33,28 +33,28 @@ def generate():
     buys = sum(1 for t in trades if t['side'] == 'buy')
     sells = sum(1 for t in trades if t['side'] == 'sell')
     
-    report = f"""# 🤖 Quant AI Trader - 系统运行摘要报告
+    report = f"""# 🤖 Quant AI Trader - System Operations Summary
 
-**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ---
 
-## 📊 账户概览
+## 📊 Account Overview
 
-| 指标 | 数值 |
+| Metric | Value |
 |------|------|
-| 初始资金 | ${acc['initial_capital']:,.2f} |
-| 当前总资产 | ${tv:,.2f} |
-| 可用现金 | ${acc['cash']:,.2f} |
-| 持仓市值 | ${mv:,.2f} |
-| **总盈亏** | **${pnl:+,.2f} ({pnl_pct:+.2f}%)** |
-| 交易笔数 | {len(trades)} (买入 {buys} / 卖出 {sells}) |
+| Initial capital | ${acc['initial_capital']:,.2f} |
+| Current NAV | ${tv:,.2f} |
+| Available cash | ${acc['cash']:,.2f} |
+| Position market value | ${mv:,.2f} |
+| **Total P&L** | **${pnl:+,.2f} ({pnl_pct:+.2f}%)** |
+| Trade count | {len(trades)} (buys {buys} / sells {sells}) |
 
 ---
 
-## 📦 当前持仓 ({len(positions)} 只)
+## 📦 Current Positions ({len(positions)} names)
 
-| 股票 | 数量 | 均价 | 市值 | 占比 |
+| Ticker | Quantity | Avg cost | Market value | Weight |
 |------|------|------|------|------|
 """
     for p in positions:
@@ -65,9 +65,9 @@ def generate():
     report += f"""
 ---
 
-## 📋 最近交易
+## 📋 Recent Trades
 
-| 时间 | 股票 | 方向 | 数量 | 价格 | 金额 | 信号强度 |
+| Time | Ticker | Side | Quantity | Price | Amount | Signal strength |
 |------|------|------|------|------|------|----------|
 """
     for t in trades[:20]:
@@ -76,57 +76,57 @@ def generate():
     report += f"""
 ---
 
-## 🔧 系统配置
+## 🔧 System Configuration
 
-| 项目 | 状态 |
+| Item | Status |
 |------|------|
-| AI 模型 | ✅ Transformer (545K 参数) + PPO RL Agent |
-| 数据覆盖 | 18 只美股+港股 |
-| 交易周期 | 每 5 分钟 |
-| 老虎证券 | ✅ 已连接 (模拟账号: 21837535188693626) |
-| 实盘下单 | ⚠️ US 市场休市时自动跳过，开市正常执行 |
-| 风控系统 | ✅ 仓位上限 25%，最大回撤 20% |
-| 日志文件 | logs/auto_trader_*.log |
-| 守护进程 | start_trader.bat (自动重启) |
+| AI models | ✅ Transformer (545K params) + PPO RL Agent |
+| Data coverage | 18 US + HK names |
+| Trading cycle | Every 5 minutes |
+| Tiger Brokers | ✅ Connected (paper account: 21837535188693626) |
+| Live orders | ⚠️ Auto-skip when US market is closed; execute normally when open |
+| Risk system | ✅ Position cap 25%, max drawdown 20% |
+| Log files | logs/auto_trader_*.log |
+| Daemon | start_trader.bat (auto-restart) |
 
 ---
 
-## 🗂️ 交付制品
+## 🗂️ Deliverables
 
-1. **交易系统主程序**: `auto_trader.py`
-2. **实时监控面板**: `dashboard.html` (浏览器打开，自动 60s 刷新)
-3. **守护启动脚本**: `start_trader.bat`
-4. **数据库**: `backend/data/quant_trader.db` (持仓 + 交易记录)
-5. **配置文件**: `.env` (老虎证券模拟账号配置)
-6. **本报告**: `REPORT.md`
+1. **Trading system main program**: `auto_trader.py`
+2. **Live monitoring dashboard**: `dashboard.html` (open in browser; auto-refresh every 60s)
+3. **Daemon launch script**: `start_trader.bat`
+4. **Database**: `backend/data/quant_trader.db` (positions + trade records)
+5. **Config file**: `.env` (Tiger Brokers paper account config)
+6. **This report**: `REPORT.md`
 
 ---
 
-## 🚀 使用方式
+## 🚀 How to Use
 
 ```bash
-# 方式1: 守护进程（推荐，自动重启）
+# Option 1: daemon (recommended, auto-restart)
 start_trader.bat
 
-# 方式2: 直接运行
+# Option 2: run directly
 python auto_trader.py --interval 300
 
-# 方式3: 单次运行
+# Option 3: single run
 python auto_trader.py --once
 
-# 刷新监控面板
+# Refresh the monitoring dashboard
 python dashboard.py
 ```
 
 ---
 
-## ⚠️ 注意事项
+## ⚠️ Notes
 
-- **US 市场交易时间**: 北京时间 21:30 - 次日 04:00 (夏令时)
-- **HK 市场交易时间**: 北京时间 09:30 - 16:00
-- 非交易时段 MKT 订单会被交易所拒绝，LMT 订单可排队
-- 当前使用老虎证券模拟账号，无真实资金风险
-- 如切换实盘：修改 `.env` 中 `TIGER_ACCOUNT` 为实盘账号 `20874631`
+- **US market hours**: 21:30 - 04:00 next day Beijing time (daylight saving)
+- **HK market hours**: 09:30 - 16:00 Beijing time
+- MKT orders are rejected by the exchange outside session; LMT orders may queue
+- Currently using a Tiger Brokers paper account; no real capital at risk
+- To switch to live: set `TIGER_ACCOUNT` in `.env` to the live account `20874631`
 
 ---
 
@@ -136,7 +136,7 @@ python dashboard.py
     output = PROJ_ROOT / "REPORT.md"
     with open(output, 'w', encoding='utf-8') as f:
         f.write(report)
-    print(f"✅ 报告已生成: {output}")
+    print(f"✅ Report generated: {output}")
     return report
 
 if __name__ == "__main__":

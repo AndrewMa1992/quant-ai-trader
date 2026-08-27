@@ -258,9 +258,9 @@ class PortfolioManager:
                 )
                 if need_reset:
                     reason: str = (
-                        "强制重置" if force
-                        else "首次同步" if not self._tiger_initial_capital_synced
-                        else f"差距 {abs(tiger_total - self.initial_capital) / max(self.initial_capital, 1) * 100:.1f}%"
+                        "forced reset" if force
+                        else "first sync" if not self._tiger_initial_capital_synced
+                        else f"gap {abs(tiger_total - self.initial_capital) / max(self.initial_capital, 1) * 100:.1f}%"
                     )
                     logger.info(
                         f"🔑 Tiger sync initial_capital ({reason}): "

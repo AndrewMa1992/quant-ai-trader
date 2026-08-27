@@ -1,8 +1,8 @@
 """
-订单执行器
-- 实盘：调用 Tiger Brokers API 下单
-- 风控前置检查
-- 交易记录持久化
+Order executor.
+- Live: place orders via the Tiger Brokers API
+- Pre-trade risk checks
+- Persist trade records
 """
 from typing import Dict, List, Optional, Callable
 from loguru import logger
@@ -15,9 +15,9 @@ from backend.data_engine.tiger_client import tiger_client, TigerClient
 
 class PaperExecutor:
     """
-    订单执行器
-    - tiger_client 已连接时，执行实盘下单
-    - 否则降级为 Paper Trading 模拟
+    Order executor.
+    - Place live orders when tiger_client is connected
+    - Otherwise degrade to paper trading
     """
 
     def __init__(self, portfolio: PortfolioManager, risk_manager: RiskManager):
@@ -26,15 +26,15 @@ class PaperExecutor:
         self._order_callbacks: List[Callable] = []
         self.pending_orders: List[Dict] = []
         self.filled_orders: List[Dict] = []
-        # 是否使用老虎实盘下单（动态检查，在 execute_signal 中判断）
+        # Whether to place live Tiger orders (checked dynamically in execute_signal)
         self._tiger_account = settings.TIGER_ACCOUNT
         if self._tiger_account:
-            logger.info(f"📝 老虎实盘账号: {self._tiger_account}")
+            logger.info(f"📝 Tiger live account: {self._tiger_account}")
         else:
-            logger.warning("⚠️ 老虎账号未配置，无法实盘交易")
+            logger.warning("⚠️ Tiger account not configured; live trading unavailable")
 
     # ================================================================
-    # 订单执行
+    # Order execution
     # ================================================================
 
     def execute_signal(
@@ -47,38 +47,38 @@ class PaperExecutor:
         strategy: str = "ensemble",
     ) -> Optional[Dict]:
         """
-        根据信号执行交易
+        Execute a trade from a signal.
 
         Args:
-            ticker: 股票代码
+            ticker: Symbol
             decision: buy / sell / hold
-            strength: 信号强度 0~1
-            price: 当前价格
-            confidence: 置信度 0~1
-            strategy: 策略名称
+            strength: Signal strength 0~1
+            price: Current price
+            confidence: Confidence 0~1
+            strategy: Strategy name
 
         Returns:
             trade_record or None
         """
-        # Hold 信号不执行
+        # Hold signals are not executed
         if decision == "hold":
             return None
 
         side = decision  # buy or sell
 
-        # 坚决不使用杠杆 — 两层验证
+        # No leverage — two-layer verification
         if settings.TRADING_NO_LEVERAGE and side == "buy":
-            # 第1层：本地资金检查
+            # Layer 1: local cash check
             max_buy_value = self.portfolio.cash * settings.TRADING_MAX_CASH_USAGE
             estimated_value = self.portfolio.cash * min(strength, settings.TRADING_MAX_POSITION_SIZE)
             if estimated_value > max_buy_value:
                 logger.warning(
-                    f"🚫 无杠杆原则拒绝(本地): {ticker} buy | "
-                    f"预估金额 ${estimated_value:,.0f} > 可用 ${max_buy_value:,.0f}"
+                    f"🚫 No-leverage reject (local): {ticker} buy | "
+                    f"est. ${estimated_value:,.0f} > available ${max_buy_value:,.0f}"
                 )
                 return None
             
-            # 第2层：Tiger 实盘资金验证 — 确保老虎账户也无杠杆
+            # Layer 2: Tiger live cash check — ensure the Tiger account is also unlevered
             if self._tiger_account and tiger_client.is_connected():
                 try:
                     tiger_acct = tiger_client.get_account_info()
@@ -88,30 +88,30 @@ class PaperExecutor:
                         tiger_leverage = tiger_acct.get("leverage", 1.0)
                         tiger_mkt = tiger_acct.get("market_value", 0)
                         
-                        # 杠杆检测：leverage > 1.001 说明在借钱
+                        # Leverage probe: leverage > 1.001 means borrowed funds
                         if tiger_leverage > 1.001:
                             logger.warning(
-                                f"🚫 无杠杆原则拒绝(Tiger): {ticker} buy | "
-                                f"Tiger杠杆率 {tiger_leverage:.4f} > 1.0 | "
-                                f"必须先消除杠杆才能买入"
+                                f"🚫 No-leverage reject (Tiger): {ticker} buy | "
+                                f"Tiger leverage {tiger_leverage:.4f} > 1.0 | "
+                                f"Clear leverage before buying"
                             )
                             return None
                         
-                        # 买入金额不得超 Tiger 实际现金
+                        # Buy notional must not exceed Tiger cash
                         if estimated_value > tiger_cash * settings.TRADING_MAX_CASH_USAGE:
                             logger.warning(
-                                f"🚫 无杠杆原则拒绝(Tiger): {ticker} buy | "
-                                f"预估${estimated_value:,.0f} > Tiger现金${tiger_cash:,.0f}×{settings.TRADING_MAX_CASH_USAGE:.0%}"
+                                f"🚫 No-leverage reject (Tiger): {ticker} buy | "
+                                f"est. ${estimated_value:,.0f} > Tiger cash ${tiger_cash:,.0f}×{settings.TRADING_MAX_CASH_USAGE:.0%}"
                             )
                             return None
                 except Exception as e:
-                    logger.warning(f"⚠️ Tiger杠杆检查异常，采用本地保守策略: {e}")
+                    logger.warning(f"⚠️ Tiger leverage check failed; using conservative local policy: {e}")
 
-        # 置信度门槛
+        # Confidence threshold
         if confidence < settings.TRADING_MIN_CONFIDENCE:
             return None
 
-        # 1. 风控检查
+        # 1. Risk check
         if side == "buy":
             buy_strength = min(strength, settings.TRADING_MAX_POSITION_SIZE)
             estimated_value = self.portfolio.cash * buy_strength
@@ -121,12 +121,12 @@ class PaperExecutor:
         else:
             shares = self.portfolio.positions.get(ticker, 0.0)
             if shares < settings.TRADING_MIN_SHARES:
-                return None  # 无仓位不卖
+                return None  # No position to sell
             quantity = shares * strength
             if quantity < settings.TRADING_MIN_SHARES:
-                quantity = shares  # 少于最小量则全卖
+                quantity = shares  # Sell all if below the minimum size
             
-            # ★ 防空头：用 Tiger 实际持仓修正卖出数量
+            # Prevent shorts: cap sell qty to Tiger's actual position
             if self._tiger_account and tiger_client.is_connected():
                 try:
                     tiger_positions = tiger_client.get_positions()
@@ -135,72 +135,72 @@ class PaperExecutor:
                         tiger_shares = tiger_dict[ticker]["shares"]
                         if tiger_shares <= 0:
                             logger.warning(
-                                f"🚫 拒绝卖出: {ticker} | Tiger持仓 {tiger_shares:.2f} ≤ 0, "
-                                f"本地误以为有 {shares:.2f} 股 — 数据不同步！"
+                                f"🚫 Reject sell: {ticker} | Tiger position {tiger_shares:.2f} ≤ 0, "
+                                f"local thought it held {shares:.2f} shares — data out of sync"
                             )
                             return None
                         if quantity > tiger_shares:
                             old_qty = quantity
                             quantity = tiger_shares
                             logger.warning(
-                                f"⚠️ 卖出量修正: {ticker} | "
-                                f"本地 {shares:.2f}股 → Tiger实际 {tiger_shares:.2f}股 | "
-                                f"卖出量 {old_qty:.0f} → {quantity:.0f}"
+                                f"⚠️ Sell qty adjusted: {ticker} | "
+                                f"local {shares:.2f} sh → Tiger actual {tiger_shares:.2f} sh | "
+                                f"sell {old_qty:.0f} → {quantity:.0f}"
                             )
                     else:
-                        # Tiger 中没有该持仓
+                        # Ticker not in Tiger positions
                         logger.warning(
-                            f"🚫 拒绝卖出: {ticker} | "
-                            f"本地有 {shares:.2f} 股但 Tiger 无此持仓 — 数据不同步！"
+                            f"🚫 Reject sell: {ticker} | "
+                            f"local holds {shares:.2f} shares but Tiger has none — data out of sync"
                         )
                         return None
                 except Exception as e:
-                    logger.warning(f"⚠️ Tiger持仓验证异常: {e}")
+                    logger.warning(f"⚠️ Tiger position verification failed: {e}")
 
-        # 最小交易额检查
+        # Minimum notional check
         if quantity * price < settings.TRADING_MIN_TRADE_VALUE:
             return None
 
-        # 港股/新加坡股买入：整手对齐（卖出不限制整手）
+        # HK/SG buys: round to board lots (sells are not lot-constrained)
         is_hk = ticker.endswith(".HK") or (len(ticker) <= 5 and ticker.isdigit())
         is_sg = ticker.endswith(".SI")
         if side == "buy" and (is_hk or is_sg):
             lot = TigerClient.get_hk_lot_size(ticker)
             proposed_qty = int(quantity)
 
-            # 不够一手时：尝试按 1 手最低量买（不超过仓位上限）
+            # Below one lot: try buying exactly 1 lot (without exceeding position cap)
             if proposed_qty < lot:
                 min_qty = lot
                 min_value = min_qty * price
                 max_allowed = self.portfolio.cash * settings.TRADING_MAX_CASH_USAGE
                 if min_value <= max_allowed and min_value >= settings.TRADING_MIN_TRADE_VALUE:
                     quantity = float(min_qty)
-                    logger.info(f"📐 {ticker} 升档至 1 手: {proposed_qty} → {min_qty} 股 (${min_value:.0f})")
+                    logger.info(f"📐 {ticker} stepped up to 1 lot: {proposed_qty} → {min_qty} sh (${min_value:.0f})")
                 else:
-                    logger.debug(f"⏸ {ticker} 不足一手 (lot={lot}, need=${min_value:.0f}, avail=${max_allowed:.0f}), 跳过")
+                    logger.debug(f"⏸ {ticker} below 1 lot (lot={lot}, need=${min_value:.0f}, avail=${max_allowed:.0f}), skip")
                     return None
             else:
-                # 向下取整到整手
+                # Round down to a whole lot
                 round_qty = (proposed_qty // lot) * lot
                 if round_qty < lot:
-                    logger.debug(f"⏸ {ticker} 取整后不足一手 (lot={lot}), 跳过")
+                    logger.debug(f"⏸ {ticker} below 1 lot after rounding (lot={lot}), skip")
                     return None
                 if round_qty != proposed_qty:
-                    logger.info(f"📐 {ticker} 整手对齐: {proposed_qty} → {round_qty} 股")
+                    logger.info(f"📐 {ticker} lot-aligned: {proposed_qty} → {round_qty} sh")
                     quantity = float(round_qty)
-                # 整手对齐后重新检查交易额
+                # Re-check notional after lot alignment
                 if quantity * price < settings.TRADING_MIN_TRADE_VALUE:
-                    logger.debug(f"⏸ {ticker} 整手对齐后交易额不足: ${quantity * price:.0f}")
+                    logger.debug(f"⏸ {ticker} notional too small after lot alignment: ${quantity * price:.0f}")
                     return None
 
         report = self.risk_manager.check_order(ticker, side, quantity, price)
 
         if not report.passed:
-            logger.warning(f"🔴 风控拒绝: {ticker} {side} | {report.violations}")
+            logger.warning(f"🔴 Risk rejected: {ticker} {side} | {report.violations}")
             return None
 
-        # 2. 执行交易
-        # 优先：本地模拟撮合（保证交易逻辑正常运行）
+        # 2. Execute
+        # Prefer local simulated fill so trading logic always runs
         trade = self.portfolio.execute_trade(
             ticker=ticker,
             side=side,
@@ -213,7 +213,7 @@ class PaperExecutor:
             self.filled_orders.append(trade)
             self._emit_order_filled(trade)
             
-            # 同时发送到老虎实盘（如果已配置且连接）
+            # Also send to Tiger live if configured and connected
             use_tiger_now = bool(self._tiger_account and tiger_client.is_connected())
             if use_tiger_now:
                 try:
@@ -226,11 +226,11 @@ class PaperExecutor:
                         limit_price=price,
                     )
                     if order_result:
-                        logger.info(f"✅ 实盘下单成功: {ticker} {action} | 订单ID: {order_result.get('order_id')}")
+                        logger.info(f"✅ Live order placed: {ticker} {action} | order id: {order_result.get('order_id')}")
                     else:
-                        logger.warning(f"⚠️ 实盘下单返回空: {ticker} {action}")
+                        logger.warning(f"⚠️ Live order returned empty: {ticker} {action}")
                 except Exception as e:
-                    logger.error(f"❌ 老虎下单异常: {ticker} {action} | {e}")
+                    logger.error(f"❌ Tiger order error: {ticker} {action} | {e}")
             
             return trade
         
@@ -242,18 +242,18 @@ class PaperExecutor:
         prices: Dict[str, float],
     ) -> List[Dict]:
         """
-        批量执行多个信号
+        Execute a batch of signals.
 
         Args:
             signals: {ticker: {decision, strength, confidence}}
             prices: {ticker: price}
 
         Returns:
-            成交记录列表
+            Fill records
         """
         trades = []
 
-        # 按信号强度排序，优先执行高置信度信号
+        # Sort by signal strength; execute high-confidence names first
         sorted_signals = sorted(
             signals.items(),
             key=lambda x: (x[1].get("confidence") or 0) * abs(x[1].get("strength") or 0),
@@ -279,29 +279,29 @@ class PaperExecutor:
         return trades
 
     # ================================================================
-    # 回调
+    # Callbacks
     # ================================================================
 
     def on_order_filled(self, callback: Callable):
-        """注册成交回调"""
+        """Register a fill callback."""
         self._order_callbacks.append(callback)
 
     def _emit_order_filled(self, trade: Dict):
-        """触发成交回调"""
+        """Fire fill callbacks."""
         for cb in self._order_callbacks:
             try:
                 cb(trade)
             except Exception as e:
-                logger.error(f"❌ 回调错误: {e}")
+                logger.error(f"❌ Callback error: {e}")
 
     # ================================================================
-    # Tiger Brokers 适配（预留）
+    # Tiger Brokers adapter (reserved)
     # ================================================================
 
     def _tiger_place_order(self, ticker: str, side: str, quantity: float, price: float):
         """
-        老虎证券下单（预留）
-        切换到实盘时启用
+        Place a Tiger Brokers order (reserved).
+        Enable when switching to live trading.
         """
         # from tiger_open_python_sdk import TigerApiClient
         # client = TigerApiClient(settings.TIGER_ID, ...)
@@ -313,10 +313,10 @@ class PaperExecutor:
         #     order_type="LMT" if price else "MKT",
         #     limit_price=price,
         # )
-        raise NotImplementedError("Tiger Brokers 实盘待接入")
+        raise NotImplementedError("Tiger Brokers live trading is not wired yet")
 
     def get_execution_summary(self) -> Dict:
-        """获取执行摘要"""
+        """Return an execution summary."""
         return {
             "total_filled": len(self.filled_orders),
             "total_pending": len(self.pending_orders),

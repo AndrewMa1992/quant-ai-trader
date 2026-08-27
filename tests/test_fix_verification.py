@@ -24,7 +24,7 @@ class TestGATStubModelAttribute:
     """Verify that stub classes expose .model attribute to prevent AttributeError."""
 
     def test_stub_classes_have_model_attribute(self):
-        """Stub 类必须暴露 .model 属性，值为 None。"""
+        """Stub classes must expose a .model attribute whose value is None."""
         # Simulate torch unavailable → stub mode
         with patch("backend.ai_models._try_import", return_value={}):
             # Force re-init of module-level state
@@ -46,7 +46,7 @@ class TestGATStubModelAttribute:
             assert instance.model is None, "Stub instance .model should be None"
 
     def test_getattr_safe_access_on_stub(self):
-        """getattr(gat_network, 'model', None) 在 stub 模式下不应报错。"""
+        """getattr(gat_network, 'model', None) must not raise in stub mode."""
         with patch("backend.ai_models._try_import", return_value={}):
             import backend.ai_models as am
             am._registry = {}
@@ -59,7 +59,7 @@ class TestGATStubModelAttribute:
             assert result is None, "getattr with default should return None, not raise"
 
     def test_stub_get_cross_stock_signal_returns_dict(self):
-        """Stub 的 get_cross_stock_signal 应返回空字典（可安全 .get() 访问）。"""
+        """Stub get_cross_stock_signal should return an empty dict (safe to .get())."""
         with patch("backend.ai_models._try_import", return_value={}):
             import backend.ai_models as am
             am._registry = {}
@@ -72,7 +72,7 @@ class TestGATStubModelAttribute:
             assert result.get("strength", 0) == 0
 
     def test_stub_predict_signal_returns_dict(self):
-        """Stub 的 predict_signal 应返回空字典。"""
+        """Stub predict_signal should return an empty dict."""
         with patch("backend.ai_models._try_import", return_value={}):
             import backend.ai_models as am
             am._registry = {}
@@ -118,7 +118,7 @@ class TestFuseSignalsDefense:
         return strategy, ensemble, sentiment
 
     def test_fuse_signals_returns_none(self, mock_strategy_deps):
-        """fuse_signals 返回 None 时应优雅降级为 hold。"""
+        """When fuse_signals returns None, degrade gracefully to hold."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = None
 
@@ -141,7 +141,7 @@ class TestFuseSignalsDefense:
         assert isinstance(result["details"], dict)
 
     def test_fuse_signals_returns_empty_dict(self, mock_strategy_deps):
-        """fuse_signals 返回空字典时应返回默认 hold。"""
+        """When fuse_signals returns an empty dict, return the default hold."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = {}
 
@@ -158,7 +158,7 @@ class TestFuseSignalsDefense:
         assert result["confidence"] == 0.0
 
     def test_fuse_signals_returns_partial_dict(self, mock_strategy_deps):
-        """fuse_signals 返回只有部分字段的字典时应安全补全默认值。"""
+        """When fuse_signals returns a partial dict, fill missing keys with defaults."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = {"decision": "buy", "strength": 0.8}
 
@@ -178,7 +178,7 @@ class TestFuseSignalsDefense:
         assert result["ensemble_score"] == 0.0  # default
 
     def test_fuse_signals_returns_non_dict(self, mock_strategy_deps):
-        """fuse_signals 返回非字典类型应返回 hold 默认值。"""
+        """When fuse_signals returns a non-dict, return the default hold."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = "invalid_string"
 
@@ -194,7 +194,7 @@ class TestFuseSignalsDefense:
         assert result["strength"] == 0.0
 
     def test_fuse_signals_with_empty_list(self, mock_strategy_deps):
-        """fuse_signals 返回空列表应触发防御检查。"""
+        """When fuse_signals returns an empty list, the defensive check should fire."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = []
 
@@ -210,7 +210,7 @@ class TestFuseSignalsDefense:
         assert result["decision"] == "hold"
 
     def test_fuse_signals_returns_full_valid_dict(self, mock_strategy_deps):
-        """fuse_signals 返回完整有效字典应正确传递。"""
+        """When fuse_signals returns a complete valid dict, values should pass through."""
         strategy, ensemble, _ = mock_strategy_deps
         ensemble.fuse_signals.return_value = {
             "decision": "sell",
@@ -244,7 +244,7 @@ class TestExecutorSignalAccess:
     """Verify executor.py uses .get() with defaults for signal fields."""
 
     def test_execute_signal_batch_with_missing_keys(self):
-        """execute_signal_batch 应对缺失的 decision/strength/confidence 键安全降级。"""
+        """execute_signal_batch should degrade safely when decision/strength/confidence keys are missing."""
         from backend.trading_engine.executor import PaperExecutor
         from backend.trading_engine.portfolio import PortfolioManager
         from backend.trading_engine.risk_manager import RiskManager
@@ -273,7 +273,7 @@ class TestExecutorSignalAccess:
         # The key point is: no KeyError
 
     def test_execute_signal_batch_with_none_values(self):
-        """execute_signal_batch 应对 None 字段值安全降级。"""
+        """execute_signal_batch should degrade safely when field values are None."""
         from backend.trading_engine.executor import PaperExecutor
         from backend.trading_engine.portfolio import PortfolioManager
         from backend.trading_engine.risk_manager import RiskManager
@@ -310,7 +310,7 @@ class TestPushScriptTokenRemoval:
         "git_push.sh",
     ])
     def test_no_hardcoded_token(self, script_file):
-        """验证脚本中不存在硬编码 token。"""
+        """Verify the script contains no hardcoded token."""
         import re
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, script_file)
@@ -332,7 +332,7 @@ class TestPushScriptTokenRemoval:
         )
 
     def test_git_push_bat_no_token(self):
-        """验证 git_push.bat 中不存在硬编码 token（旧脚本但也检查）。"""
+        """Verify git_push.bat contains no hardcoded token (legacy script, still checked)."""
         import re
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "git_push.bat")
@@ -351,13 +351,13 @@ class TestDaemonForeverBatSyntax:
     """Verify daemon_forever.bat batch syntax correctness."""
 
     def test_file_exists(self):
-        """daemon_forever.bat 文件必须存在。"""
+        """daemon_forever.bat must exist."""
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "daemon_forever.bat")
         assert os.path.exists(filepath), "daemon_forever.bat must exist"
 
     def test_no_unmatched_labels(self):
-        """验证所有 goto 目标标签都存在。"""
+        """Verify all goto target labels exist."""
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "daemon_forever.bat")
         with open(filepath, "r", encoding="utf-8") as f:
@@ -395,7 +395,7 @@ class TestDaemonForeverBatSyntax:
             )
 
     def test_variables_defined_before_use(self):
-        """验证关键环境变量在使用前已定义。"""
+        """Verify key environment variables are defined before use."""
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "daemon_forever.bat")
         with open(filepath, "r", encoding="utf-8") as f:
@@ -417,7 +417,7 @@ class TestDaemonForeverBatSyntax:
             )
 
     def test_paren_balancing(self):
-        """检查括号大致平衡。"""
+        """Check that parentheses are roughly balanced."""
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "daemon_forever.bat")
         with open(filepath, "r", encoding="utf-8") as f:
@@ -439,14 +439,14 @@ class TestTigerSyncAllToDb:
     """Verify sync_all_to_db method exists and degrades gracefully."""
 
     def test_sync_all_to_db_method_exists(self):
-        """sync_all_to_db 方法必须存在于 TigerClient。"""
+        """sync_all_to_db must exist on TigerClient."""
         from backend.data_engine.tiger_client import TigerClient
         assert hasattr(TigerClient, "sync_all_to_db"), (
             "TigerClient must have sync_all_to_db method"
         )
 
     def test_sync_all_to_db_not_connected(self):
-        """sync_all_to_db 在未连接时返回 not_connected 错误。"""
+        """sync_all_to_db returns a not_connected error when disconnected."""
         from backend.data_engine.tiger_client import TigerClient
         client = TigerClient()
         client._connected = False
@@ -457,7 +457,7 @@ class TestTigerSyncAllToDb:
         assert result["error"] == "not_connected"
 
     def test_sync_all_to_db_returns_dict_on_failure(self):
-        """sync_all_to_db 在异常时应安全返回带 error 的字典，不抛异常。"""
+        """On exception, sync_all_to_db should safely return a dict with error and not raise."""
         from backend.data_engine.tiger_client import TigerClient
         client = TigerClient()
         client._connected = True
@@ -471,7 +471,7 @@ class TestTigerSyncAllToDb:
 
     @pytest.mark.skip(reason="auto_trader.py archived, replaced by trading_pipeline.py in v2.2")
     def test_auto_trader_calls_sync_all_to_db(self):
-        """验证 auto_trader.py 在 run_cycle 中调用 tiger_client.sync_all_to_db()。"""
+        """Verify auto_trader.py calls tiger_client.sync_all_to_db() in run_cycle."""
         proj_root = os.path.join(os.path.dirname(__file__), "..")
         filepath = os.path.join(proj_root, "auto_trader.py")
 
@@ -491,7 +491,7 @@ class TestStubModeEndToEnd:
     """End-to-end verification that stub mode works without crashes."""
 
     def test_ai_models_import_without_torch(self):
-        """即使 torch 不可用，import backend.ai_models 也不应报错。"""
+        """import backend.ai_models must not raise even if torch is unavailable."""
         # The module itself should import without torch
         import backend.ai_models as am
         assert am._STUB_MODE is True or am._STUB_MODE is False
@@ -503,7 +503,7 @@ class TestStubModeEndToEnd:
             assert am.gat_network is not None
 
     def test_all_stub_classes_have_required_attrs(self):
-        """所有 stub 类公开 API 属性应一致。"""
+        """All stub classes should expose a consistent public API."""
         import backend.ai_models as am
 
         # Force stub mode
@@ -548,7 +548,7 @@ class TestCrossStockSignalDefense:
     """Verify cross-stock signal access pattern works in both stub and real mode."""
 
     def test_getattr_gat_network_model_pattern(self):
-        """验证策略使用的 getattr(gat_network, 'model', None) 模式在 stub 模式安全。"""
+        """Verify the strategy getattr(gat_network, 'model', None) pattern is safe in stub mode."""
         import backend.ai_models as am
         original_registry = am._registry
         original_stub_mode = am._STUB_MODE

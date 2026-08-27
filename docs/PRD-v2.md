@@ -1,103 +1,103 @@
 # PRD: Quant AI Trader v2
 
-| 项目 | 内容 |
+| Item | Content |
 |------|------|
-| 产品 | quant-ai-trader v2 — 头部量化基金级 AI 交易系统 |
-| 版本 | v2.0 |
-| 状态 | 待评审 |
-| 语言 | 中文 |
-| 技术栈 | Python + FastAPI + Vue 3 + PyTorch + MLflow |
+| Product | quant-ai-trader v2 — institutional-grade AI trading system |
+| Version | v2.0 |
+| Status | Pending review |
+| Language | English |
+| Tech stack | Python + FastAPI + Vue 3 + PyTorch + MLflow |
 
 ---
 
-## 1. 项目信息
+## 1. Project Information
 
 - **Project Name**: `quant_ai_trader_v2`
 - **Programming Language**: Python 3.11+ (Backend) + TypeScript/Vue 3 (Frontend)
-- **原需求复述**: 按头部量化基金标准（Renaissance Technologies / Two Sigma / Citadel / D.E. Shaw 级别）重写整个量化交易系统，覆盖因子工程、AI/ML 引擎、风险模型、组合优化、回测引擎、执行系统、数据管线、基础设施八大模块。
+- **Requirement restatement**: Rebuild the entire quantitative trading system to the standard of leading quantitative funds (Renaissance Technologies / Two Sigma / Citadel / D.E. Shaw class), covering eight modules: factor engineering, AI/ML engine, risk model, portfolio optimization, backtest engine, execution system, data pipeline, and infrastructure.
 
 ---
 
-## 2. 产品定义
+## 2. Product Definition
 
-### 2.1 产品目标
+### 2.1 Product Goals
 
-1. **机构级因子研究平台**：提供 100+ 因子的系统性研究框架，支持因子 IC/IR 分析、相关性矩阵、衰减曲线、自动化挖掘和中性化，使因子研究的效率与深度达到专业量化团队水平。
-2. **多模型 AI 预测引擎**：集成 GBDT、深度学习、强化学习、市场状态识别四类模型，通过动态贝叶斯加权实现自适应信号融合，支持 GPU 加速训练与分布式超参优化。
-3. **端到端生产级交易管线**：从数据采集 → 因子计算 → 模型预测 → 风险预算 → 组合优化 → 订单执行 → 绩效归因，全链路可审计、可复现、可独立部署。
+1. **Institutional-grade factor research platform**: Provide a systematic research framework for 100+ factors, supporting factor IC/IR analysis, correlation matrices, decay curves, automated discovery, and neutralization, so that factor-research efficiency and depth reach professional quant-team standards.
+2. **Multi-model AI prediction engine**: Integrate four model families — GBDT, deep learning, reinforcement learning, and market-regime identification — with dynamic Bayesian weighting for adaptive signal fusion, plus GPU-accelerated training and distributed hyperparameter optimization.
+3. **End-to-end production trading pipeline**: From data collection -> factor computation -> model prediction -> risk budgeting -> portfolio optimization -> order execution -> performance attribution, with the full chain auditable, reproducible, and independently deployable.
 
-### 2.2 用户故事
+### 2.2 User Stories
 
-| # | 角色 | 需求 | 价值 |
+| # | Role | Need | Value |
 |---|------|------|------|
-| US-1 | 量化研究员 | 我希望在一个统一平台上进行因子研究：批量计算 100+ 因子、查看 IC 衰减曲线和因子相关性热力图，以便快速筛选出有效的 Alpha 因子 | 将因子研究效率从手工 Excel 提升到系统化平台 |
-| US-2 | 策略开发者 | 我希望一键启动多模型（XGBoost/LightGBM/Transformer/TFT）训练 + Optuna 超参搜索 + Walk-Forward 回测验证，并自动输出完整的绩效报告 | 策略迭代周期从天级缩短到小时级 |
-| US-3 | 风控经理 | 我希望实时查看组合的 Barra 风格因子暴露、VaR/CVaR/Expected Shortfall、各行业集中度，并在风险超标时收到即时告警 | 风险监控从事后检查变为事前预警 |
-| US-4 | 交易员 | 我希望组合优化器自动根据我的约束条件（个股权重上限、行业集中度、换手率限制）计算最优持仓权重，并通过 TWAP/VWAP 算法自动执行订单切片 | 执行质量从手动分散到算法自动优化 |
-| US-5 | 系统运维 | 我希望各模块（数据/训练/推理/执行）独立部署和监控，模型版本通过 MLflow 管理，异常通过 Slack/企业微信即时推送 | 系统可用性从个人脚本到生产级服务 |
+| US-1 | Quant researcher | I want a unified platform for factor research: batch-compute 100+ factors, view IC decay curves and factor-correlation heatmaps, so I can quickly screen effective alpha factors | Raise factor-research efficiency from manual Excel to a systematic platform |
+| US-2 | Strategy developer | I want one-click multi-model (XGBoost / LightGBM / Transformer / TFT) training + Optuna hyperparameter search + walk-forward backtest validation, with a complete performance report produced automatically | Shorten the strategy iteration cycle from days to hours |
+| US-3 | Risk manager | I want real-time Barra style-factor exposures, VaR / CVaR / Expected Shortfall, and sector concentrations, with immediate alerts when risk limits are breached | Move risk monitoring from after-the-fact inspection to ex-ante warning |
+| US-4 | Trader | I want the portfolio optimizer to compute optimal holdings from my constraints (single-name weight caps, sector concentration, turnover limits) and automatically slice orders via TWAP / VWAP | Raise execution quality from manual dispersion to algorithmic optimization |
+| US-5 | Site reliability / ops | I want each module (data / training / inference / execution) independently deployed and monitored, model versions managed in MLflow, and anomalies pushed immediately via Slack / WeChat Work | Raise availability from personal scripts to production-grade services |
 
 ---
 
-## 3. 技术规范
+## 3. Technical Specification
 
-### 3.1 需求池（Requirements Pool）
+### 3.1 Requirements Pool
 
-#### P0 — 核心能力（必须实现，否则 v2 不成立）
+#### P0 — Core capabilities (must ship; otherwise v2 is not viable)
 
-| ID | 模块 | 需求描述 | 验收标准 |
+| ID | Module | Requirement | Acceptance criteria |
 |----|------|----------|----------|
-| P0-1 | 数据管线 | 多源数据融合：yfinance + Tiger API + EODHD + FRED（宏观），覆盖 US(500+)、HK(200+)、SG(30+)、AU(50+)、NZ(20+) 五市场 | 日频数据覆盖 ≥800 只标的，分钟级数据覆盖 ≥500 只；数据质量检查自动标记缺失/异常 |
-| P0-2 | 数据管线 | 实时数据流 + 历史数据存储：WebSocket 推送实时行情到 Redis Stream，历史 OHLCV 存 Parquet + SQLite 元数据索引 | 延迟 < 500ms；历史数据查询 < 2 秒 |
-| P0-3 | 因子工程 | 因子计算框架：技术因子(50+)、基本面因子(30+)、另类因子(20+)、微观结构因子(10+)，统一 Factor 基类，支持向量化批量计算 | 单日全市场因子计算 < 30 秒 |
-| P0-4 | 因子工程 | 因子评估体系：IC 均值/标准差/IR、因子相关性矩阵、因子衰减曲线、分层回测（分位数组合收益）、Fama-MacBeth 回归 | 每个因子自动生成评估报告 |
-| P0-5 | AI 引擎 | GBDT 模型：XGBoost/LightGBM/CatBoost 三选一，支持 GPU 加速，输出特征重要性 + SHAP 解释 | AUC > 0.55（日频方向预测） |
-| P0-6 | AI 引擎 | 深度学习模型：Transformer (d_model ≥ 512) + TCN + TFT (Temporal Fusion Transformer)，支持多步预测 | 至少一个 DL 模型 Sharpe > 1.0（回测） |
-| P0-7 | AI 引擎 | Walk-Forward 训练框架：滚动窗口训练/验证，避免前视偏差；支持时间序列交叉验证 | 训练验证严格按时间顺序，禁止未来信息泄露 |
-| P0-8 | 风险模型 | Barra 多因子风险模型：实现 USE4/CNE5 风格的风格因子暴露计算、因子协方差矩阵、特异性风险估计 | 因子暴露覆盖：Beta/Size/Value/Momentum/Quality/Volatility/Growth/Leverage/Liquidity |
-| P0-9 | 风险模型 | 协方差矩阵估计：Ledoit-Wolf Shrinkage + 指数加权衰减（半衰期 60 天） | 矩阵条件数 < 1e6（确保数值稳定） |
-| P0-10 | 风险模型 | VaR/CVaR/Expected Shortfall 实时计算：参数法 + 历史模拟法 + Monte Carlo，三种方法交叉验证 | 95%/99% 置信度，日频更新 |
-| P0-11 | 组合优化 | Mean-Variance Optimization (Markowitz)：基于估计的收益向量和协方差矩阵，最大化 Sharpe | 优化求解 < 5 秒（≤500 只标的） |
-| P0-12 | 组合优化 | Black-Litterman 模型：将模型信号作为主观观点（views）融入先验均衡收益，生成后验最优权重 | 支持绝对观点 + 相对观点 |
-| P0-13 | 组合优化 | 约束系统：个股权重上限、行业集中度、换手率上限、现金下限、做空限制、Beta 中性可选 | 所有约束同时满足，无约束违反 |
-| P0-14 | 回测引擎 | 事件驱动回测：分钟级精度，支持市场事件/信号事件/交易事件三类事件队列 | 1 年回测 < 10 分钟（500 只标的） |
-| P0-15 | 回测引擎 | 撮合模型：滑点模型（Almgren-Chriss 类）、冲击成本、限价单/市价单模拟 | 滑点估计误差 < 20% |
-| P0-16 | 执行系统 | TWAP/VWAP/POV 订单切片算法 | 日均滑点 < 5bp |
-| P0-17 | 执行系统 | 实时盈亏跟踪 + 熔断机制（日亏损 > 5% 暂停交易） | 熔断触发到停止执行 < 1 秒 |
-| P0-18 | 基础设施 | 模块化架构：数据服务 / 因子计算 / 模型训练 / 模型推理 / 组合优化 / 订单执行 六个独立服务 | 各服务可通过 Docker Compose 独立部署 |
+| P0-1 | Data pipeline | Multi-source fusion: yfinance + Tiger API + EODHD + FRED (macro), covering five markets: US (500+), HK (200+), SG (30+), AU (50+), NZ (20+) | Daily data coverage >= 800 names; minute-level coverage >= 500 names; data-quality checks automatically flag missing / anomalous values |
+| P0-2 | Data pipeline | Real-time stream + historical storage: WebSocket pushes live quotes into Redis Stream; historical OHLCV in Parquet + SQLite metadata index | Latency < 500 ms; historical queries < 2 seconds |
+| P0-3 | Factor engineering | Factor computation framework: technical (50+), fundamental (30+), alternative (20+), microstructure (10+); unified Factor base class; vectorized batch computation | Full-universe daily factor computation < 30 seconds |
+| P0-4 | Factor engineering | Factor evaluation: IC mean / std / IR, factor correlation matrix, factor decay curves, stratified backtests (quantile-portfolio returns), Fama-MacBeth regression | Each factor automatically produces an evaluation report |
+| P0-5 | AI engine | GBDT models: one of XGBoost / LightGBM / CatBoost, GPU-accelerated, outputting feature importance + SHAP explanations | AUC > 0.55 (daily directional prediction) |
+| P0-6 | AI engine | Deep-learning models: Transformer (d_model >= 512) + TCN + TFT (Temporal Fusion Transformer), supporting multi-step forecasts | At least one DL model with Sharpe > 1.0 (backtest) |
+| P0-7 | AI engine | Walk-forward training: rolling train / validation windows to avoid look-ahead bias; time-series cross-validation | Train and validation strictly chronological; no future-information leakage |
+| P0-8 | Risk model | Barra multi-factor risk model: USE4 / CNE5-style style-factor exposures, factor covariance matrix, specific-risk estimation | Factor exposures cover: Beta / Size / Value / Momentum / Quality / Volatility / Growth / Leverage / Liquidity |
+| P0-9 | Risk model | Covariance estimation: Ledoit-Wolf shrinkage + exponentially weighted decay (60-day half-life) | Matrix condition number < 1e6 (numerical stability) |
+| P0-10 | Risk model | Real-time VaR / CVaR / Expected Shortfall: parametric + historical simulation + Monte Carlo, cross-validated | 95% / 99% confidence, daily refresh |
+| P0-11 | Portfolio optimization | Mean-Variance Optimization (Markowitz): maximize Sharpe from estimated return vector and covariance | Solver < 5 seconds (<= 500 names) |
+| P0-12 | Portfolio optimization | Black-Litterman: fold model signals in as subjective views on prior equilibrium returns to produce posterior optimal weights | Support absolute views + relative views |
+| P0-13 | Portfolio optimization | Constraint system: single-name weight caps, sector concentration, turnover caps, cash floor, short-sale limits, optional beta-neutrality | All constraints satisfied simultaneously; no violations |
+| P0-14 | Backtest engine | Event-driven backtest: minute-level precision; three event queues (market / signal / trade) | 1-year backtest < 10 minutes (500 names) |
+| P0-15 | Backtest engine | Matching model: slippage (Almgren-Chriss class), impact cost, limit / market order simulation | Slippage estimate error < 20% |
+| P0-16 | Execution | TWAP / VWAP / POV order-slicing algorithms | Average daily slippage < 5 bp |
+| P0-17 | Execution | Real-time P&L tracking + circuit breaker (halt trading if daily loss > 5%) | Circuit-breaker trigger to execution halt < 1 second |
+| P0-18 | Infrastructure | Modular architecture: six independent services — data, factor compute, model training, model inference, portfolio optimization, order execution | Each service independently deployable via Docker Compose |
 
-#### P1 — 重要能力（显著提升性能/体验）
+#### P1 — Important capabilities (materially improve performance / experience)
 
-| ID | 模块 | 需求描述 | 验收标准 |
+| ID | Module | Requirement | Acceptance criteria |
 |----|------|----------|----------|
-| P1-1 | 因子工程 | 自动化因子挖掘：遗传编程（gplearn）+ 符号回归，每周生成候选因子池 | 每周产出 ≥100 个候选因子，自动过滤 IC < 0.02 的因子 |
-| P1-2 | 因子工程 | 因子中性化：行业中性化（虚拟变量回归）+ 市值中性化 + 风格中性化 | 中性化后因子与市值/行业的相关性 < 0.05 |
-| P1-3 | AI 引擎 | 市场状态识别：HMM 隐状态分类（牛市/熊市/震荡/高波动）+ GARCH 波动率预测 | 状态分类准确率 ≥ 70% |
-| P1-4 | AI 引擎 | 动态模型权重：基于近期表现的贝叶斯加权（滚动 60 天 Sharpe/IC 加权） | 动态加权后 Sharpe 比固定加权提升 ≥ 0.1 |
-| P1-5 | AI 引擎 | 分布式超参搜索：Optuna + 多 GPU 并行，支持 ≥100 轮自动搜索 | 超参搜索时间 ≤ 4 小时（单模型） |
-| P1-6 | AI 引擎 | 强化学习引擎：PPO + SAC 双算法，奖励函数为 Risk-Adjusted Return | RL 策略 Sharpe ≥ 1.0（回测） |
-| P1-7 | 风险模型 | 压力测试 & 场景分析：历史极端行情重放（2008/2020/2022）+ 自定义场景 | 至少 5 个预置历史场景 |
-| P1-8 | 组合优化 | 风险平价 (Risk Parity) + 最大分散度 (Maximum Diversification) 作为备选目标函数 | 优化求解 < 5 秒 |
-| P1-9 | 回测引擎 | Performance Attribution：Brinson 归因 + 因子归因，区分 Alpha 收益和 Beta 收益 | 归因报告自动生成 |
-| P1-10 | 执行系统 | 老虎证券 OpenAPI 实盘对接：支持 US/HK 双市场下单、持仓查询、订单状态同步 | 订单确认延迟 < 3 秒 |
-| P1-11 | 基础设施 | MLflow 模型版本管理 + 实验追踪 | 每次训练自动记录参数/指标/模型文件 |
-| P1-12 | 基础设施 | 告警系统：Slack + 企业微信 + 邮件三通道，支持自定义告警规则 | 告警延迟 < 30 秒 |
+| P1-1 | Factor engineering | Automated factor discovery: genetic programming (gplearn) + symbolic regression; weekly candidate factor pool | >= 100 candidate factors per week; automatically drop factors with IC < 0.02 |
+| P1-2 | Factor engineering | Factor neutralization: industry neutralization (dummy-variable regression) + size neutralization + style neutralization | After neutralization, factor correlation with size / industry < 0.05 |
+| P1-3 | AI engine | Market-regime identification: HMM hidden-state classification (bull / bear / range / high-vol) + GARCH volatility forecasts | Regime classification accuracy >= 70% |
+| P1-4 | AI engine | Dynamic model weights: Bayesian weighting from recent performance (rolling 60-day Sharpe / IC) | Dynamic weighting Sharpe improvement >= 0.1 vs. fixed weights |
+| P1-5 | AI engine | Distributed hyperparameter search: Optuna + multi-GPU parallelism, supporting >= 100 automatic trials | Hyperparameter search time <= 4 hours (single model) |
+| P1-6 | AI engine | Reinforcement-learning engine: PPO + SAC, reward = risk-adjusted return | RL strategy Sharpe >= 1.0 (backtest) |
+| P1-7 | Risk model | Stress testing and scenario analysis: replay of historical extremes (2008 / 2020 / 2022) + custom scenarios | At least 5 preset historical scenarios |
+| P1-8 | Portfolio optimization | Risk Parity + Maximum Diversification as alternative objective functions | Solver < 5 seconds |
+| P1-9 | Backtest engine | Performance attribution: Brinson + factor attribution, separating alpha vs. beta returns | Attribution report generated automatically |
+| P1-10 | Execution | Tiger Brokers OpenAPI live integration: US / HK dual-market order placement, position query, order-status sync | Order-ack latency < 3 seconds |
+| P1-11 | Infrastructure | MLflow model versioning + experiment tracking | Every training run automatically records params / metrics / model artifacts |
+| P1-12 | Infrastructure | Alerting: Slack + WeChat Work + email, with custom alert rules | Alert latency < 30 seconds |
 
-#### P2 — 增强能力（锦上添花）
+#### P2 — Enhancement capabilities (nice-to-have)
 
-| ID | 模块 | 需求描述 |
+| ID | Module | Requirement |
 |----|------|----------|
-| P2-1 | 因子工程 | 因子时效性监控：自动检测因子 IC 衰减，当 IC 低于阈值时标记"失效"并建议替换 |
-| P2-2 | AI 引擎 | 集成 TabNet / N-BEATS / Autoformer 作为备选模型 |
-| P2-3 | 风险模型 | 风险归因：将组合风险分解为因子风险 + 特异性风险 + 交互项 |
-| P2-4 | 组合优化 | 考虑交易成本的最优执行：将冲击成本模型嵌入优化目标 |
-| P2-5 | 回测引擎 | 多资产回测：同时回测股票 + ETF + 期货 |
-| P2-6 | 执行系统 | 智能路由：基于流动性/价差选择最优做市商 |
-| P2-7 | 数据管线 | 另类数据接入：SEC 文件情绪分析、Reddit/Twitter 舆情、供应链数据 |
-| P2-8 | 基础设施 | Kubernetes 部署 + Prometheus/Grafana 监控面板 |
-| P2-9 | 前端 | Vue 3 仪表盘 v2：因子分析面板、组合优化面板、实时风险仪表盘、回测报告面板 |
-| P2-10 | 前端 | 移动端适配：微信小程序或 PWA，支持查看实时盈亏和告警 |
+| P2-1 | Factor engineering | Factor freshness monitoring: automatically detect IC decay; mark a factor "expired" and recommend replacement when IC falls below a threshold |
+| P2-2 | AI engine | Integrate TabNet / N-BEATS / Autoformer as alternative models |
+| P2-3 | Risk model | Risk attribution: decompose portfolio risk into factor risk + specific risk + interaction terms |
+| P2-4 | Portfolio optimization | Transaction-cost-aware optimal execution: embed the impact-cost model in the objective |
+| P2-5 | Backtest engine | Multi-asset backtests: equities + ETFs + futures in the same run |
+| P2-6 | Execution | Smart routing: choose the best market maker by liquidity / spread |
+| P2-7 | Data pipeline | Alternative-data ingest: SEC filing sentiment, Reddit / Twitter sentiment, supply-chain data |
+| P2-8 | Infrastructure | Kubernetes deployment + Prometheus / Grafana monitoring dashboards |
+| P2-9 | Frontend | Vue 3 dashboard v2: factor-analysis panel, portfolio-optimization panel, live risk dashboard, backtest-report panel |
+| P2-10 | Frontend | Mobile: WeChat mini-program or PWA for live P&L and alerts |
 
-### 3.2 系统架构图
+### 3.2 System Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -114,109 +114,109 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 数据流
+### 3.3 Data Flow
 
 ```
-T+0 盘前:
-  数据采集 → 因子计算 → 模型推理 → 信号生成
+T+0 pre-market:
+  Data collection -> factor computation -> model inference -> signal generation
 
-T+0 盘前 (接上):
-  信号 → Black-Litterman 观点 → 风险模型 (协方差矩阵) → 组合优化 → 目标持仓
+T+0 pre-market (continued):
+  Signals -> Black-Litterman views -> risk model (covariance matrix) -> portfolio optimization -> target holdings
 
-T+0 盘中:
-  实时行情 → 订单切片 (TWAP/VWAP) → 执行 → 盈亏监控 → 熔断检测
+T+0 regular session:
+  Live quotes -> order slicing (TWAP/VWAP) -> execution -> P&L monitoring -> circuit-breaker checks
 
-T+0 盘后:
-  收盘数据 → 信号评估 → 绩效归因 → 模型重训决策
+T+0 post-market:
+  Close data -> signal evaluation -> performance attribution -> model-retrain decision
 
-周期性:
-  每周: 因子 IC 评估 + 自动化因子挖掘
-  每月: Walk-Forward 重训 + 模型版本发布
+Periodic:
+  Weekly: factor IC evaluation + automated factor discovery
+  Monthly: walk-forward retrain + model-version release
 ```
 
-### 3.4 UI 设计稿
+### 3.4 UI Mockups
 
-#### 主仪表盘布局
+#### Main dashboard layout
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Quant AI Trader v2                                    [设置] [告警] │
+│  Quant AI Trader v2                                 [Settings] [Alerts] │
 ├──────────────────────────────────────────────────────────────────────┤
-│  账户: 20874631  │  总资产: $1,247,532  │  日收益: +0.83%  │ 风险: 低 │
+│  Account: 20874631  │  AUM: $1,247,532  │  Daily P&L: +0.83%  │  Risk: Low │
 ├────────────┬────────────┬────────────┬────────────┬──────────────────┤
-│  因子面板   │  模型面板   │  风险面板   │  组合面板   │  执行面板        │
-│  (Tab切换)  │  (Tab切换)  │  (Tab切换)  │  (Tab切换)  │  (Tab切换)       │
+│  Factors   │  Models    │  Risk      │  Portfolio │  Execution       │
+│  (Tab)     │  (Tab)     │  (Tab)     │  (Tab)     │  (Tab)           │
 ├────────────┴────────────┴────────────┴────────────┴──────────────────┤
 │                                                                       │
-│  ┌─ 因子研究 (默认展示) ──────────────────────────────────────────┐  │
-│  │ 因子搜索: [____________]  类型: [技术▼]  排序: [IC▼]           │  │
+│  ┌─ Factor Research (default) ─────────────────────────────────────┐  │
+│  │ Factor search: [____________]  Type: [Technical▼]  Sort: [IC▼]  │  │
 │  │ ┌───────────┬────────┬────────┬────────┬────────┬────────┐     │  │
-│  │ │ 因子名称   │ IC均值  │ IC IR  │ 最近IC │ 衰减H-L│ 状态   │     │  │
+│  │ │ Factor    │ IC mean│ IC IR  │ Latest │ Decay  │ Status │     │  │
 │  │ ├───────────┼────────┼────────┼────────┼────────┼────────┤     │  │
-│  │ │ mom_21d   │  0.042 │  0.68  │  0.051 │  15d   │ 🟢活跃 │     │  │
-│  │ │ vol_ratio │ -0.038 │ -0.52  │ -0.029 │  12d   │ 🟡衰减 │     │  │
+│  │ │ mom_21d   │  0.042 │  0.68  │  0.051 │  15d   │ Active │     │  │
+│  │ │ vol_ratio │ -0.038 │ -0.52  │ -0.029 │  12d   │ Decay  │     │  │
 │  │ │ ...       │        │        │        │        │        │     │  │
 │  │ └───────────┴────────┴────────┴────────┴────────┴────────┘     │  │
-│  │                                                      共 112 因子 │  │
-│  │ [IC 热力图]  [因子相关性]  [衰减曲线]  [分层回测]  [自动化挖掘] │  │
+│  │                                                    112 factors │  │
+│  │ [IC heatmap] [Factor corr] [Decay curve] [Strat. BT] [Auto mine]│  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                       │
-│  ┌─ 组合持仓建议 ──────────────────────────────────────────────────┐  │
-│  │ 优化目标: [Max Sharpe ▼]  约束: 个股权重≤15% 换手≤30%           │  │
+│  ┌─ Suggested holdings ────────────────────────────────────────────┐  │
+│  │ Objective: [Max Sharpe ▼]  Constraints: name<=15% turnover<=30% │  │
 │  │ ┌─────────┬────────┬────────┬────────┬────────┐                 │  │
-│  │ │ 标的     │ 当前%  │ 目标%  │ 差额%   │ 操作   │                 │  │
+│  │ │ Ticker  │ Curr % │ Target%│ Delta %│ Action │                 │  │
 │  │ ├─────────┼────────┼────────┼────────┼────────┤                 │  │
-│  │ │ AAPL    │  12.3  │  10.5  │ -1.8   │ 减仓   │                 │  │
-│  │ │ NVDA    │   8.2  │  12.1  │ +3.9   │ 加仓   │                 │  │
+│  │ │ AAPL    │  12.3  │  10.5  │ -1.8   │ Reduce │                 │  │
+│  │ │ NVDA    │   8.2  │  12.1  │ +3.9   │ Add    │                 │  │
 │  │ │ ...     │        │        │        │        │                 │  │
 │  │ └─────────┴────────┴────────┴────────┴────────┘                 │  │
-│  │                                                 [执行再平衡]    │  │
+│  │                                                 [Rebalance]     │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 关键页面
+#### Key pages
 
-| 页面 | 核心功能 |
+| Page | Core functions |
 |------|----------|
-| **因子研究** | 因子列表（可排序/可筛选）、单因子 IC 分析图、因子相关性热力图、因子衰减曲线、分层回测收益图、自动化因子挖掘进度 |
-| **模型中心** | 各模型训练状态、最新评估指标、SHAP 特征重要性图、预测 vs 实际散点图、模型版本管理 |
-| **风险仪表盘** | Barra 因子暴露雷达图、VaR 实时仪表、行业集中度饼图、压力测试结果表、风险预算使用率 |
-| **组合优化** | 有效前沿可视化、当前持仓 vs 最优持仓对比、约束面板、优化历史记录 |
-| **回测分析** | 净值曲线图、月度收益热力图、滚动 Sharpe、最大回撤标注、Brinson 归因瀑布图 |
-| **执行监控** | 订单切片进度、实时滑点 vs 预期、今日成交汇总、熔断状态指示 |
+| **Factor research** | Sortable / filterable factor list, single-factor IC charts, factor-correlation heatmap, factor decay curve, stratified backtest returns, automated factor-discovery progress |
+| **Model center** | Per-model training status, latest evaluation metrics, SHAP feature-importance charts, predicted vs. actual scatter, model versioning |
+| **Risk dashboard** | Barra factor-exposure radar, live VaR gauge, sector-concentration pie, stress-test results table, risk-budget utilization |
+| **Portfolio optimization** | Efficient-frontier visualization, current vs. optimal holdings, constraint panel, optimization history |
+| **Backtest analysis** | NAV curve, monthly-return heatmap, rolling Sharpe, max-drawdown annotations, Brinson attribution waterfall |
+| **Execution monitor** | Order-slice progress, live vs. expected slippage, today's fills, circuit-breaker status |
 
-### 3.5 待确认问题
+### 3.5 Open Questions
 
-| # | 问题 | 建议决策 |
+| # | Question | Recommended decision |
 |---|------|----------|
-| Q1 | **GPU 资源**：当前开发环境是否有 GPU？若无，深度学习模块是否可先 CPU 训练（小参数版），后续生产环境再迁移 GPU？ | 建议：先用小参数 CPU 训练验证管线，生产环境通过 `device` 配置切换 GPU |
-| Q2 | **数据源优先级**：yfinance 有速率限制，Tiger API 需付费。是否考虑使用 EODHD（~$30/月）作为主数据源，yfinance 作备份？ | 建议：P0 阶段 yfinance + Tiger API 双源，P1 评估 EODHD 性价比后决定 |
-| Q3 | **老虎 API 账户限制**：当前账户 20874631 的 API 权限是否支持程序化下单？是否需要先通过 Paper Trading 验证？ | 建议：P0 全部用 Paper Trading / 回测模式验证，实盘对接放在 P1 |
-| Q4 | **因子数量目标**：P0 达到 50+ 还是 100+？100+ 因子对数据质量和计算资源要求更高。 | 建议：P0 先实现 50+ 核心因子（技术 20 + 基本面 15 + 另类 10 + 微观结构 5），P1 扩展到 100+ |
-| Q5 | **组合优化求解器**：使用 cvxpy（免费）还是商业求解器（CPLEX/Gurobi）？cvxpy 对 500 只标的可能较慢。 | 建议：P0 使用 cvxpy + OSQP 求解器（开源且足够快），P2 评估商业求解器 |
-| Q6 | **数据库选型**：当前使用 SQLite，v2 需支持更大规模。PostgreSQL 还是 TimescaleDB？ | 建议：历史行情用 Parquet 文件（列存压缩），元数据/订单/持仓用 PostgreSQL |
-| Q7 | **前端框架**：延续 Vue 3 + Vite + ECharts，还是考虑迁移到 React？ | 建议：延续 Vue 3（现有代码可复用部分），图表升级到 ECharts 5 + 新增 Plotly.js 用于统计图 |
-| Q8 | **部署方式**：单机 Docker Compose 还是 K8s 集群？ | 建议：P0 单机 Docker Compose，P2 K8s |
-| Q9 | **回测精度**：日频回测还是分钟级回测？分钟级对数据量和计算资源要求高得多。 | 建议：P0 日频回测（快速迭代），P1 分钟级回测（精度验证） |
-| Q10 | **代码结构**：在现有仓库重构还是新建独立仓库？ | 建议：新建 `quant-ai-trader-v2` 独立仓库，保留 v1 作为参考；v2 稳定后归档 v1 |
+| Q1 | **GPU resources**: Does the current development environment have a GPU? If not, can deep-learning modules train on CPU first (small-parameter variant) and migrate to GPU in production? | Start with small-parameter CPU training to validate the pipeline; switch via a `device` config in production |
+| Q2 | **Data-source priority**: yfinance has rate limits; Tiger API is paid. Should EODHD (~$30/month) be the primary source, with yfinance as backup? | P0: dual source yfinance + Tiger API; P1: evaluate EODHD cost-effectiveness |
+| Q3 | **Tiger API account limits**: Does account 20874631 have programmatic order permission? Should Paper Trading be used first? | P0: validate everything in Paper Trading / backtest mode; live connectivity in P1 |
+| Q4 | **Factor-count target**: Is P0 50+ or 100+? 100+ factors demand more data quality and compute. | P0: 50+ core factors first (technical 20 + fundamental 15 + alternative 10 + microstructure 5); P1: expand to 100+ |
+| Q5 | **Portfolio optimizer solver**: cvxpy (free) vs. commercial (CPLEX / Gurobi)? cvxpy may be slow at 500 names. | P0: cvxpy + OSQP (open-source and fast enough); P2: evaluate commercial solvers |
+| Q6 | **Database choice**: Currently SQLite; v2 needs larger scale. PostgreSQL or TimescaleDB? | Historical quotes in Parquet (columnar compression); metadata / orders / positions in PostgreSQL |
+| Q7 | **Frontend framework**: Stay on Vue 3 + Vite + ECharts, or migrate to React? | Stay on Vue 3 (partial reuse of existing code); upgrade charts to ECharts 5 and add Plotly.js for statistical plots |
+| Q8 | **Deployment**: Single-host Docker Compose or Kubernetes cluster? | P0: single-host Docker Compose; P2: Kubernetes |
+| Q9 | **Backtest granularity**: Daily or minute-level? Minute-level is far more demanding on data volume and compute. | P0: daily backtests (fast iteration); P1: minute-level (precision validation) |
+| Q10 | **Code structure**: Refactor the existing repo or create a new one? | Create a new `quant-ai-trader-v2` repo; keep v1 as reference; archive v1 after v2 is stable |
 
 ---
 
-## 4. 里程碑建议
+## 4. Suggested Milestones
 
-| 阶段 | 周期 | 交付物 |
+| Phase | Duration | Deliverables |
 |------|------|--------|
-| **M1: 数据+因子基础** | 2 周 | 多市场数据管线、50+ 因子计算框架、因子评估报告 |
-| **M2: AI 引擎** | 3 周 | GBDT + Transformer + TFT 训练管线、Walk-Forward 验证、MLflow 集成 |
-| **M3: 风险+组合** | 2 周 | Barra 风险模型、协方差估计、Markowitz/BL 优化、约束系统 |
-| **M4: 回测+执行** | 2 周 | 事件驱动回测、滑点模型、TWAP/VWAP 执行、老虎 API 对接 |
-| **M5: 前端+集成** | 2 周 | Vue 3 仪表盘 v2、系统集成测试、端到端验证 |
-| **M6: 上线+监控** | 1 周 | Docker 部署、告警系统、文档完善 |
+| **M1: Data + factor foundation** | 2 weeks | Multi-market data pipeline, 50+ factor computation framework, factor evaluation reports |
+| **M2: AI engine** | 3 weeks | GBDT + Transformer + TFT training pipeline, walk-forward validation, MLflow integration |
+| **M3: Risk + portfolio** | 2 weeks | Barra risk model, covariance estimation, Markowitz / BL optimization, constraint system |
+| **M4: Backtest + execution** | 2 weeks | Event-driven backtest, slippage model, TWAP / VWAP execution, Tiger API integration |
+| **M5: Frontend + integration** | 2 weeks | Vue 3 dashboard v2, system integration tests, end-to-end validation |
+| **M6: Launch + monitoring** | 1 week | Docker deployment, alerting, documentation |
 
-> **总计：约 12 周（3 个月），2-3 人团队**
+> **Total: ~12 weeks (3 months), 2–3 person team**
 
 ---
 
-*文档版本: v1.0 | 作者: Alice (Product Manager) | 日期: 2025-07-17*
+*Document version: v1.0 | Author: Alice (Product Manager) | Date: 2025-07-17*

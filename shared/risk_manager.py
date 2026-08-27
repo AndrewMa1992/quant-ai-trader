@@ -194,14 +194,14 @@ class RiskManager:
                 report.circuit_breaker = True
                 report.passed = False
                 report.reason = (
-                    f"🚨 熔断冷却中: {int(cooldown_elapsed)}s / "
-                    f"{self.CIRCUIT_BREAKER_COOLDOWN}s (剩余 {remaining}s)"
+                    f"🚨 Circuit-breaker cooldown: {int(cooldown_elapsed)}s / "
+                    f"{self.CIRCUIT_BREAKER_COOLDOWN}s ({remaining}s remaining)"
                 )
                 report.details["breaker_mode"] = self.breaker_mode
                 report.details["cooldown_remaining_s"] = remaining
                 return report
             # Cool-down expired → auto-lift.
-            logger.info("🟢 熔断冷却期结束，恢复交易")
+            logger.info("🟢 Circuit-breaker cooldown ended, trading resumed")
             self.circuit_breaker_triggered = False
             self.circuit_breaker_time = None
 
@@ -212,9 +212,9 @@ class RiskManager:
         # ── Guard: auto-calibrate on extreme gap from first Tiger sync ─
         if abs(daily_loss_pct) > 0.10 and not self._tiger_synced:
             logger.warning(
-                f"⚠️ 检测到异常日损益 {daily_loss_pct:.1%} (pv=${self.portfolio_value:,.0f} "
+                f"⚠️ Abnormal daily P&L detected {daily_loss_pct:.1%} (pv=${self.portfolio_value:,.0f} "
                 f"vs daily_start=${self.daily_start_value:,.0f}) — "
-                f"推测尚未完成 Tiger 同步，自动校准并跳过本轮"
+                f"Tiger sync likely incomplete; auto-calibrating and skipping this cycle"
             )
             self.daily_start_value = self.portfolio_value
             self.peak_value = self.portfolio_value
@@ -225,8 +225,8 @@ class RiskManager:
             report.circuit_breaker = True
             report.passed = is_warn  # warn: still pass; hard: block
             msg: str = (
-                f"{'⚠️ 断路器告警' if is_warn else '🚨 熔断触发'}: "
-                f"当日亏损 {daily_loss_pct:.2%} ≥ 限制 {self.DAILY_LOSS_LIMIT:.0%}"
+                f"{'⚠️ Circuit-breaker warning' if is_warn else '🚨 Circuit breaker tripped'}: "
+                f"daily loss {daily_loss_pct:.2%} ≥ limit {self.DAILY_LOSS_LIMIT:.0%}"
             )
             report.reason = msg
             if not is_warn:
@@ -251,8 +251,8 @@ class RiskManager:
                 report.circuit_breaker = True
                 report.passed = is_warn  # warn: still pass; hard: block
                 msg2: str = (
-                    f"{'⚠️ 断路器告警' if is_warn else '🚨 熔断触发'}: "
-                    f"最大回撤 {current_dd:.2%} ≥ 限制 {self.MAX_DRAWDOWN:.0%}"
+                    f"{'⚠️ Circuit-breaker warning' if is_warn else '🚨 Circuit breaker tripped'}: "
+                    f"max drawdown {current_dd:.2%} ≥ limit {self.MAX_DRAWDOWN:.0%}"
                 )
                 report.reason = msg2 if not report.reason else report.reason + "; " + msg2
                 if not is_warn:
@@ -267,8 +267,8 @@ class RiskManager:
                 report.details["current_drawdown"] = round(current_dd, 4)
             elif anomaly_skip:
                 logger.warning(
-                    f"⚠️ 检测到异常回撤 {current_dd:.2%}，尚未完成 Tiger 同步，"
-                    f"跳过熔断 (peak=${self.peak_value:,.0f}, pv=${self.portfolio_value:,.0f})"
+                    f"⚠️ Abnormal drawdown {current_dd:.2%} detected; Tiger sync not complete, "
+                    f"skipping circuit breaker (peak=${self.peak_value:,.0f}, pv=${self.portfolio_value:,.0f})"
                 )
 
         report.details["daily_start_value"] = self.daily_start_value
@@ -300,10 +300,10 @@ class RiskManager:
             List of liquidation order dicts.
         """
         if not self.positions:
-            logger.info("📭 无持仓需要平仓")
+            logger.info("📭 No positions to liquidate")
             return []
 
-        logger.warning(f"🚨 执行组合级平仓: {len(self.positions)} 只持仓")
+        logger.warning(f"🚨 Executing portfolio-level liquidation: {len(self.positions)} positions")
         liquidation_records: List[Dict[str, Any]] = []
 
         live_mode: bool = False
@@ -315,7 +315,7 @@ class RiskManager:
         except Exception:
             live_mode = False
         if not live_mode:
-            logger.info("📭 模拟/paper 模式平仓 — 仅更新本地持仓，不下实盘单")
+            logger.info("📭 Simulation/paper liquidation — updating local positions only, no live orders")
 
         for ticker, shares in list(self.positions.items()):
             if shares <= 0:
@@ -323,7 +323,7 @@ class RiskManager:
 
             price: float = prices.get(ticker, 0.0)
             if price <= 0:
-                logger.warning(f"⚠️ {ticker} 无有效价格，跳过平仓")
+                logger.warning(f"⚠️ {ticker} has no valid price, skipping liquidation")
                 continue
 
             value: float = shares * price
@@ -350,17 +350,17 @@ class RiskManager:
                         if order_result:
                             record["order_id"] = order_result.get("order_id", "")
                             logger.info(
-                                f"  📉 实盘平仓 {ticker}: {qty_int}股 @ ${price:.2f} = ${value:,.2f}"
+                                f"  📉 Live liquidation {ticker}: {qty_int} shares @ ${price:.2f} = ${value:,.2f}"
                             )
                         else:
                             record["order_failed"] = True
-                            logger.warning(f"  ⚠️ 平仓下单返回空: {ticker}")
+                            logger.warning(f"  ⚠️ Liquidation order returned empty: {ticker}")
                 except Exception as exc:
                     record["order_failed"] = True
-                    logger.error(f"  ❌ 平仓下单异常 {ticker}: {exc}")
+                    logger.error(f"  ❌ Liquidation order error {ticker}: {exc}")
             else:
                 logger.info(
-                    f"  📉 Paper平仓 {ticker}: {shares:.0f}股 @ ${price:.2f} = ${value:,.2f}"
+                    f"  📉 Paper liquidation {ticker}: {shares:.0f} shares @ ${price:.2f} = ${value:,.2f}"
                 )
 
             # Update local state regardless of live/paper.
@@ -378,8 +378,8 @@ class RiskManager:
         self.portfolio_value = self.cash + remaining_value
 
         logger.warning(
-            f"✅ 平仓完成: {len(liquidation_records)} 笔, "
-            f"现金 ${self.cash:,.2f}, 总资产 ${self.portfolio_value:,.2f}"
+            f"✅ Liquidation complete: {len(liquidation_records)} fills, "
+            f"cash ${self.cash:,.2f}, total assets ${self.portfolio_value:,.2f}"
         )
         return liquidation_records
 
@@ -403,8 +403,8 @@ class RiskManager:
         leverage: float = float(tiger_account.get("leverage", 1.0))
         if leverage > 1.001:
             logger.warning(
-                f"🚫 杠杆铁律阻止: Tiger杠杆率 {leverage:.4f} > 1.0 | "
-                f"必须先消除杠杆才能交易"
+                f"🚫 Leverage hard rule blocked: Tiger leverage {leverage:.4f} > 1.0 | "
+                f"must unwind leverage before trading"
             )
             return True
         return False
@@ -424,7 +424,7 @@ class RiskManager:
             return False
         if self.trades_today >= self.max_daily_trades:
             logger.warning(
-                f"📊 每日交易上限: {self.trades_today}/{self.max_daily_trades}"
+                f"📊 Daily trade cap: {self.trades_today}/{self.max_daily_trades}"
             )
             return True
         return False
@@ -466,14 +466,14 @@ class RiskManager:
         if self.circuit_breaker_triggered:
             report.passed = False
             report.circuit_breaker = True
-            report.reason = "🚨 熔断状态 — 拒绝所有新开仓"
+            report.reason = "🚨 Circuit-breaker active — rejecting all new positions"
             return report
 
         # 2. Daily trade limit.
         if self.check_daily_limit():
             report.passed = False
             report.daily_limit_reached = True
-            report.reason = f"📊 日交易上限: {self.trades_today}/{self.max_daily_trades}"
+            report.reason = f"📊 Daily trade cap: {self.trades_today}/{self.max_daily_trades}"
             return report
 
         order_value: float = quantity * price
@@ -482,7 +482,7 @@ class RiskManager:
         if order_value < self.MIN_TRADE_VALUE:
             report.passed = False
             report.reason = (
-                f"交易额不足: ${order_value:.2f} < ${self.MIN_TRADE_VALUE:.2f}"
+                f"Trade size too small: ${order_value:.2f} < ${self.MIN_TRADE_VALUE:.2f}"
             )
             return report
 
@@ -492,9 +492,9 @@ class RiskManager:
             if order_value > max_allowed:
                 report.passed = False
                 report.reason = (
-                    f"🚫 资金不足 — 买入金额 ${order_value:,.2f} "
-                    f"超过可用 $ {max_allowed:,.2f} "
-                    f"(现金 ${self.cash:,.2f} × {self.MAX_CASH_USAGE:.0%})"
+                    f"🚫 Insufficient funds — buy amount ${order_value:,.2f} "
+                    f"exceeds available ${max_allowed:,.2f} "
+                    f"(cash ${self.cash:,.2f} × {self.MAX_CASH_USAGE:.0%})"
                 )
                 return report
 
@@ -506,7 +506,7 @@ class RiskManager:
             if ratio > self.MAX_POSITION_SIZE:
                 report.passed = False
                 report.reason = (
-                    f"仓位超限: {ticker} 占比 {ratio:.1%} > {self.MAX_POSITION_SIZE:.0%}"
+                    f"Position limit exceeded: {ticker} weight {ratio:.1%} > {self.MAX_POSITION_SIZE:.0%}"
                 )
                 return report
 
@@ -516,7 +516,7 @@ class RiskManager:
             if dd >= self.MAX_DRAWDOWN:
                 report.passed = False
                 report.reason = (
-                    f"最大回撤触发: {dd:.1%} > {self.MAX_DRAWDOWN:.0%}"
+                    f"Max drawdown triggered: {dd:.1%} > {self.MAX_DRAWDOWN:.0%}"
                 )
                 return report
 
@@ -562,14 +562,14 @@ class RiskManager:
             if cash is not None:
                 self.cash = cash
             logger.info(
-                f"🔰 老虎首次同步校准: 资产 ${total_value:,.2f} → "
-                f"daily_start / peak 已重置"
+                f"🔰 Tiger first-sync calibration: assets ${total_value:,.2f} → "
+                f"daily_start / peak reset"
             )
             return
 
         if self.daily_start_value <= 0.0:
             logger.info(
-                f"🔄 风控首次同步: 资产 ${self.portfolio_value:,.0f} → ${total_value:,.2f}"
+                f"🔄 Risk first sync: assets ${self.portfolio_value:,.0f} → ${total_value:,.2f}"
             )
             self.portfolio_value = total_value
             self.daily_start_value = total_value
@@ -613,8 +613,8 @@ class RiskManager:
         self.circuit_breaker_time = None
         self.trades_today = 0
         logger.info(
-            f"📅 新交易日重置: 起始净值=${self.daily_start_value:,.2f}, "
-            f"熔断状态=正常"
+            f"📅 New trading day reset: start NAV=${self.daily_start_value:,.2f}, "
+            f"circuit breaker=normal"
         )
 
     def record_trade(self) -> None:
@@ -652,11 +652,11 @@ class RiskManager:
             buy_qty: float = abs(shares)
             price: float = prices.get(ticker, 0.0)
             if price <= 0:
-                logger.warning(f"⚠️ fix_short: {ticker} 无有效价格，跳过")
+                logger.warning(f"⚠️ fix_short: {ticker} has no valid price, skipping")
                 continue
 
             logger.warning(
-                f"🔧 修复空头: {ticker} | 本地 {shares:.2f} 股 → 买入 {buy_qty:.2f} 股"
+                f"🔧 Covering short: {ticker} | local {shares:.2f} shares → buy {buy_qty:.2f} shares"
             )
 
             # Attempt live fix via Tiger only in live mode.
@@ -670,11 +670,11 @@ class RiskManager:
                         quantity=int(buy_qty),
                         order_type="MKT",
                     )
-                    logger.info(f"  ✅ Tiger实盘修复 {ticker}: BUY {int(buy_qty)}")
+                    logger.info(f"  ✅ Tiger live cover {ticker}: BUY {int(buy_qty)}")
                 else:
-                    logger.info(f"  📝 Paper修复 {ticker}: BUY {int(buy_qty)} (本地)")
+                    logger.info(f"  📝 Paper cover {ticker}: BUY {int(buy_qty)} (local)")
             except Exception as exc:
-                logger.error(f"  ❌ Tiger修复失败 {ticker}: {exc}")
+                logger.error(f"  ❌ Tiger cover failed {ticker}: {exc}")
 
             # Update local state.
             portfolio.execute_trade(
@@ -687,7 +687,7 @@ class RiskManager:
             fixed += 1
 
         if fixed > 0:
-            logger.info(f"✅ 空头修复完成: {fixed} 只")
+            logger.info(f"✅ Short-position repair complete: {fixed} names")
         return fixed
 
     # ═══════════════════════════════════════════════════════════════
@@ -734,7 +734,7 @@ class RiskManager:
             pass
         logger.info("Circuit breaker + kill switch force-reset")
         self.peak_value = max(self.peak_value, self.portfolio_value)
-        logger.info(f"🔄 断路器已重置，峰值校准至 ${self.peak_value:,.2f}")
+        logger.info(f"🔄 Circuit breaker reset, peak calibrated to ${self.peak_value:,.2f}")
 
     def toggle_breaker_mode(self, mode: str) -> None:
         """Switch breaker mode.
@@ -751,7 +751,7 @@ class RiskManager:
             )
         old: str = self.breaker_mode
         self.breaker_mode = mode
-        logger.info(f"🔧 断路器模式切换: {old} → {mode}")
+        logger.info(f"🔧 Circuit-breaker mode switch: {old} → {mode}")
 
     def save_state(self, path: str = "data/risk_state.json") -> None:
         """Persist breaker / daily anchors so restarts do not false-trigger."""

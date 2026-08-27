@@ -10,14 +10,14 @@ export default {
       colors: {
         // ── Xiaomi Design System Colors ──
         xm: {
-          primary: '#FF6700',        // 小米橙 — CTA、关键指标、选中态
+          primary: '#FF6700',        // Xiaomi orange — CTAs, key metrics, selected state
           'primary-hover': '#E55A00',
           'primary-light': '#FFF0E6',
           bg: {
-            page: '#FAFAFA',         // 页面背景
-            card: '#FFFFFF',         // 卡片背景
-            surface: '#F5F5F5',      // 次级背景
-            sidebar: '#FAFAFA',      // 侧边栏背景
+            page: '#FAFAFA',         // page background
+            card: '#FFFFFF',         // card background
+            surface: '#F5F5F5',      // secondary background
+            sidebar: '#FAFAFA',      // sidebar background
           },
           border: {
             DEFAULT: '#E0E0E0',

@@ -1,14 +1,14 @@
 #!/bin/bash
 # ============================================================
-# Quant AI Trader — macOS 开机自启安装脚本
-# 
-# 使用方法（在 WorkBuddy 外部的终端中执行）：
+# Quant AI Trader — macOS boot autostart installer
+#
+# Usage (run in a terminal outside WorkBuddy):
 #   chmod +x scripts/install_boot.sh
 #   ./scripts/install_boot.sh
 #
-# 这会做两件事：
-#   1. 安装 launchd plist → 开机自动启动 watchdog
-#   2. 安装 crontab → 每日健康检查 + 日志清理
+# This does two things:
+#   1. Install the launchd plist → start watchdog on boot
+#   2. Install crontab → daily health check + log cleanup
 # ============================================================
 set -e
 
@@ -76,13 +76,13 @@ echo ""
 echo "============================================"
 echo "  Boot auto-start configured!"
 echo ""
-echo "  开机自启:  macOS LaunchAgent (watchdog)"
-echo "  备用方案:  crontab @reboot (start_all.sh)"
-echo "  每日检查:  04:00 health check"
+echo "  Boot autostart:  macOS LaunchAgent (watchdog)"
+echo "  Fallback:        crontab @reboot (start_all.sh)"
+echo "  Daily check:     04:00 health check"
 echo ""
-echo "  手动操作:"
-echo "    启动:  ./scripts/start_all.sh"
-echo "    停止:  ./scripts/stop_all.sh"
-echo "    状态:  pgrep -fl 'watchdog\|auto_trader\|run_backend'"
-echo "    日志:  tail -f logs/watchdog.log"
+echo "  Manual commands:"
+echo "    Start:   ./scripts/start_all.sh"
+echo "    Stop:    ./scripts/stop_all.sh"
+echo "    Status:  pgrep -fl 'watchdog\\|auto_trader\\|run_backend'"
+echo "    Logs:    tail -f logs/watchdog.log"
 echo "============================================"

@@ -1,10 +1,10 @@
 """
-Forex Manager — 多币种自动换汇管理器
+Forex Manager — automatic multi-currency FX.
 
-跨 USD/HKD/SGD 自动换汇，确保各市场有足够资金执行交易。
-使用 Tiger API 的 currency_exchange (若可用) 或记录日志供手动操作。
+Auto-converts across USD/HKD/SGD so each market has enough cash to trade.
+Uses Tiger API currency_exchange when available, otherwise logs for manual action.
 
-P2: 全品种扫描 + 自动换汇 + 整手预测 + 资金过滤
+P2: universe scan + auto FX + lot prediction + capital filter
 """
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ from loguru import logger
 from configs.settings import settings
 
 
-# 币种列表
+# Supported currencies
 SUPPORTED_CURRENCIES = ["USD", "HKD", "SGD"]
 
-# 最低换汇金额阈值 (USD 等价)
+# Minimum FX amount (USD equivalent)
 MIN_FOREX_AMOUNT_USD = 10.0
 
-# 各市场预留缓冲金 (本地货币)
+# Per-market cash buffer (local currency)
 MARKET_BUFFER = {
     "USD": 50.0,
     "HKD": 500.0,   # ~$64 USD
@@ -31,12 +31,12 @@ MARKET_BUFFER = {
 
 @dataclass
 class ForexOrder:
-    """换汇订单"""
+    """FX order."""
     from_currency: str
     to_currency: str
-    amount: float  # from_currency 的数量
-    amount_usd: float  # USD 等价
-    rate: float  # from→to 汇率
+    amount: float  # Quantity in from_currency
+    amount_usd: float  # USD equivalent
+    rate: float  # from→to FX rate
     reason: str
 
     def __repr__(self):
@@ -46,12 +46,12 @@ class ForexOrder:
 
 class ForexManager:
     """
-    自动换汇管理器。
+    Automatic FX manager.
 
-    逻辑:
-    1. 每轮交易前，评估各市场资金需求
-    2. 若某市场现金不足，从多余市场换汇
-    3. 通过 Tiger API 执行换汇 (若支持) 或生成警报
+    Logic:
+    1. Before each trading round, estimate per-market cash demand
+    2. If a market is short cash, convert from a surplus market
+    3. Execute via Tiger API when supported, otherwise raise an alert
     """
 
     def __init__(self, tiger_client=None):
@@ -59,32 +59,32 @@ class ForexManager:
         self._pending_orders: List[ForexOrder] = []
         self._executed_orders: List[ForexOrder] = []
         self._last_forex_time: float = 0
-        self._min_interval = 300  # 最小换汇间隔 5 分钟
+        self._min_interval = 300  # Minimum FX interval: 5 minutes
 
-    # ── 核心: 评估换汇需求 ──
+    # ── Core: evaluate FX demand ──
     def evaluate(
         self,
         account_segments: Dict[str, Dict],
         target_trades: List[Dict],
     ) -> List[ForexOrder]:
         """
-        基于账户细分和待执行交易，评估换汇需求。
+        Evaluate FX demand from account segments and pending trades.
 
         Args:
-            account_segments: Tiger get_account_segments() 返回值
+            account_segments: Return value of Tiger get_account_segments()
                 {"US": {"cash": ..., "market_value": ...}, "HK": {...}, ...}
-            target_trades: 待执行交易列表
+            target_trades: Pending trades
                 [{"ticker": "AAPL", "side": "buy", "value": 500, "currency": "USD"}, ...]
 
         Returns:
-            换汇订单列表 (按优先级排序)
+            FX orders (priority-sorted)
         """
         import time
         now = time.time()
         if now - self._last_forex_time < self._min_interval:
-            return []  # 冷却中
+            return []  # Cooldown
 
-        # 1. 计算各市场当前可用现金 (USD 等价)
+        # 1. Available cash per market (USD equivalent)
         cash_usd = {}
         for ccy in SUPPORTED_CURRENCIES:
             rate = settings.trading_currency_rates_dict.get(ccy, 1.0)
@@ -94,9 +94,9 @@ class ForexManager:
 
         total_usd = sum(cash_usd.values())
         if total_usd < 100:
-            return []  # 资金太少不换汇
+            return []  # Too little capital to FX
 
-        # 2. 计算各市场交易需求 (USD 等价)
+        # 2. Trade demand per market (USD equivalent)
         demand_usd = {"USD": 0.0, "HKD": 0.0, "SGD": 0.0}
         for trade in target_trades:
             if trade.get("side") != "buy":
@@ -105,7 +105,7 @@ class ForexManager:
             value_usd = trade.get("value", 0) * settings.trading_currency_rates_dict.get(ccy, 1.0)
             demand_usd[ccy] += value_usd
 
-        # 3. 检测缺口 — 哪些市场现金不足
+        # 3. Detect gaps — which markets are short cash
         orders = []
         for ccy in ["HKD", "SGD", "USD"]:
             available = cash_usd.get(ccy, 0)
@@ -114,7 +114,7 @@ class ForexManager:
 
             if needed > available:
                 deficit = needed - available
-                # 找有多余现金的市场
+                # Find a market with surplus cash
                 for src_ccy in ["USD", "HKD", "SGD"]:
                     if src_ccy == ccy:
                         continue
@@ -125,10 +125,10 @@ class ForexManager:
 
                     if src_surplus > MIN_FOREX_AMOUNT_USD and deficit > MIN_FOREX_AMOUNT_USD:
                         amount_usd = min(deficit, src_surplus)
-                        # 转回源币种数量
+                        # Convert back to source-currency quantity
                         src_rate = settings.trading_currency_rates_dict.get(src_ccy, 1.0)
                         amount_from = amount_usd / src_rate
-                        # 汇率: from→to
+                        # Rate: from→to
                         to_rate = settings.trading_currency_rates_dict.get(ccy, 1.0)
                         exchange_rate = src_rate / to_rate
 
@@ -138,7 +138,7 @@ class ForexManager:
                             amount=round(amount_from, 2),
                             amount_usd=round(amount_usd, 2),
                             rate=round(exchange_rate, 4),
-                            reason=f"资金缺口: {ccy} 需 {needed:.0f}, 缺 {deficit:.0f} USD",
+                            reason=f"Cash gap: {ccy} needs {needed:.0f}, short {deficit:.0f} USD",
                         )
                         orders.append(order)
                         cash_usd[src_ccy] -= amount_usd
@@ -147,12 +147,12 @@ class ForexManager:
 
         return orders
 
-    # ── 执行换汇 ──
+    # ── Execute FX ──
     def execute(self, orders: List[ForexOrder]) -> List[Dict]:
         """
-        执行换汇订单。
+        Execute FX orders.
 
-        Tiger API 可能不支持直接换汇 — 若无法执行则记录日志并返回状态。
+        Tiger API may not support direct FX — log and return status if it cannot run.
         """
         results = []
         import time
@@ -169,10 +169,10 @@ class ForexManager:
                 "message": "",
             }
 
-            # 尝试通过 Tiger API 执行换汇
+            # Try Tiger API FX
             if self._tiger and self._tiger.is_connected():
                 try:
-                    # Tiger SDK: 尝试 currency_exchange
+                    # Tiger SDK: try currency_exchange
                     trade_client = self._tiger._trade_client
                     if hasattr(trade_client, 'forex_exchange'):
                         fx_result = trade_client.forex_exchange(
@@ -182,19 +182,19 @@ class ForexManager:
                         )
                         result["status"] = "executed"
                         result["order_id"] = getattr(fx_result, 'id', '')
-                        result["message"] = f"Tiger 换汇成功"
-                        logger.info(f"  ✅ 换汇已执行: {result['message']}")
+                        result["message"] = f"Tiger FX succeeded"
+                        logger.info(f"  ✅ FX executed: {result['message']}")
                     else:
                         result["status"] = "alert"
-                        result["message"] = "Tiger API 不支持自动换汇 — 已记录待手动操作"
+                        result["message"] = "Tiger API does not support auto FX — logged for manual action"
                         logger.warning(f"  ⚠️ {result['message']}")
                 except Exception as e:
                     result["status"] = "failed"
-                    result["message"] = f"换汇失败: {e}"
+                    result["message"] = f"FX failed: {e}"
                     logger.error(f"  ❌ {result['message']}")
             else:
                 result["status"] = "offline"
-                result["message"] = "Tiger 未连接 — 仅记录日志"
+                result["message"] = "Tiger not connected — log only"
                 logger.info(f"  📝 {result['message']}")
 
             results.append(result)
@@ -203,20 +203,20 @@ class ForexManager:
         self._last_forex_time = time.time()
         return results
 
-    # ── 自动换汇 (一键方法) ──
+    # ── Auto FX (one-shot) ──
     def auto_forex(
         self,
         account_segments: Dict[str, Dict],
         target_trades: List[Dict],
     ) -> Dict:
         """
-        自动化换汇入口: 评估 → 执行 → 返回结果。
+        Auto-FX entry: evaluate → execute → return results.
 
         Returns:
             {
-                "orders": [...],        # 换汇订单
-                "results": [...],       # 执行结果
-                "total_converted_usd": 0,  # 总换汇金额 USD
+                "orders": [...],        # FX orders
+                "results": [...],       # Execution results
+                "total_converted_usd": 0,  # Total FX notional in USD
             }
         """
         orders = self.evaluate(account_segments, target_trades)
@@ -225,7 +225,7 @@ class ForexManager:
             return {"orders": [], "results": [], "total_converted_usd": 0}
 
         total_usd = sum(o.amount_usd for o in orders)
-        logger.info(f"💱 自动换汇: {len(orders)} 笔, 总计 ${total_usd:,.2f} USD")
+        logger.info(f"💱 Auto FX: {len(orders)} orders, total ${total_usd:,.2f} USD")
 
         results = self.execute(orders)
         return {
@@ -240,22 +240,22 @@ class ForexManager:
             "total_converted_usd": total_usd,
         }
 
-    # ── 汇率查询 ──
+    # ── FX rate lookup ──
     @staticmethod
     def get_fx_rate(from_ccy: str, to_ccy: str) -> float:
-        """获取两种币种间汇率"""
+        """Return the FX rate between two currencies."""
         from_rate = settings.trading_currency_rates_dict.get(from_ccy, 1.0)
         to_rate = settings.trading_currency_rates_dict.get(to_ccy, 1.0)
         return from_rate / to_rate
 
-    # ── 工具: 计算交易本地货币价值 ──
+    # ── Helper: local-currency trade value ──
     @staticmethod
     def calc_trade_local_value(
         ticker: str,
         quantity: float,
         price: float,
     ) -> dict:
-        """计算交易的本地货币价值和 USD 等值"""
+        """Compute a trade's local-currency value and USD equivalent."""
         from backend.trading_engine.portfolio import PortfolioManager
 
         pm = PortfolioManager.__new__(PortfolioManager)
@@ -270,7 +270,7 @@ class ForexManager:
             "usd_value": round(usd_value, 2),
         }
 
-    # ── 摘要 ──
+    # ── Summary ──
     def get_status(self) -> Dict:
         return {
             "pending_orders": len(self._pending_orders),
@@ -280,5 +280,5 @@ class ForexManager:
         }
 
 
-# 全局单例
+# Global singleton
 forex_manager = ForexManager()

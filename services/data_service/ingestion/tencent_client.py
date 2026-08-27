@@ -1,4 +1,4 @@
-"""services/data_service/ingestion/tencent_client.py – 腾讯行情客户端.
+"""services/data_service/ingestion/tencent_client.py – Tencent market-data client.
 
 Fetches historical and daily K-line data from Tencent Finance's
 public market data APIs. Used as a fallback for A-share data.
@@ -20,7 +20,7 @@ from loguru import logger
 
 
 class TencentClient:
-    """腾讯 (Tencent) Finance market data client.
+    """Tencent Finance market data client.
 
     Fetches K-line data for A-share (and HK) tickers. Handles
     SH/SZ prefix logic and returns standardized OHLCV DataFrames.

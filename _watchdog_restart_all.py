@@ -1,5 +1,5 @@
 """
-Watchdog Restart All — 启动 Quant AI Trader 全部服务（独立进程，不依赖当前 session）
+Watchdog Restart All — start all Quant AI Trader services (independent processes, not tied to the current session)
 """
 import subprocess
 import sys

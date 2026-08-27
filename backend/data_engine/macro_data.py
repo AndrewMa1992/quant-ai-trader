@@ -1,16 +1,16 @@
 """
-宏观市场数据引擎 — 拓展多维度特征
+Macro market-data engine — multi-dimensional features.
 
-数据维度:
-- VIX 恐慌指数 (^VIX)
-- 板块 ETF 资金流向 (SPY/QQQ/IWM/DIA/XLF/XLE/XLK/XLV/XLI/XLY)
-- 美元指数 (DX-Y.NYB)
-- 美债收益率 (^TNX)
+Data dimensions:
+- VIX fear index (^VIX)
+- Sector ETF flows (SPY/QQQ/IWM/DIA/XLF/XLE/XLK/XLV/XLI/XLY)
+- US Dollar Index (DX-Y.NYB)
+- US Treasury yield (^TNX)
 
-用途:
-- 作为大盘环境特征输入到模型
-- 识别风险偏好/避险模式
-- 板块轮动信号
+Uses:
+- Broad-market regime features for models
+- Risk-on / risk-off detection
+- Sector-rotation signals
 """
 import time
 import numpy as np
@@ -21,25 +21,25 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 
-# 宏观数据标的
+# Macro data symbols
 MACRO_SYMBOLS = {
-    "vix": "^VIX",           # CBOE 波动率指数
+    "vix": "^VIX",           # CBOE Volatility Index
     "spy": "SPY",             # S&P 500 ETF
     "qqq": "QQQ",             # Nasdaq 100 ETF
     "iwm": "IWM",             # Russell 2000 ETF
     "dia": "DIA",             # Dow Jones ETF
-    "tlt": "TLT",             # 20+年美债 ETF (利率代理)
-    "gld": "GLD",             # 黄金 ETF (避险代理)
-    "uso": "USO",             # 原油 ETF
-    "xlv": "XLV",             # 医疗板块
-    "xlf": "XLF",             # 金融板块
-    "xlk": "XLK",             # 科技板块
-    "xle": "XLE",             # 能源板块
-    "xli": "XLI",             # 工业板块
-    "xly": "XLY",             # 可选消费板块
+    "tlt": "TLT",             # 20+ year Treasury ETF (rates proxy)
+    "gld": "GLD",             # Gold ETF (safe-haven proxy)
+    "uso": "USO",             # Crude oil ETF
+    "xlv": "XLV",             # Healthcare sector
+    "xlf": "XLF",             # Financials sector
+    "xlk": "XLK",             # Technology sector
+    "xle": "XLE",             # Energy sector
+    "xli": "XLI",             # Industrials sector
+    "xly": "XLY",             # Consumer discretionary sector
 }
 
-# 板块 ETF 对照（用于生成板块特征）
+# Sector ETF map (used to build sector features)
 SECTOR_ETFS = {
     "Tech": "XLK",
     "Finance": "XLF",
@@ -51,7 +51,7 @@ SECTOR_ETFS = {
 
 
 class MacroDataEngine:
-    """宏观市场数据引擎"""
+    """Macro market-data engine."""
 
     def __init__(self, use_cache: bool = True, cache_ttl: int = 3600):
         self.use_cache = use_cache
@@ -61,7 +61,7 @@ class MacroDataEngine:
 
     def fetch_macro_data(self, period: str = "3mo") -> pd.DataFrame:
         """
-        获取宏观市场数据，合并为统一 DataFrame。
+        Fetch macro market data and merge into a single DataFrame.
 
         Returns:
             DataFrame with columns: vix, spy_return, qqq_return, sector_spread, ...
@@ -79,26 +79,26 @@ class MacroDataEngine:
                     failed.append(name)
             except Exception as e:
                 failed.append(name)
-                logger.debug(f"宏观数据 {name} ({symbol}) 获取失败: {e}")
+                logger.debug(f"Macro data {name} ({symbol}) fetch failed: {e}")
 
         if not df_list:
-            logger.warning("⚠️ 所有宏观数据获取失败")
+            logger.warning("⚠️ All macro data fetches failed")
             return pd.DataFrame()
 
-        # 合并所有宏观数据
+        # Merge all macro series
         macro_df = pd.concat(df_list, axis=1, join="outer")
         macro_df = macro_df.ffill().dropna(how="all")
 
         if failed:
-            logger.debug(f"部分宏观数据不可用: {failed}")
+            logger.debug(f"Some macro series unavailable: {failed}")
 
         return macro_df
 
     def _fetch_single(self, symbol: str, period: str) -> Optional[pd.DataFrame]:
-        """获取单个标的的历史数据"""
+        """Fetch historical data for a single symbol."""
         cache_key = f"{symbol}_{period}"
 
-        # 缓存检查
+        # Cache check
         if self.use_cache and cache_key in self._cache:
             ts, df = self._cache[cache_key]
             if time.time() - ts < self.cache_ttl:
@@ -119,17 +119,17 @@ class MacroDataEngine:
 
     def compute_macro_features(self, macro_df: pd.DataFrame) -> Dict[str, np.ndarray]:
         """
-        从宏观数据计算特征向量。
+        Compute feature vectors from macro data.
 
         Returns:
             {
-                "vix_level": float,        # VIX 当前水平
-                "vix_change_5d": float,    # VIX 5日变化
-                "market_regime": str,      # 市场状态: risk_on/risk_off/normal
-                "sector_momentum": dict,   # 各板块动量
-                "sector_rotation": str,    # 板块轮动方向
-                "rates_trend": float,      # 利率趋势
-                "gold_signal": str,        # 避险信号
+                "vix_level": float,        # current VIX level
+                "vix_change_5d": float,    # 5-day VIX change
+                "market_regime": str,      # market regime: risk_on/risk_off/normal
+                "sector_momentum": dict,   # sector momentum
+                "sector_rotation": str,    # sector-rotation direction
+                "rates_trend": float,      # rates trend
+                "gold_signal": str,        # safe-haven signal
             }
         """
         features = {
@@ -146,7 +146,7 @@ class MacroDataEngine:
             return features
 
         try:
-            # VIX 特征
+            # VIX features
             if "vix" in macro_df.columns:
                 vix_series = macro_df["vix"].dropna()
                 if len(vix_series) >= 5:
@@ -155,7 +155,7 @@ class MacroDataEngine:
                         (vix_series.iloc[-1] - vix_series.iloc[-5]) / (vix_series.iloc[-5] + 1e-8)
                     )
 
-                    # 市场状态判断
+                    # Market-regime classification
                     vix = features["vix_level"]
                     if vix > 30:
                         features["market_regime"] = "risk_off"
@@ -164,7 +164,7 @@ class MacroDataEngine:
                     else:
                         features["market_regime"] = "normal"
 
-            # 利率趋势（TLT 价格与利率反向）
+            # Rates trend (TLT price moves inversely to yields)
             if "tlt" in macro_df.columns:
                 tlt = macro_df["tlt"].dropna()
                 if len(tlt) >= 20:
@@ -172,19 +172,19 @@ class MacroDataEngine:
                         (tlt.iloc[-1] - tlt.iloc[-20]) / (tlt.iloc[-20] + 1e-8)
                     )
 
-            # 黄金避险信号
+            # Gold safe-haven signal
             if "gld" in macro_df.columns:
                 gld = macro_df["gld"].dropna()
                 if len(gld) >= 5:
                     gld_return = float((gld.iloc[-1] - gld.iloc[-5]) / (gld.iloc[-5] + 1e-8))
                     if gld_return > 0.03 and features["market_regime"] == "risk_off":
-                        features["gold_signal"] = "避险情绪升温"
+                        features["gold_signal"] = "safe_haven_demand_rising"
                     elif gld_return < -0.02:
-                        features["gold_signal"] = "风险偏好回升"
+                        features["gold_signal"] = "risk_appetite_returning"
                     else:
                         features["gold_signal"] = "neutral"
 
-            # 板块动量计算
+            # Sector momentum
             sector_momentum = {}
             for sector_name, etf_symbol in SECTOR_ETFS.items():
                 col = etf_symbol.lower()
@@ -196,18 +196,18 @@ class MacroDataEngine:
 
             features["sector_momentum"] = sector_momentum
 
-            # 板块轮动判断
+            # Sector rotation
             if sector_momentum:
                 top_sector = max(sector_momentum, key=sector_momentum.get)
                 bottom_sector = min(sector_momentum, key=sector_momentum.get)
                 spread = sector_momentum[top_sector] - sector_momentum[bottom_sector]
 
                 if spread > 0.05:
-                    features["sector_rotation"] = f"资金流入 {top_sector}，流出 {bottom_sector}"
+                    features["sector_rotation"] = f"inflows to {top_sector}, outflows from {bottom_sector}"
                 else:
-                    features["sector_rotation"] = "板块分化不明显"
+                    features["sector_rotation"] = "limited sector divergence"
 
-            # 大盘基准收益率
+            # Benchmark returns
             for bench in ["spy", "qqq", "iwm"]:
                 if bench in macro_df.columns:
                     series = macro_df[bench].dropna()
@@ -221,15 +221,15 @@ class MacroDataEngine:
                         )
 
         except Exception as e:
-            logger.warning(f"宏观特征计算异常: {e}")
+            logger.warning(f"Macro feature computation failed: {e}")
 
         return features
 
     def get_sector_allocation_hint(self, macro_features: Dict) -> Dict[str, float]:
         """
-        基于宏观特征给出板块配置建议。
-        风险偏好高 → 超配科技、可选消费
-        风险规避 → 超配医疗、公用事业
+        Suggest sector weights from macro features.
+        Risk-on → overweight tech and consumer discretionary
+        Risk-off → overweight healthcare and utilities
         """
         regime = macro_features.get("market_regime", "normal")
         sector_momentum = macro_features.get("sector_momentum", {})
@@ -252,12 +252,12 @@ class MacroDataEngine:
             base_allocation["Energy"] -= 0.05
             base_allocation["Finance"] -= 0.05
 
-        # 动量加成
+        # Momentum overlay
         for sector, momentum in sector_momentum.items():
             if sector in base_allocation:
                 base_allocation[sector] += max(0, momentum * 0.5)
 
-        # 归一化
+        # Normalize
         total = sum(base_allocation.values())
         if total > 0:
             for k in base_allocation:
@@ -267,8 +267,8 @@ class MacroDataEngine:
 
     def get_market_regime_signal(self, macro_features: Dict) -> Dict:
         """
-        生成市场状态交易信号。
-        用于调整系统整体的风险敞口。
+        Produce a market-regime trading signal.
+        Used to scale system-wide risk exposure.
         """
         regime = macro_features.get("market_regime", "normal")
         vix = macro_features.get("vix_level", 15.0)
@@ -276,16 +276,16 @@ class MacroDataEngine:
 
         if regime == "risk_off":
             risk_multiplier = 0.5
-            signal = "持有现金避险"
+            signal = "hold_cash_defensive"
         elif regime == "risk_on":
             risk_multiplier = 1.2
-            signal = "积极配置"
+            signal = "aggressive_allocation"
         else:
             risk_multiplier = 1.0
-            signal = "正常交易"
+            signal = "normal_trading"
 
-        # 利率影响：利率升 → 成长股承压
-        if rates_trend < -0.05:  # TLT跌 = 利率升
+        # Rates impact: rising yields pressure growth stocks
+        if rates_trend < -0.05:  # TLT down = yields up
             rate_bias = "value_over_growth"
         elif rates_trend > 0.05:
             rate_bias = "growth_over_value"
@@ -301,5 +301,5 @@ class MacroDataEngine:
         }
 
 
-# 全局单例
+# Global singleton
 macro_engine = MacroDataEngine()

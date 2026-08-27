@@ -1,4 +1,4 @@
-"""交易引擎"""
+"""Trading engine"""
 from .executor import PaperExecutor
 from .risk_manager import RiskManager
 from .portfolio import PortfolioManager

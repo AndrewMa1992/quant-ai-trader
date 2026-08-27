@@ -1,4 +1,4 @@
-"""将 SQLite daily_bars 表数据导出到 ParquetStore 格式。
+"""Export SQLite daily_bars table data into ParquetStore format.
 
 One-time migration script: reads all daily bar data from the SQLite
 ``daily_bars`` table and writes one Parquet file per ticker into the

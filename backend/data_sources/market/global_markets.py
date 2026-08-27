@@ -1,6 +1,6 @@
 """
-全球市场数据源
-支持美国、中国、香港、日本、欧洲等主要市场
+Global market data source.
+Supports US, China, Hong Kong, Japan, Europe, and other major markets.
 """
 
 import requests
@@ -13,18 +13,18 @@ from configs.settings import settings
 
 class GlobalMarketDataSource:
     """
-    全球市场数据源管理器
-    统一接口获取全球股票数据
+    Global market data-source manager.
+    Unified interface for worldwide equity data.
     """
     
     def __init__(self):
         self.config = settings
         
-        # 数据缓存
+        # Data cache
         self.cache = {}
-        self.cache_ttl = 60  # 秒
+        self.cache_ttl = 60  # seconds
         
-        # 市场时区映射
+        # Market timezone map
         self.market_timezones = {
             "US": "America/New_York",
             "CN": "Asia/Shanghai", 
@@ -34,7 +34,7 @@ class GlobalMarketDataSource:
         }
     
     def get_all_stocks(self) -> Dict[str, List[str]]:
-        """获取所有关注的股票"""
+        """Return all watched tickers by market."""
         return {
             "US": self.config.US_STOCKS,
             "CN": self.config.CN_STOCKS,
@@ -44,7 +44,7 @@ class GlobalMarketDataSource:
         }
     
     def get_realtime_quote(self, symbol: str, market: str = "US") -> Dict:
-        """获取实时行情"""
+        """Return a live quote."""
         if market == "US" or market == "HK":
             return self._get_tiger_quote(symbol)
         elif market == "CN":
@@ -53,7 +53,7 @@ class GlobalMarketDataSource:
             return self._get_yahoo_quote(symbol)
     
     def _get_tiger_quote(self, symbol: str) -> Dict:
-        """老虎证券行情"""
+        """Tiger Brokers quote."""
         try:
             from backend.data_engine.tiger_client import TigerClient
             client = TigerClient()
@@ -62,7 +62,7 @@ class GlobalMarketDataSource:
             return {"error": str(e)}
     
     def _get_sina_quote(self, symbol: str) -> Dict:
-        """新浪财经行情 (A股)"""
+        """Sina Finance quote (A-shares)."""
         try:
             url = f"http://hq.sinajs.cn/list={symbol}"
             headers = {"Referer": "http://finance.sina.com.cn"}
@@ -80,7 +80,7 @@ class GlobalMarketDataSource:
                     "low": float(data[5]) if len(data) > 5 else 0,
                     "price": float(data[3]) if len(data) > 3 else 0,
                     "volume": int(data[8]) if len(data) > 8 else 0,
-                    "pctChg": 0,  # 需要计算
+                    "pctChg": 0,  # Needs to be computed
                     "last": float(data[3]) if len(data) > 3 else 0
                 }
         except Exception as e:
@@ -88,7 +88,7 @@ class GlobalMarketDataSource:
         return {"error": "Unknown error"}
     
     def _get_yahoo_quote(self, symbol: str) -> Dict:
-        """中国境内实时行情（替代 Yahoo Finance）"""
+        """China-onshore live quote (Yahoo Finance replacement)."""
         try:
             from backend.data_engine.china_adapter import china_data_adapter
             quote = china_data_adapter.get_realtime_quote(symbol)
@@ -104,7 +104,7 @@ class GlobalMarketDataSource:
         market: str = "US",
         days: int = 365
     ) -> pd.DataFrame:
-        """获取历史数据"""
+        """Return historical data."""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
@@ -114,13 +114,13 @@ class GlobalMarketDataSource:
             return self._get_yahoo_history(symbol, start_date, end_date)
     
     def _get_cn_history(self, symbol: str, start, end) -> pd.DataFrame:
-        """获取A股历史数据"""
+        """Return A-share historical data."""
         try:
             import baostock as bs
             
             bs.login()
             
-            # 转换symbol格式
+            # Convert symbol format
             if symbol.startswith("6"):
                 bs_code = f"sh.{symbol}"
             else:
@@ -150,26 +150,26 @@ class GlobalMarketDataSource:
                 return df
             
         except Exception as e:
-            print(f"获取A股数据失败: {e}")
+            print(f"Failed to fetch A-share data: {e}")
         
         return pd.DataFrame()
     
     def _get_yahoo_history(self, symbol: str, start, end) -> pd.DataFrame:
-        """获取历史数据（中国境内数据源）"""
+        """Return historical data from China onshore sources."""
         try:
             from backend.data_engine.china_adapter import china_data_adapter
             return china_data_adapter.get_historical_data(symbol, period="2y", interval="1d")
         except Exception as e:
-            print(f"获取历史数据失败: {e}")
+            print(f"Failed to fetch historical data: {e}")
             return pd.DataFrame()
     
     def get_market_summary(self) -> Dict:
-        """获取市场概览"""
+        """Return a market overview."""
         summary = {}
         
         for market, stocks in self.get_all_stocks().items():
             market_data = []
-            for stock in stocks[:5]:  # 每市场取5只
+            for stock in stocks[:5]:  # Five names per market
                 quote = self.get_realtime_quote(stock, market)
                 if "error" not in quote:
                     market_data.append({
@@ -187,7 +187,7 @@ class GlobalMarketDataSource:
         return summary
     
     def get_correlation_matrix(self, stocks: List[str], market: str = "US") -> np.ndarray:
-        """计算股票相关性矩阵"""
+        """Compute the equity correlation matrix."""
         prices = []
         valid_stocks = []
         
@@ -206,22 +206,22 @@ class GlobalMarketDataSource:
 
 
 class FeatureEngineering:
-    """特征工程"""
+    """Feature engineering."""
     
     @staticmethod
     def compute_features(df: pd.DataFrame) -> pd.DataFrame:
-        """计算技术指标和特征"""
+        """Compute technical indicators and features."""
         result = df.copy()
         
-        # 价格变化
+        # Price change
         result["returns_1d"] = result["close"].pct_change(1)
         result["returns_5d"] = result["close"].pct_change(5)
         result["returns_20d"] = result["close"].pct_change(20)
         
-        # 波动率
+        # Volatility
         result["volatility_20d"] = result["returns_1d"].rolling(20).std()
         
-        # 移动平均
+        # Moving averages
         result["ma_5"] = result["close"].rolling(5).mean()
         result["ma_20"] = result["close"].rolling(20).mean()
         result["ma_60"] = result["close"].rolling(60).mean()
@@ -239,7 +239,7 @@ class FeatureEngineering:
         result["macd"] = exp1 - exp2
         result["macd_signal"] = result["macd"].ewm(span=9, adjust=False).mean()
         
-        # 布林带
+        # Bollinger Bands
         result["bb_mid"] = result["close"].rolling(20).mean()
         bb_std = result["close"].rolling(20).std()
         result["bb_upper"] = result["bb_mid"] + 2 * bb_std
@@ -248,17 +248,17 @@ class FeatureEngineering:
             result["bb_upper"] - result["bb_lower"] + 1e-8
         )
         
-        # 成交量特征
+        # Volume features
         result["volume_ratio"] = result["volume"] / result["volume"].rolling(20).mean()
         
-        # 动量
+        # Momentum
         result["momentum"] = result["close"] / result["close"].shift(20) - 1
         
         return result.dropna()
     
     @staticmethod
     def prepare_model_input(df: pd.DataFrame) -> np.ndarray:
-        """准备模型输入"""
+        """Prepare model input."""
         features = [
             "returns_1d", "returns_5d", "returns_20d",
             "volatility_20d", "rsi_14", "macd", "macd_signal",
@@ -269,19 +269,19 @@ class FeatureEngineering:
         return (feature_df - feature_df.mean(axis=0)) / (feature_df.std(axis=0) + 1e-8)
 
 
-# 创建全局实例
+# Global instance
 market_data_source = GlobalMarketDataSource()
 
 
 if __name__ == "__main__":
-    # 测试
+    # Smoke test
     source = GlobalMarketDataSource()
     
-    print("=== 全球市场概览 ===")
+    print("=== Global market overview ===")
     summary = source.get_market_summary()
     
     for market, data in summary.items():
-        print(f"\n{market} 市场:")
-        print(f"  平均涨跌: {data['avg_change']:.2f}%")
+        print(f"\n{market} market:")
+        print(f"  Average change: {data['avg_change']:.2f}%")
         for stock in data["stocks"][:3]:
             print(f"    {stock['symbol']}: ${stock['price']:.2f} ({stock['change']:+.2f}%)")

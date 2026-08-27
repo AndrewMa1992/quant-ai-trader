@@ -1,6 +1,6 @@
 """
-策略管理器 - 信号生成与策略调度中枢 (v3 - GNN + RL Enhanced)
-整合 AI 模型、技术指标、情绪分析、跨股票关联生成统一交易信号
+Strategy manager — signal generation and dispatch hub (v3 — GNN + RL enhanced).
+Fuses AI models, technicals, sentiment, and cross-stock correlation into a unified signal.
 """
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
@@ -22,11 +22,11 @@ pipeline = DataPipeline()
 
 class TradingStrategy:
     """
-    交易策略管理器
-    - 收集各模型信号
-    - 信号融合
-    - 定期执行
-    - 动态调整
+    Trading strategy manager.
+    - Collects per-model signals
+    - Fuses signals
+    - Periodic execution
+    - Dynamic adjustment
     """
 
     def __init__(
@@ -48,7 +48,7 @@ class TradingStrategy:
         self._total_cycles = 0
 
     # ================================================================
-    # 主循环
+    # Main loop
     # ================================================================
 
     def analyze_and_trade(
@@ -58,15 +58,15 @@ class TradingStrategy:
         prices: Dict[str, float],
     ) -> Dict:
         """
-        执行一次完整的分析交易循环 (v3 Enhanced)
+        Run one full analysis-and-trade cycle (v3 enhanced).
 
         Args:
-            tickers: 股票列表
+            tickers: Ticker list
             data_dict: {ticker: {"features": np.ndarray (seq_len, n_vars), ...}}
             prices: {ticker: current_price}
 
         Returns:
-            分析结果
+            Analysis result
         """
         self._total_cycles += 1
         results = {
@@ -76,13 +76,13 @@ class TradingStrategy:
             "trades": [],
         }
 
-        # 0. 跨股票关联分析（一次性计算，所有股票共享）
+        # 0. Cross-stock analysis (computed once, shared by all names)
         features_dict = {t: data_dict[t]["features"] for t in tickers if t in data_dict}
         try:
             cross_stock.compute_sector_momentum(tickers, features_dict)
         except (AttributeError, TypeError, Exception):
-            pass  # stub mode 或模块未完全加载时静默跳过
-        # GAT 行业动量计算
+            pass  # Silently skip in stub mode or if the module is not fully loaded
+        # GAT sector-momentum computation
         try:
             gat_network.compute_sector_momentum(tickers, features_dict)
         except Exception:
@@ -97,11 +97,11 @@ class TradingStrategy:
                 results["signals"][ticker] = signal
                 self.last_signals[ticker] = signal
 
-        # 执行交易
+        # Execute trades
         trades = self.executor.execute_signal_batch(results["signals"], prices)
         results["trades"] = trades
 
-        # 回调通知
+        # Callbacks
         self._emit_analysis(results)
 
         return results
@@ -114,7 +114,7 @@ class TradingStrategy:
         all_tickers: List[str] = None,
         features_dict: Dict[str, np.ndarray] = None,
     ) -> Optional[Dict]:
-        """分析单只股票 (v3: RL + GNN cross-stock enhanced)"""
+        """Analyze a single ticker (v3: RL + GNN cross-stock enhanced)."""
         features = data_dict.get(ticker, {}).get("features")
         if features is None:
             return None
@@ -122,7 +122,7 @@ class TradingStrategy:
         price = prices.get(ticker, 0.0)
         signals = {}
 
-        # 1. Transformer 预测信号
+        # 1. Transformer prediction signal
         if self.transformer.is_ready() and len(features) >= settings.MODEL_TRANSFORMER_LOOKBACK:
             try:
                 input_seq = features[-settings.MODEL_TRANSFORMER_LOOKBACK:]
@@ -135,9 +135,9 @@ class TradingStrategy:
                         "prediction": pred,
                     }
             except Exception as e:
-                logger.warning(f"⚠️ {ticker} Transformer 预测失败: {e}")
+                logger.warning(f"⚠️ {ticker} Transformer prediction failed: {e}")
 
-        # 2. RL Agent 信号（v3: 已启用，单股推理）
+        # 2. RL agent signal (v3: enabled, single-name inference)
         if self.rl_agent.is_ready() and len(features) >= 30:
             try:
                 from backend.trading_engine.portfolio import PortfolioManager
@@ -151,12 +151,12 @@ class TradingStrategy:
                 if rl_signal.get("confidence", 0) > 0:
                     signals["rl_agent"] = rl_signal
             except Exception as e:
-                logger.debug(f"⚠️ {ticker} RL 推理跳过: {e}")
+                logger.debug(f"⚠️ {ticker} RL inference skipped: {e}")
 
-        # 3. 跨股票关联信号（GAT v2 + GNN-lite fallback）
+        # 3. Cross-stock signal (GAT v2 + GNN-lite fallback)
         if all_tickers and features_dict:
             try:
-                # 优先使用 GAT
+                # Prefer GAT
                 if getattr(gat_network, 'model', None) is not None:
                     cs = gat_network.get_cross_stock_signal(ticker, all_tickers, features_dict)
                 else:
@@ -164,17 +164,17 @@ class TradingStrategy:
                 if cs.get("strength", 0) > 0 or cs.get("boost_factor", 1.0) != 1.0:
                     signals["cross_stock"] = cs
             except Exception as e:
-                logger.debug(f"⚠️ {ticker} 跨股票分析跳过: {e}")
+                logger.debug(f"⚠️ {ticker} cross-stock analysis skipped: {e}")
 
-        # 4. 技术指标信号
+        # 4. Technical signal
         tech_signal = self._generate_technical_signal(features)
         signals["technical"] = tech_signal
 
-        # 5. 情绪信号
+        # 5. Sentiment signal
         sentiment_signal = self.sentiment.get_signal(ticker)
         signals["sentiment"] = sentiment_signal
 
-        # 信号融合（带跨股票增强因子）
+        # Fuse signals (with cross-stock boost)
         if not signals:
             return None
 
@@ -184,7 +184,7 @@ class TradingStrategy:
 
         fused = self.ensemble.fuse_signals(signals, cross_stock_boost)
 
-        # 防御性访问：fuse_signals 可能返回异常格式（stub 模式等）
+        # Defensive access: fuse_signals may return an unexpected shape (stub mode, etc.)
         if not fused or not isinstance(fused, dict):
             return {
                 "decision": "hold",
@@ -205,14 +205,14 @@ class TradingStrategy:
         }
 
     def _generate_technical_signal(self, features: np.ndarray) -> Dict:
-        """从技术指标生成信号"""
+        """Generate a signal from technical indicators."""
         signal = {"signal": "neutral", "strength": 0.0, "confidence": 0.0}
 
         if features.shape[0] < 30:
             return signal
 
-        # 使用 rsi 指标（假设 rsi 在特征中的某列）
-        # 简化版：取最近几天的收盘价判断趋势
+        # Use RSI if present (assumed to occupy a feature column)
+        # Simplified: infer trend from recent closes
         recent_close = features[-5:, 0] if features.shape[1] > 0 else []
 
         if len(recent_close) >= 2:
@@ -226,9 +226,9 @@ class TradingStrategy:
         return signal
 
     def _build_rl_state(self, features: np.ndarray, ticker: str, prices: Dict[str, float]) -> np.ndarray:
-        """构建 RL 状态（仅用数值特征，过滤非数值）"""
+        """Build RL state (numeric features only; drop non-numeric)."""
         flat = features.flatten()
-        # 只保留纯数值，过滤任何字符串或 NaN
+        # Keep numeric values only; drop strings and NaN
         flat = pd.Series(flat[pd.notna(flat)]).apply(lambda x: float(x) if isinstance(x, (int, float, np.number)) else np.nan).dropna().values
         flat = flat[-1000:] if len(flat) > 1000 else flat
         state = np.concatenate([
@@ -238,19 +238,19 @@ class TradingStrategy:
         return state.astype(np.float32)
 
     def on_analysis(self, callback: Callable):
-        """注册分析回调"""
+        """Register an analysis callback."""
         self._analysis_callbacks.append(callback)
 
     def _emit_analysis(self, results: Dict):
-        """触发分析回调"""
+        """Fire analysis callbacks."""
         for cb in self._analysis_callbacks:
             try:
                 cb(results)
             except Exception as e:
-                logger.error(f"❌ 分析回调错误: {e}")
+                logger.error(f"❌ Analysis callback error: {e}")
 
     def get_status(self) -> Dict:
-        """获取策略状态"""
+        """Return strategy status."""
         return {
             "total_cycles": self._total_cycles,
             "last_signals_count": len(self.last_signals),

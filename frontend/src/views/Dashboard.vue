@@ -52,17 +52,17 @@ const canRollback = computed(() => {
 })
 
 async function handleRollback() {
-  if (!confirm('确定要回滚到上一个稳定版本吗？')) return
+  if (!confirm('Roll back to the last stable version?')) return
   rollbackLoading.value = true
   try {
     const result = await execStore.rollback()
     if (result?.success) {
-      showToast('回滚成功！熔断器已重置。')
+      showToast('Rollback succeeded. Circuit breaker reset.')
     } else {
-      showToast('回滚失败，请查看日志。')
+      showToast('Rollback failed. Check the logs.')
     }
   } catch {
-    showToast('回滚请求失败，请稍后重试。')
+    showToast('Rollback request failed. Try again later.')
   } finally {
     rollbackLoading.value = false
   }
@@ -230,7 +230,7 @@ const recentOrders = computed(() => execStore.orders.slice(0, 8))
       </div>
       <button
         :disabled="!canRollback || rollbackLoading"
-        :title="!canRollback ? '仅非交易时段可用' : '回滚到上一个稳定版本'"
+        :title="!canRollback ? 'Available only when markets are closed' : 'Roll back to the last stable version'"
         class="flex-shrink-0 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-md active:scale-95"
         :style="{ backgroundColor: canRollback ? '#FF6700' : '#CCCCCC' }"
         @click="handleRollback"
@@ -240,9 +240,9 @@ const recentOrders = computed(() => execStore.orders.slice(0, 8))
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          回滚中...
+          Rolling back...
         </span>
-        <span v-else>一键回滚</span>
+        <span v-else>One-click rollback</span>
       </button>
     </div>
 

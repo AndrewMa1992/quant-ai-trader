@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Quant AI Trader — macOS 守护进程 (Watchdog)
-监控 backend (FastAPI) 和 auto_trader 进程，被杀后自动重启。
+Quant AI Trader — macOS watchdog daemon.
+Monitors the backend (FastAPI) and auto_trader processes and restarts them if they die.
 """
 
 import os
@@ -42,7 +42,7 @@ running = True
 
 
 def start_backend() -> subprocess.Popen | None:
-    """启动 FastAPI 后端"""
+    """Start the FastAPI backend."""
     cmd = [PYTHON, str(PROJ_ROOT / "run_backend.py")]
     try:
         p = subprocess.Popen(
@@ -60,7 +60,7 @@ def start_backend() -> subprocess.Popen | None:
 
 
 def start_trader() -> subprocess.Popen | None:
-    """启动自动交易引擎"""
+    """Start the auto-trading engine."""
     cmd = [PYTHON, str(PROJ_ROOT / "auto_trader.py"), "--interval", "300"]
     try:
         p = subprocess.Popen(
@@ -78,7 +78,7 @@ def start_trader() -> subprocess.Popen | None:
 
 
 def check_backend_health() -> bool:
-    """HTTP 健康检查"""
+    """HTTP health check."""
     try:
         import urllib.request
         req = urllib.request.Request(HEALTH_URL)
@@ -89,22 +89,22 @@ def check_backend_health() -> bool:
 
 
 def check_process_alive(proc: subprocess.Popen | None) -> bool:
-    """检查进程是否存活"""
+    """Return whether the process is still alive."""
     if proc is None:
         return False
     return proc.poll() is None
 
 
 def restart_process(name: str) -> bool:
-    """重启指定进程"""
+    """Restart the named process."""
     restart_counts[name] += 1
     count = restart_counts[name]
 
-    # 快速重启保护：1分钟内超过5次则延迟
+    # Rapid-restart protection: delay if more than 5 restarts within 1 minute
     if count > 5:
         delay = min(300, (count - 5) * 30)
         logger.warning(
-            f"{name} 已重启 {count} 次，等 {delay}s 再试"
+            f"{name} has restarted {count} times; waiting {delay}s before retry"
         )
         time.sleep(delay)
 
@@ -128,7 +128,7 @@ def restart_process(name: str) -> bool:
 
 
 def stop_all():
-    """安全停止所有进程"""
+    """Stop all processes safely."""
     global running
     running = False
     logger.info("Shutting down all processes...")
@@ -166,23 +166,23 @@ def main():
     logger.info(f"Python:  {PYTHON}")
     logger.info("=" * 60)
 
-    # 启动进程
+    # Start processes
     processes["backend"] = start_backend()
-    time.sleep(3)  # 等 backend 启动
+    time.sleep(3)  # Wait for backend to start
     processes["trader"] = start_trader()
 
-    # 健康检查 interval
-    health_interval = 30    # 每 30s 检查一次
-    trader_interval = 60    # 每 60s 检查一次
+    # Health-check intervals
+    health_interval = 30    # Check every 30s
+    trader_interval = 60    # Check every 60s
     last_health_check = time.time()
     last_trader_check = time.time()
 
     while running:
-        time.sleep(5)  # 主循环 tick
+        time.sleep(5)  # Main-loop tick
 
         now = time.time()
 
-        # Backend 健康检查
+        # Backend health check
         if now - last_health_check >= health_interval:
             last_health_check = now
             proc = processes["backend"]
@@ -193,14 +193,14 @@ def main():
                 restart_process("backend")
             elif not check_backend_health():
                 logger.warning("Backend health check FAILED (port alive but /health not 200)")
-                # 仍然尝试 restart
+                # Still attempt a restart
                 if restart_counts["backend"] % 10 == 0:
                     logger.warning("Health check failures persistent, restarting backend")
                     restart_process("backend")
             else:
                 restart_counts["backend"] = max(0, restart_counts["backend"] - 1)
 
-        # AutoTrader 存活检查
+        # AutoTrader liveness check
         if now - last_trader_check >= trader_interval:
             last_trader_check = now
             proc = processes["trader"]
@@ -211,7 +211,7 @@ def main():
             else:
                 restart_counts["trader"] = max(0, restart_counts["trader"] - 1)
 
-        # 状态汇总（每 5 分钟）
+        # Status summary (every 5 minutes)
         if int(now) % 300 < 5:
             status = {
                 "time": datetime.now().isoformat(),

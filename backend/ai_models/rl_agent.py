@@ -1,9 +1,9 @@
 """
-PPO 强化学习交易智能体
-基于 Stable-Baselines3
+PPO reinforcement-learning trading agent.
+Built on Stable-Baselines3.
 
-P1-1: GPU 自动检测 (CUDA/MPS/CPU)
-P1-2: predict_signal 重构 — 使用均值投影替代随机噪声
+P1-1: Automatic GPU detection (CUDA/MPS/CPU)
+P1-2: predict_signal rewrite — mean projection instead of random noise
 """
 import numpy as np
 import gymnasium as gym
@@ -13,7 +13,7 @@ from configs.settings import settings
 
 
 class TradingEnv(gym.Env):
-    """美股交易环境"""
+    """US-equity trading environment."""
 
     def __init__(self, df_dict, close_dict=None, feature_dim=40, lookback=60, initial_balance=100000.0,
                  commission=0.001, max_position=0.25):
@@ -69,7 +69,7 @@ class TradingEnv(gym.Env):
         return np.clip(np.nan_to_num(np.concatenate(parts).astype(np.float32)), -10, 10)
 
     def _get_prices(self, offset=0):
-        """获取当前价格，优先使用收盘价字典"""
+        """Current prices, preferring the close-price dictionary."""
         prices = {}
         for t in self.tickers:
             step = min(self.current_step + offset, self.df_dict[t].shape[0] - 1)
@@ -78,7 +78,7 @@ class TradingEnv(gym.Env):
                 p = float(self.close_dict[t][idx])
             else:
                 p = float(self.df_dict[t][step, 0])
-            prices[t] = max(p, 0.01)  # 确保价格为正
+            prices[t] = max(p, 0.01)  # Keep prices strictly positive
         return prices
 
     def _get_portfolio_value(self, prices):
@@ -106,16 +106,16 @@ class TradingEnv(gym.Env):
 
 
 # ═══════════════════════════════════════════════════════════════
-# P5: 组合级联合动作空间 — Portfolio Optimization
+# P5: Portfolio-level joint action space — portfolio optimization
 # ═══════════════════════════════════════════════════════════════
 class PortfolioTradingEnv(gym.Env):
     """
-    组合级别交易环境 — 联合动作空间优化。
+    Portfolio-level trading environment — joint action-space optimization.
 
-    改进相对于 TradingEnv:
-    - 动作空间: 组合权重向量 (softmax 归一化 → sum=1)
-    - 奖励: Sharpe + 收益率 - 回撤惩罚 - 换手成本 + 分散化奖励
-    - 状态: 含相关性矩阵 + 宏观特征
+    Improvements over TradingEnv:
+    - Action space: portfolio weight vector (softmax → sum=1)
+    - Reward: Sharpe + return - drawdown penalty - turnover cost + diversification
+    - State: correlation matrix + macro features
     """
 
     def __init__(self, df_dict, close_dict=None, feature_dim=40, lookback=60,
@@ -132,17 +132,17 @@ class PortfolioTradingEnv(gym.Env):
         self.n_tickers = len(self.tickers)
         self.max_steps = min(len(v) for v in df_dict.values()) - lookback - 1
 
-        # 动作空间: 每只股票的目标权重 [0, 1]
+        # Action space: target weight per stock in [0, 1]
         self.action_space = spaces.Box(
             low=0, high=1, shape=(self.n_tickers,), dtype=np.float32
         )
 
-        # 状态空间: 特征 + 仓位 + 余额 + 相关矩阵(上三角)
+        # State space: features + positions + cash + corr matrix (upper triangle)
         n_corr_features = self.n_tickers * (self.n_tickers - 1) // 2
         self.state_dim = (feature_dim * self.n_tickers
-                          + self.n_tickers      # 当前仓位
-                          + 1                   # 余额比例
-                          + min(n_corr_features, 20))  # 相关性(截断)
+                          + self.n_tickers      # Current positions
+                          + 1                   # Cash ratio
+                          + min(n_corr_features, 20))  # Correlation (truncated)
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32
         )
@@ -168,14 +168,14 @@ class PortfolioTradingEnv(gym.Env):
         if not prices or not next_prices:
             return self._get_state(), 0.0, True, False, {}
 
-        # 动作 → 目标权重 (softmax 归一化保证和为1)
+        # Actions → target weights (softmax so they sum to 1)
         target_weights = self._actions_to_weights(actions, prices)
 
         pv_before = self._get_portfolio_value(prices)
         self._execute_rebalance(target_weights, prices)
         pv_after = self._get_portfolio_value(next_prices)
 
-        # 更新峰值
+        # Update peak
         if pv_after > self.peak_value:
             self.peak_value = pv_after
 
@@ -184,46 +184,46 @@ class PortfolioTradingEnv(gym.Env):
         self.portfolio_value = pv_after
         self.prev_weights = target_weights
 
-        # === 组合级奖励函数 ===
+        # === Portfolio-level reward ===
         reward = self._compute_reward(ret, target_weights, actions)
         return self._get_state(), float(reward), done, False, {}
 
     def _compute_reward(self, ret, weights, raw_actions):
-        """组合级多因子奖励"""
+        """Portfolio-level multi-factor reward."""
         reward = 0.0
 
-        # 1. 基础收益 (×100 放大)
+        # 1. Base return (×100 scale)
         reward += ret * 100
 
-        # 2. 夏普比率加成 (20日滚动)
+        # 2. Sharpe bonus (20-day rolling)
         if len(self.returns_history) >= 5:
             recent = self.returns_history[-min(20, len(self.returns_history)):]
             sharpe = np.mean(recent) / (np.std(recent) + 1e-8) * np.sqrt(252)
             reward += max(sharpe, -3) * 0.15
 
-        # 3. 最大回撤惩罚
+        # 3. Max-drawdown penalty
         dd = (self.peak_value - self.portfolio_value) / (self.peak_value + 1e-8)
         reward -= dd * 0.5
 
-        # 4. 换手成本
+        # 4. Turnover cost
         turnover = np.sum(np.abs(weights - self.prev_weights))
         reward -= turnover * 0.02
 
-        # 5. 分散化奖励 (权重不集中于单只股票)
-        hhi = np.sum(weights ** 2)  # Herfindahl 指数
+        # 5. Diversification bonus (weights not concentrated in one name)
+        hhi = np.sum(weights ** 2)  # Herfindahl index
         diversification = 1.0 - (hhi * self.n_tickers - 1) / (self.n_tickers - 1)
         reward += max(0, diversification) * 0.05
 
         return float(np.clip(reward, -10, 10))
 
     def _actions_to_weights(self, actions, prices) -> np.ndarray:
-        """将动作向量转换为投资组合权重"""
-        # softmax 归一化
+        """Convert an action vector into portfolio weights."""
+        # Softmax normalize
         actions = np.clip(np.nan_to_num(actions), -5, 5)
         exp_actions = np.exp(actions - np.max(actions))
         weights = exp_actions / (exp_actions.sum() + 1e-8)
 
-        # 保留一定比例的现金
+        # Keep a cash buffer
         max_total = 0.95
         if weights.sum() > max_total:
             weights = weights / weights.sum() * max_total
@@ -231,7 +231,7 @@ class PortfolioTradingEnv(gym.Env):
         return weights
 
     def _execute_rebalance(self, target_weights, prices):
-        """执行组合再平衡"""
+        """Execute a portfolio rebalance."""
         total_value = self._get_portfolio_value(prices)
         cash_target = (1.0 - target_weights.sum()) * total_value
 
@@ -258,7 +258,7 @@ class PortfolioTradingEnv(gym.Env):
                     self.positions[t] -= shares
 
     def _get_state(self):
-        """构建增强状态向量（含相关性特征）"""
+        """Build an augmented state vector (including correlation features)."""
         parts = []
         for t in self.tickers:
             data = self.df_dict[t]
@@ -271,14 +271,14 @@ class PortfolioTradingEnv(gym.Env):
 
         parts.append([self.balance / (self.portfolio_value + 1e-8)])
 
-        # 相关性特征 (截断到 20 维)
+        # Correlation features (truncate to 20 dims)
         corr_features = self._compute_correlation_features()
         parts.append(corr_features[:20])
 
         return np.clip(np.nan_to_num(np.concatenate(parts).astype(np.float32)), -10, 10)
 
     def _compute_correlation_features(self) -> np.ndarray:
-        """计算股票间相关性特征"""
+        """Compute pairwise correlation features."""
         returns_list = []
         for t in self.tickers:
             data = self.df_dict[t]
@@ -321,7 +321,7 @@ class PortfolioTradingEnv(gym.Env):
 
 
 class TradingRLAgent:
-    """PPO 强化学习交易智能体"""
+    """PPO reinforcement-learning trading agent."""
 
     def __init__(self):
         self.model = None
@@ -332,26 +332,26 @@ class TradingRLAgent:
     @staticmethod
     def _detect_device() -> str:
         """
-        P1-1: 自动检测可用设备。
-        优先级: CUDA > MPS (Apple Silicon) > CPU
+        P1-1: Auto-detect the available device.
+        Priority: CUDA > MPS (Apple Silicon) > CPU
 
         Returns:
-            'cuda', 'mps', 或 'cpu'
+            'cuda', 'mps', or 'cpu'
         """
         try:
             import torch
             if torch.cuda.is_available():
                 device = "cuda"
-                logger.info(f"🖥️ GPU 检测: CUDA — {torch.cuda.get_device_name(0)}")
+                logger.info(f"🖥️ GPU detect: CUDA — {torch.cuda.get_device_name(0)}")
             elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
                 device = "mps"
-                logger.info("🖥️ GPU 检测: Apple MPS (Metal Performance Shaders)")
+                logger.info("🖥️ GPU detect: Apple MPS (Metal Performance Shaders)")
             else:
                 device = "cpu"
-                logger.info("🖥️ GPU 检测: 仅 CPU 可用")
+                logger.info("🖥️ GPU detect: CPU only")
             return device
         except ImportError:
-            logger.warning("⚠️ PyTorch 未安装，使用 CPU")
+            logger.warning("⚠️ PyTorch not installed; using CPU")
             return "cpu"
 
     def create_env(self, df_dict, close_dict=None, feature_dim=40, lookback=60, initial_balance=100000.0):
@@ -360,16 +360,16 @@ class TradingRLAgent:
         return self.env
 
     def build_model(self):
-        """P1-1: 构建 PPO 模型，自动检测 GPU 设备"""
+        """P1-1: Build the PPO model; auto-detect GPU."""
         from stable_baselines3 import PPO
         if self.env is None:
-            raise ValueError("请先创建环境")
+            raise ValueError("Create an environment first")
         self.model = PPO("MlpPolicy", self.env, learning_rate=settings.MODEL_RL_LEARNING_RATE,
                          n_steps=settings.MODEL_RL_N_STEPS, batch_size=settings.MODEL_RL_BATCH_SIZE,
                          gamma=settings.MODEL_RL_GAMMA, verbose=0, device=self._device,
                          ent_coef=settings.MODEL_RL_ENT_COEF,
                          clip_range=settings.MODEL_RL_CLIP_RANGE)
-        logger.info(f"PPO 模型构建完成 (device={self._device}, ent_coef={settings.MODEL_RL_ENT_COEF}, "
+        logger.info(f"PPO model built (device={self._device}, ent_coef={settings.MODEL_RL_ENT_COEF}, "
                     f"clip_range={settings.MODEL_RL_CLIP_RANGE})")
         return self.model
 
@@ -377,33 +377,33 @@ class TradingRLAgent:
         if self.model is None:
             self.build_model()
         timesteps = total_timesteps or settings.MODEL_RL_TOTAL_TIMESTEPS
-        logger.info(f"PPO 训练开始: {timesteps:,} timesteps (device={self._device})")
+        logger.info(f"PPO training started: {timesteps:,} timesteps (device={self._device})")
         self.model.learn(total_timesteps=timesteps, progress_bar=True)
         self._is_trained = True
-        logger.info("PPO 训练完成！")
+        logger.info("PPO training complete.")
 
     def predict(self, state, deterministic=True):
         if self.model is None:
-            raise ValueError("模型未训练")
+            raise ValueError("Model is not trained")
         return self.model.predict(state, deterministic=deterministic)
 
     def save(self, name="ppo_trader.zip"):
         if self.model is None:
             return
         self.model.save(str(MODELS_DIR / name))
-        logger.info("PPO 已保存")
+        logger.info("PPO saved")
 
     def load(self, name="ppo_trader.zip"):
-        """P1-1: 加载模型时使用自动检测的设备"""
+        """P1-1: Load the model onto the auto-detected device."""
         from stable_baselines3 import PPO
         import os as _os
         path = str(MODELS_DIR / name)
         if not _os.path.exists(path):
-            logger.warning(f"模型文件不存在: {path}")
+            logger.warning(f"Model file not found: {path}")
             return False
         self.model = PPO.load(path, device=self._device)
         self._is_trained = True
-        logger.info(f"PPO 模型已加载 (device={self._device})")
+        logger.info(f"PPO model loaded (device={self._device})")
         return True
 
     def is_ready(self):
@@ -497,7 +497,7 @@ class TradingRLAgent:
         positions_dict: dict = None,
     ) -> list:
         """
-        P5: 组合级别联合推理 — 输出整个组合的优化权重。
+        P5: Portfolio-level joint inference — optimized weights for the whole book.
         """
         if not self._is_trained or len(tickers) < 2:
             return [{"ticker": t, "signal": "neutral", "strength": 0.0,
@@ -563,6 +563,6 @@ class TradingRLAgent:
             return results
 
         except Exception as e:
-            logger.debug(f"Portfolio RL 推理失败: {e}")
+            logger.debug(f"Portfolio RL inference failed: {e}")
             return [{"ticker": t, "signal": "neutral", "strength": 0.0,
                      "confidence": 0.0, "target_weight": 0.0} for t in tickers]

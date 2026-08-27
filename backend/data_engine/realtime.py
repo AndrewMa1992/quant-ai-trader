@@ -1,6 +1,6 @@
 """
-实时行情推流引擎
-作为真实市场数据的模拟层 + WebSocket 推流源
+Realtime quote streaming engine.
+Acts as a simulated market-data layer plus a WebSocket push source.
 """
 import asyncio
 from datetime import datetime
@@ -16,60 +16,60 @@ from backend.data_engine.data_pipeline import DataPipeline
 
 class RealtimeEngine:
     """
-    实时行情引擎
-    - 模拟实时数据推流（基于历史数据 + 随机噪声）
-    - 真实模式对接 Tiger Brokers 实时行情
-    - 自定频次推送（1min/5min/1day）
+    Realtime quote engine.
+    - Simulate realtime streaming (historical data + random noise)
+    - Live mode can connect to Tiger Brokers realtime quotes
+    - Configurable push frequency (1min/5min/1day)
     """
 
     def __init__(self, market_data: MarketDataEngine, pipeline: DataPipeline):
         self.market_data = market_data
         self.pipeline = pipeline
         self._callbacks: Dict[str, List[Callable]] = {
-            "tick": [],      # 每次数据更新
-            "signal": [],    # 信号生成
-            "error": [],     # 错误
+            "tick": [],      # every data update
+            "signal": [],    # signal generation
+            "error": [],     # errors
         }
         self._running = False
-        self._tick_interval = settings.DATA_UPDATE_INTERVAL  # 秒
+        self._tick_interval = settings.DATA_UPDATE_INTERVAL  # seconds
         self._base_data: Dict[str, pd.DataFrame] = {}
         self._current_prices: Dict[str, float] = {}
         self._last_update: Dict[str, datetime] = {}
 
     # ================================================================
-    # 事件注册
+    # Event registration
     # ================================================================
 
     def on_tick(self, callback: Callable):
-        """注册 tick 回调"""
+        """Register a tick callback."""
         self._callbacks["tick"].append(callback)
 
     def on_signal(self, callback: Callable):
-        """注册信号回调"""
+        """Register a signal callback."""
         self._callbacks["signal"].append(callback)
 
     def on_error(self, callback: Callable):
-        """注册错误回调"""
+        """Register an error callback."""
         self._callbacks["error"].append(callback)
 
     # ================================================================
-    # 引擎控制
+    # Engine control
     # ================================================================
 
     async def start(self):
         """
-        启动实时行情引擎
-        首次运行会加载历史数据作为基础，然后开始模拟推流
+        Start the realtime quote engine.
+        First run loads historical data as a baseline, then starts simulated streaming.
         """
-        logger.info("🚀 启动实时行情引擎...")
+        logger.info("🚀 Starting realtime quote engine...")
 
-        # 加载初始数据
+        # Load initial data
         await self._load_initial_data()
 
         self._running = True
-        logger.info(f"✅ 实时行情引擎已启动 (间隔: {self._tick_interval}s)")
+        logger.info(f"✅ Realtime quote engine started (interval: {self._tick_interval}s)")
 
-        # 主循环
+        # Main loop
         while self._running:
             try:
                 await self._process_tick()
@@ -77,22 +77,22 @@ class RealtimeEngine:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"❌ 实时引擎错误: {e}")
+                logger.error(f"❌ Realtime engine error: {e}")
                 self._emit("error", {"error": str(e)})
 
     def stop(self):
-        """停止引擎"""
+        """Stop the engine."""
         self._running = False
-        logger.info("⏹️ 实时行情引擎已停止")
+        logger.info("⏹️ Realtime quote engine stopped")
 
     # ================================================================
-    # 数据生成
+    # Data generation
     # ================================================================
 
     def _generate_simulated_tick(self, ticker: str) -> Dict:
         """
-        基于历史数据生成模拟实时 tick
-        使用随机游走 + 均值回归生成逼真的价格变动
+        Generate a simulated realtime tick from historical data.
+        Uses random walk + mean reversion for realistic price moves.
         """
         if ticker not in self._base_data or self._base_data[ticker].empty:
             return {}
@@ -101,23 +101,23 @@ class RealtimeEngine:
         last_close = base["close"].iloc[-1]
         base_volatility = base["returns_1d"].std() if "returns_1d" in base.columns else 0.02
 
-        # 当前价格（带随机噪声）
+        # Current price (with random noise)
         current_price = self._current_prices.get(ticker, float(last_close))
-        noise = np.random.normal(0, base_volatility / np.sqrt(78))  # 分钟级噪声
-        # 均值回归力
+        noise = np.random.normal(0, base_volatility / np.sqrt(78))  # minute-level noise
+        # Mean-reversion force
         mean_revert = 0.01 * (float(last_close) - current_price) / float(last_close)
         new_price = current_price * (1 + noise + mean_revert)
 
-        # 确保价格合理
+        # Keep prices in a reasonable band
         new_price = max(new_price, current_price * 0.98)
         new_price = min(new_price, current_price * 1.02)
 
         self._current_prices[ticker] = new_price
 
-        # 模拟成交量
+        # Simulated volume
         avg_volume = base["volume"].mean()
         volume_intensity = np.random.exponential(1.5)
-        simulated_volume = int(avg_volume * volume_intensity / 78)  # 分钟级
+        simulated_volume = int(avg_volume * volume_intensity / 78)  # minute-level
 
         tick = {
             "ticker": ticker,
@@ -135,7 +135,7 @@ class RealtimeEngine:
         return tick
 
     async def _process_tick(self):
-        """处理一次 tick 更新，支持多市场"""
+        """Process one tick update across markets."""
         ticks = []
         for ticker in settings.DATA_ALL_TICKERS:
             tick = self._generate_simulated_tick(ticker)
@@ -146,7 +146,7 @@ class RealtimeEngine:
             self._emit("tick", ticks)
 
     async def _load_initial_data(self):
-        """加载初始数据作为模拟基准（非阻塞）"""
+        """Load baseline historical data for simulation (non-blocking)."""
         import concurrent.futures
         loop = asyncio.get_running_loop()
 
@@ -160,39 +160,39 @@ class RealtimeEngine:
                     df = await loop.run_in_executor(None, lambda: self.pipeline.process(df))
                     self._base_data[ticker] = df
                     self._current_prices[ticker] = float(df["close"].iloc[-1])
-                    logger.info(f"📊 {ticker}: 基础数据加载完成 (当前价格: ${self._current_prices[ticker]:.2f})")
+                    logger.info(f"📊 {ticker}: baseline data loaded (last price: ${self._current_prices[ticker]:.2f})")
             except Exception as e:
-                logger.warning(f"⚠️ {ticker} 数据加载失败: {e}")
+                logger.warning(f"⚠️ {ticker} data load failed: {e}")
 
         for ticker in settings.DATA_ALL_TICKERS:
             await _load_one(ticker)
-            # 让出事件循环，避免阻塞 HTTP 请求
+            # Yield the event loop so HTTP requests are not blocked
             await asyncio.sleep(0)
 
-        logger.info(f"✅ 共加载 {len(self._base_data)} 只股票的基础数据")
+        logger.info(f"✅ Loaded baseline data for {len(self._base_data)} stocks")
 
     def _emit(self, event: str, data):
-        """发射事件到所有注册的回调"""
+        """Emit an event to all registered callbacks."""
         for cb in self._callbacks.get(event, []):
             try:
                 cb(data)
             except Exception as e:
-                logger.error(f"❌ 回调执行错误: {e}")
+                logger.error(f"❌ Callback error: {e}")
 
     # ================================================================
-    # 数据查询
+    # Data queries
     # ================================================================
 
     def get_current_price(self, ticker: str) -> Optional[float]:
-        """获取当前模拟价格"""
+        """Return the current simulated price."""
         return self._current_prices.get(ticker)
 
     def get_base_data(self, ticker: str) -> Optional[pd.DataFrame]:
-        """获取基础历史数据"""
+        """Return baseline historical data."""
         return self._base_data.get(ticker)
 
     def get_status(self) -> Dict:
-        """获取引擎状态"""
+        """Return engine status."""
         return {
             "running": self._running,
             "tickers": len(self._current_prices),
