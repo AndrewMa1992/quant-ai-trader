@@ -1,23 +1,23 @@
 """
-tests/test_v22_verification.py — v2.2 全量验证测试套件
+tests/test_v22_verification.py — v2.2 full verification test suite
 ======================================================
-QA Engineer: Edward (严过关)
+QA Engineer: Edward (strict QA)
 
-覆盖 P0/P1/P2 全部 15 项需求:
-  P0-1: 实盘执行通道 (TigerExecutor live/paper/rebalance)
-  P0-2: 组合熔断 (circuit breaker, liquidate_all, daily_start init)
-  P0-3: 市场时段检测 (get_market_status, is_any_market_open)
-  P0-4: Tiger状态同步 (sync_from_tiger)
-  P0-5: 桥接清理 (AST check: no backend. imports in trading_pipeline)
-  P1-1: 杠杆铁律 (check_leverage)
-  P1-2: 每日交易上限 (check_daily_limit)
-  P1-3: 空头修复 (fix_short_positions)
-  P1-4: v1 fallback降级 (指数退避逻辑)
-  P1-5: 前端推送 (WsPusher 不抛异常)
-  P2-1: Git自动同步 (GIT_AUTO_SYNC=False 不调用)
+Covers all 15 P0/P1/P2 requirements:
+  P0-1: Live execution path (TigerExecutor live/paper/rebalance)
+  P0-2: Portfolio circuit breaker (circuit breaker, liquidate_all, daily_start init)
+  P0-3: Market-session detection (get_market_status, is_any_market_open)
+  P0-4: Tiger state sync (sync_from_tiger)
+  P0-5: Bridge cleanup (AST check: no backend. imports in trading_pipeline)
+  P1-1: Leverage iron rule (check_leverage)
+  P1-2: Daily trade cap (check_daily_limit)
+  P1-3: Short-position fix (fix_short_positions)
+  P1-4: v1 fallback (exponential backoff)
+  P1-5: Frontend push (WsPusher must not raise)
+  P2-1: Git auto-sync (GIT_AUTO_SYNC=False must not call)
 
-运行方式:
-    cd E:\workbuddyspace\Claw\quant-ai-trader
+How to run:
+    cd E:/workbuddyspace/Claw/quant-ai-trader
     python -m pytest tests/test_v22_verification.py -v --tb=short
 """
 
@@ -40,96 +40,96 @@ if _PROJ_ROOT not in sys.path:
 
 
 class TestImportIntegrity:
-    """验证所有 shared/ 模块和 PipelineConfig 可正确导入。"""
+    """Verify all shared/ modules and PipelineConfig import correctly."""
 
     def test_import_shared_tiger_bridge(self):
-        """shared.tiger_bridge 可导入。"""
+        """shared.tiger_bridge can be imported."""
         import shared.tiger_bridge
         assert shared.tiger_bridge is not None
 
     def test_import_shared_market_session(self):
-        """shared.market_session 可导入。"""
+        """shared.market_session can be imported."""
         import shared.market_session
         assert shared.market_session is not None
 
     def test_import_shared_portfolio_manager(self):
-        """shared.portfolio_manager 可导入。"""
+        """shared.portfolio_manager can be imported."""
         import shared.portfolio_manager
         assert shared.portfolio_manager is not None
 
     def test_import_shared_risk_manager(self):
-        """shared.risk_manager 可导入。"""
+        """shared.risk_manager can be imported."""
         import shared.risk_manager
         assert shared.risk_manager is not None
 
     def test_import_shared_tiger_executor(self):
-        """shared.tiger_executor 可导入。"""
+        """shared.tiger_executor can be imported."""
         import shared.tiger_executor
         assert shared.tiger_executor is not None
 
     def test_import_shared_daily_state(self):
-        """shared.daily_state 可导入。"""
+        """shared.daily_state can be imported."""
         import shared.daily_state
         assert shared.daily_state is not None
 
     def test_import_shared_ws_pusher(self):
-        """shared.ws_pusher 可导入。"""
+        """shared.ws_pusher can be imported."""
         import shared.ws_pusher
         assert shared.ws_pusher is not None
 
     def test_import_shared_git_sync(self):
-        """shared.git_sync 可导入。"""
+        """shared.git_sync can be imported."""
         import shared.git_sync
         assert shared.git_sync is not None
 
     def test_import_risk_report_class(self):
-        """RiskReport 可从 risk_manager 导入。"""
+        """RiskReport can be imported from risk_manager."""
         from shared.risk_manager import RiskReport
         report = RiskReport()
         assert report.passed is True
         assert report.circuit_breaker is False
 
     def test_import_risk_manager_class(self):
-        """RiskManager 可从 risk_manager 导入。"""
+        """RiskManager can be imported from risk_manager."""
         from shared.risk_manager import RiskManager
         rm = RiskManager()
         assert rm is not None
 
     def test_import_tiger_executor_class(self):
-        """TigerExecutor 可从 tiger_executor 导入。"""
+        """TigerExecutor can be imported from tiger_executor."""
         from shared.tiger_executor import TigerExecutor
         assert TigerExecutor is not None
 
     def test_import_portfolio_manager_class(self):
-        """PortfolioManager 可从 portfolio_manager 导入。"""
+        """PortfolioManager can be imported from portfolio_manager."""
         from shared.portfolio_manager import PortfolioManager
         pm = PortfolioManager()
         assert pm is not None
 
     def test_import_market_session_functions(self):
-        """get_market_status / is_any_market_open 可从 market_session 导入。"""
+        """get_market_status / is_any_market_open can be imported from market_session."""
         from shared.market_session import get_market_status, is_any_market_open
         status = get_market_status()
         assert isinstance(status, dict)
-        # P0-3: 返回 3 个市场的状态 (US, HK, CN)
+        # P0-3: return status for 3 markets (US, HK, CN)
         assert len(status) >= 2  # At least 2 markets tracked
         result = is_any_market_open()
         assert isinstance(result, bool)
 
     def test_import_pipeline_config(self):
-        """PipelineConfig 可从 configs.pipeline_config 导入。"""
+        """PipelineConfig can be imported from configs.pipeline_config."""
         from configs.pipeline_config import PipelineConfig, pipeline_config
         assert PipelineConfig is not None
         assert pipeline_config is not None
 
     def test_import_wspusher_class(self):
-        """WsPusher 可从 ws_pusher 导入。"""
+        """WsPusher can be imported from ws_pusher."""
         from shared.ws_pusher import WsPusher
         wp = WsPusher(api_url="http://localhost:9999", enabled=False)
         assert wp is not None
 
     def test_import_dailystate_class(self):
-        """DailyState 可从 daily_state 导入。"""
+        """DailyState can be imported from daily_state."""
         from shared.daily_state import DailyState
         ds = DailyState()
         assert ds is not None
@@ -140,17 +140,17 @@ class TestImportIntegrity:
 # ───────────────────────────────────────────────────────────────
 
 
-# ── P0-1: 实盘执行通道 ──────────────────────────────────────
+# ── P0-1: Live execution path ──────────────────────────────────────
 
 class TestP01_TigerExecutor:
-    """P0-1: TigerExecutor live/paper/rebalance 测试。"""
+    """P0-1: TigerExecutor live/paper/rebalance tests."""
 
     @pytest.fixture
     def mock_portfolio(self):
-        """创建 mock portfolio。"""
+        """Create a mock portfolio."""
         from shared.portfolio_manager import PortfolioManager
         pf = PortfolioManager(initial_capital=100000.0)
-        # 预设持仓: AAPL 100股 @ $180
+        # Seeded position: AAPL 100 shares @ $180
         pf.positions["AAPL"] = 100.0
         pf.avg_costs["AAPL"] = 180.0
         pf.cash = 82000.0
@@ -159,19 +159,19 @@ class TestP01_TigerExecutor:
 
     @pytest.fixture
     def mock_risk(self):
-        """创建 mock risk manager。"""
+        """Create a mock risk manager."""
         from shared.risk_manager import RiskManager
         rm = RiskManager(initial_capital=100000.0)
         rm.sync_portfolio_value(100000.0, 82000.0)
-        # 确保 daily_start_value 已初始化，避免 check_circuit_breaker 第一次返回空
+        # Ensure daily_start_value is initialized so check_circuit_breaker does not return empty on first call
         rm.daily_start_value = 100000.0
         return rm
 
     @pytest.fixture
     def mock_tiger(self):
-        """创建 mock tiger bridge。"""
+        """Create a mock tiger bridge."""
         tiger = MagicMock()
-        tiger.is_connected.return_value = False  # 默认断连
+        tiger.is_connected.return_value = False  # disconnected by default
         tiger.place_order.return_value = {"order_id": "fake-order-123"}
         tiger.get_account_info.return_value = {
             "cash": 82000.0, "total_value": 100000.0, "leverage": 1.0
@@ -182,7 +182,7 @@ class TestP01_TigerExecutor:
         return tiger
 
     def test_paper_mode_calls_portfolio_execute_trade(self, mock_portfolio, mock_risk, mock_tiger):
-        """TigerExecutor mode='paper' → 调用 portfolio.execute_trade。"""
+        """TigerExecutor mode='paper' → calls portfolio.execute_trade."""
         from shared.tiger_executor import TigerExecutor
 
         # Patch portfolio.execute_trade to verify it's called
@@ -197,7 +197,7 @@ class TestP01_TigerExecutor:
             assert spy.called, "paper mode should call portfolio.execute_trade"
 
     def test_live_mode_calls_tiger_place_order(self, mock_portfolio, mock_risk, mock_tiger):
-        """TigerExecutor mode='live' → 调用 tiger_bridge.place_order。"""
+        """TigerExecutor mode='live' → calls tiger_bridge.place_order."""
         from shared.tiger_executor import TigerExecutor
 
         mock_tiger.is_connected.return_value = True
@@ -216,7 +216,7 @@ class TestP01_TigerExecutor:
         assert mock_tiger.place_order.called, "live mode should call tiger_bridge.place_order"
 
     def test_execute_rebalance_weights(self, mock_portfolio, mock_risk, mock_tiger):
-        """execute_rebalance 正确计算权重差异并生成订单。"""
+        """execute_rebalance correctly computes weight diffs and generates orders."""
         from shared.tiger_executor import TigerExecutor
 
         mock_risk.daily_start_value = 100000.0
@@ -244,45 +244,45 @@ class TestP01_TigerExecutor:
             assert "side" in order
 
 
-# ── P0-2: 组合熔断 ──────────────────────────────────────────
+# ── P0-2: Portfolio circuit breaker ──────────────────────────────────────────
 
 class TestP02_CircuitBreaker:
-    """P0-2: 组合熔断 (circuit breaker, liquidate_all, daily_start init)。"""
+    """P0-2: Portfolio circuit breaker (circuit breaker, liquidate_all, daily_start init)."""
 
     def test_daily_loss_5pct_triggers_breaker_hard(self):
-        """日亏损 ≥5% → RiskReport(passed=False, circuit_breaker=True) in hard mode。"""
+        """Daily loss ≥5% → RiskReport(passed=False, circuit_breaker=True) in hard mode."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0, breaker_mode="hard")
         rm.sync_portfolio_value(100000.0, 100000.0)
-        # 首次调用初始化 daily_start_value
+        # First call initializes daily_start_value
         report = rm.check_circuit_breaker()
-        # 第一次调用总是通过 (初始化)
+        # First call always passes (initialization)
         assert report.passed is True, "First call should always pass (init)"
         assert report.circuit_breaker is False
 
-        # 模拟日亏损 6%
+        # Simulate a 6% daily loss
         rm.portfolio_value = 94000.0  # -6%
         report = rm.check_circuit_breaker()
         assert report.passed is False, "6% daily loss should block in hard mode"
         assert report.circuit_breaker is True
 
     def test_daily_loss_5pct_warn_mode_passes(self):
-        """breaker_mode='warn' → daily_loss 5% → passed=True but circuit_breaker=True。"""
+        """breaker_mode='warn' → daily_loss 5% → passed=True but circuit_breaker=True."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0, breaker_mode="warn")
         rm.sync_portfolio_value(100000.0, 100000.0)
-        # 首次初始化
+        # First-time initialization
         rm.check_circuit_breaker()
-        # 模拟日亏损 6%
+        # Simulate a 6% daily loss
         rm.portfolio_value = 94000.0
         report = rm.check_circuit_breaker()
         assert report.passed is True, "warn mode should still pass"
         assert report.circuit_breaker is True, "circuit_breaker flag should still be set"
 
     def test_liquidate_all_returns_order_list(self):
-        """liquidate_all 返回平仓订单列表。"""
+        """liquidate_all returns a list of flatten orders."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
@@ -299,7 +299,7 @@ class TestP02_CircuitBreaker:
             assert order["reason"] == "circuit_breaker_liquidation"
 
     def test_liquidate_all_empty_positions(self):
-        """无持仓时 liquidate_all 返回空列表。"""
+        """liquidate_all returns an empty list when there are no positions."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
@@ -311,7 +311,7 @@ class TestP02_CircuitBreaker:
         assert orders == [], "No positions should return empty list"
 
     def test_first_check_initializes_daily_start(self):
-        """首次调用 check_circuit_breaker 自动初始化 daily_start_value。"""
+        """First check_circuit_breaker call auto-initializes daily_start_value."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
@@ -322,7 +322,7 @@ class TestP02_CircuitBreaker:
         assert rm.daily_start_value == 100000.0
 
     def test_cool_down_period(self):
-        """断路器触发后在冷却期内持续阻断。"""
+        """After the breaker trips, blocking continues during cooldown."""
         from shared.risk_manager import RiskManager
         from datetime import datetime, timedelta
 
@@ -330,7 +330,7 @@ class TestP02_CircuitBreaker:
         rm.sync_portfolio_value(100000.0, 100000.0)
         rm.check_circuit_breaker()  # init
 
-        # 手动触发断路器
+        # Manually trip the circuit breaker
         rm.circuit_breaker_triggered = True
         rm.circuit_breaker_time = datetime.now()  # just now
         rm.daily_start_value = 100000.0
@@ -339,35 +339,35 @@ class TestP02_CircuitBreaker:
         report = rm.check_circuit_breaker()
         assert report.passed is False
         assert report.circuit_breaker is True
-        assert "冷却" in report.reason
+        assert "cooldown" in report.reason.lower() or "cooling" in report.reason.lower()
 
 
-# ── P0-3: 市场时段检测 ──────────────────────────────────────
+# ── P0-3: Market-session detection ──────────────────────────────────────
 
 class TestP03_MarketSession:
-    """P0-3: 市场时段检测 (get_market_status, is_any_market_open)。"""
+    """P0-3: Market-session detection (get_market_status, is_any_market_open)."""
 
     def test_get_market_status_returns_dict(self):
-        """get_market_status() 返回字典，包含 US/HK/CN 键。"""
+        """get_market_status() returns a dict with US/HK/CN keys."""
         from shared.market_session import get_market_status, _MARKETS
 
         status = get_market_status()
         assert isinstance(status, dict), "Should return dict"
-        # 验证包含所有跟踪的市场
+        # Verify all tracked markets are present
         for market in _MARKETS:
             assert market in status, f"Market {market} should be in status"
         assert len(status) == len(_MARKETS), f"Should return {len(_MARKETS)} market statuses"
 
     def test_is_any_market_open_returns_bool(self):
-        """is_any_market_open() 返回 bool，不抛异常。"""
+        """is_any_market_open() returns a bool and does not raise."""
         from shared.market_session import is_any_market_open
 
         result = is_any_market_open()
         assert isinstance(result, bool), "Should return bool"
-        # 无论 True/False 都不应抛异常
+        # Must not raise regardless of True/False
 
     def test_no_exceptions(self):
-        """市场时段检测函数不抛异常。"""
+        """Market-session helpers must not raise."""
         from shared.market_session import get_market_status, is_any_market_open, is_market_open
 
         try:
@@ -376,25 +376,25 @@ class TestP03_MarketSession:
             is_market_open("US")
             is_market_open("HK")
             is_market_open("CN")
-            is_market_open("JP")  # 未知市场应返回 False
+            is_market_open("JP")  # unknown market should return False
         except Exception as e:
             pytest.fail(f"Market session functions raised exception: {e}")
 
     def test_is_market_open_unknown_returns_false(self):
-        """未知市场 is_market_open 返回 False。"""
+        """is_market_open returns False for an unknown market."""
         from shared.market_session import is_market_open
 
         result = is_market_open("NONEXISTENT")
         assert result is False
 
 
-# ── P0-4: Tiger状态同步 ──────────────────────────────────────
+# ── P0-4: Tiger state sync ──────────────────────────────────────
 
 class TestP04_TigerSync:
-    """P0-4: Tiger 状态同步 (PortfolioManager.sync_from_tiger)。"""
+    """P0-4: Tiger state sync (PortfolioManager.sync_from_tiger)."""
 
     def test_sync_from_tiger_returns_required_fields(self):
-        """sync_from_tiger 返回值包含所有必要字段。"""
+        """sync_from_tiger return value includes all required fields."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -422,7 +422,7 @@ class TestP04_TigerSync:
         assert "source" in result, "Must have source key"
 
     def test_sync_from_tiger_with_positions(self):
-        """sync_from_tiger 正确同步持仓数量。"""
+        """sync_from_tiger correctly syncs position quantities."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -445,7 +445,7 @@ class TestP04_TigerSync:
         assert result["source"] == "tiger_api"
 
     def test_sync_from_tiger_offline(self):
-        """Tiger 离线时 sync_from_tiger 返回 synced=False。"""
+        """When Tiger is offline, sync_from_tiger returns synced=False."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -495,20 +495,20 @@ class TestP04_TigerSync:
         assert pf.total_value == 1700.0
 
 
-# ── P0-5: 桥接清理 ──────────────────────────────────────────
+# ── P0-5: Bridge cleanup ──────────────────────────────────────────
 
 class TestP05_BridgeCleanup:
-    """P0-5: 桥接清理 — trading_pipeline.py 不包含旧的 backend 模块级导入。"""
+    """P0-5: Bridge cleanup — trading_pipeline.py must not contain old backend module-level imports."""
 
     @pytest.fixture
     def pipeline_source(self):
-        """读取 trading_pipeline.py 源码。"""
+        """Read trading_pipeline.py source."""
         path = os.path.join(_PROJ_ROOT, "trading_pipeline.py")
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
 
     def test_no_backend_portfolio_import(self, pipeline_source):
-        """trading_pipeline.py 不含 from backend.trading_engine.portfolio import。"""
+        """trading_pipeline.py must not contain from backend.trading_engine.portfolio import."""
         assert "from backend.trading_engine.portfolio" not in pipeline_source, (
             "trading_pipeline.py must NOT import from backend.trading_engine.portfolio"
         )
@@ -518,7 +518,7 @@ class TestP05_BridgeCleanup:
         )
 
     def test_no_backend_risk_manager_import(self, pipeline_source):
-        """trading_pipeline.py 不含 from backend.trading_engine.risk_manager import。"""
+        """trading_pipeline.py must not contain from backend.trading_engine.risk_manager import."""
         assert "from backend.trading_engine.risk_manager" not in pipeline_source, (
             "trading_pipeline.py must NOT import from backend.trading_engine.risk_manager"
         )
@@ -527,7 +527,7 @@ class TestP05_BridgeCleanup:
         )
 
     def test_no_backend_executor_import(self, pipeline_source):
-        """trading_pipeline.py 不含 from backend.trading_engine.executor import。"""
+        """trading_pipeline.py must not contain from backend.trading_engine.executor import."""
         assert "from backend.trading_engine.executor" not in pipeline_source, (
             "trading_pipeline.py must NOT import from backend.trading_engine.executor"
         )
@@ -536,26 +536,26 @@ class TestP05_BridgeCleanup:
         )
 
     def test_uses_shared_modules(self, pipeline_source):
-        """trading_pipeline.py 使用 shared/ 模块替代旧 backend 导入。"""
+        """trading_pipeline.py uses shared/ modules instead of old backend imports."""
         assert "from shared.portfolio_manager import PortfolioManager" in pipeline_source
         assert "from shared.risk_manager import RiskManager" in pipeline_source
         assert "from shared.tiger_executor import TigerExecutor" in pipeline_source
 
     def test_tiger_bridge_uses_lazy_import(self):
-        """shared/tiger_bridge.py 使用延迟导入 (不在模块级 import backend)。"""
+        """shared/tiger_bridge.py uses lazy imports (no module-level import backend)."""
         path = os.path.join(_PROJ_ROOT, "shared", "tiger_bridge.py")
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
-        # 模块级不应有 from backend. import
+        # Module level must not have from backend. import
         lines = source.splitlines()
         for line in lines:
             stripped = line.strip()
-            # 忽略注释行和函数内的 import
+            # Ignore comment lines and in-function imports
             if stripped.startswith("#"):
                 continue
             if stripped.startswith("from backend.") or stripped.startswith("import backend."):
-                # 必须是在函数/方法内部的 import (缩进)
+                # Must be an import inside a function/method (indented)
                 leading_spaces = len(line) - len(line.lstrip())
                 if leading_spaces == 0:
                     pytest.fail(
@@ -568,13 +568,13 @@ class TestP05_BridgeCleanup:
 # ───────────────────────────────────────────────────────────────
 
 
-# ── P1-1: 杠杆铁律 ──────────────────────────────────────────
+# ── P1-1: Leverage iron rule ──────────────────────────────────────────
 
 class TestP11_LeverageIronLaw:
-    """P1-1: 杠杆铁律 — check_leverage 阻止杠杆交易。"""
+    """P1-1: Leverage iron rule — check_leverage blocks leveraged trades."""
 
     def test_leverage_15_blocked(self):
-        """check_leverage({"leverage": 1.5}) → True (阻止交易)。"""
+        """check_leverage({"leverage": 1.5}) → True (block the trade)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager()
@@ -582,7 +582,7 @@ class TestP11_LeverageIronLaw:
         assert result is True, "Leverage 1.5 should be blocked"
 
     def test_leverage_10_allowed(self):
-        """check_leverage({"leverage": 1.0}) → False (放行)。"""
+        """check_leverage({"leverage": 1.0}) → False (allow)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager()
@@ -590,7 +590,7 @@ class TestP11_LeverageIronLaw:
         assert result is False, "Leverage 1.0 should be allowed"
 
     def test_leverage_1001_blocked(self):
-        """check_leverage({"leverage": 1.001}) → True (阻止，严格大于 1.001 阈值)。"""
+        """check_leverage({"leverage": 1.001}) → True (block; strictly above the 1.001 threshold)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager()
@@ -598,7 +598,7 @@ class TestP11_LeverageIronLaw:
         assert result is True, f"Leverage >1.001 should be blocked, got {result}"
 
     def test_leverage_none_allowed(self):
-        """check_leverage(None) → False (None account = safe)。"""
+        """check_leverage(None) → False (None account = safe)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager()
@@ -606,13 +606,13 @@ class TestP11_LeverageIronLaw:
         assert result is False, "None account should be allowed"
 
 
-# ── P1-2: 每日交易上限 ──────────────────────────────────────
+# ── P1-2: Daily trade cap ──────────────────────────────────────
 
 class TestP12_DailyTradeLimit:
-    """P1-2: 每日交易上限 — check_daily_limit。"""
+    """P1-2: Daily trade cap — check_daily_limit."""
 
     def test_trades_today_equals_max_blocked(self):
-        """trades_today=5, max=5 → True (阻止)。"""
+        """trades_today=5, max=5 → True (block)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(max_daily_trades=5)
@@ -621,7 +621,7 @@ class TestP12_DailyTradeLimit:
         assert result is True, "When trades_today == max, should be blocked"
 
     def test_max_zero_allowed(self):
-        """max_daily_trades=0 → False (不限制)。"""
+        """max_daily_trades=0 → False (no limit)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(max_daily_trades=0)
@@ -630,7 +630,7 @@ class TestP12_DailyTradeLimit:
         assert result is False, "max=0 should disable limit"
 
     def test_trades_below_max_allowed(self):
-        """trades_today=3, max=5 → False (放行)。"""
+        """trades_today=3, max=5 → False (allow)."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(max_daily_trades=5)
@@ -639,19 +639,19 @@ class TestP12_DailyTradeLimit:
         assert result is False, "trades < max should be allowed"
 
 
-# ── P1-3: 空头修复 ──────────────────────────────────────────
+# ── P1-3: Short-position fix ──────────────────────────────────────────
 
 class TestP13_ShortFix:
-    """P1-3: 空头修复 — fix_short_positions 检测负持仓并修复。"""
+    """P1-3: Short-position fix — fix_short_positions detects and repairs negative holdings."""
 
     def test_fix_short_positions_detects_negative(self):
-        """fix_short_positions 检测负持仓并修复。"""
+        """fix_short_positions detects and repairs negative holdings."""
         from shared.risk_manager import RiskManager
         from shared.portfolio_manager import PortfolioManager
 
         rm = RiskManager(initial_capital=100000.0)
         pf = PortfolioManager(initial_capital=100000.0)
-        # 设置一个负持仓 (空头)
+        # Seed a negative holding (short)
         pf.positions["AAPL"] = -50.0
 
         mock_tiger = MagicMock()
@@ -662,13 +662,13 @@ class TestP13_ShortFix:
         assert fixed >= 1, f"Should fix at least 1 short position, got {fixed}"
 
     def test_fix_short_positions_no_short(self):
-        """无空头时返回 0。"""
+        """Returns 0 when there are no shorts."""
         from shared.risk_manager import RiskManager
         from shared.portfolio_manager import PortfolioManager
 
         rm = RiskManager(initial_capital=100000.0)
         pf = PortfolioManager(initial_capital=100000.0)
-        pf.positions["AAPL"] = 100.0  # 正持仓
+        pf.positions["AAPL"] = 100.0  # long position
 
         mock_tiger = MagicMock()
         prices = {"AAPL": 180.0}
@@ -677,14 +677,14 @@ class TestP13_ShortFix:
         assert fixed == 0, "No short positions should return 0"
 
     def test_fix_short_positions_updates_portfolio(self):
-        """修复空头后 portfolio 持仓应更新。"""
+        """Portfolio holdings should update after shorts are repaired."""
         from shared.risk_manager import RiskManager
         from shared.portfolio_manager import PortfolioManager
 
         rm = RiskManager(initial_capital=100000.0)
         pf = PortfolioManager(initial_capital=100000.0)
         pf.positions["AAPL"] = -50.0
-        pf.cash = 100000.0 + 50 * 180  # 提供足够资金
+        pf.cash = 100000.0 + 50 * 180  # provide enough cash
 
         mock_tiger = MagicMock()
         mock_tiger.is_connected.return_value = False
@@ -692,17 +692,17 @@ class TestP13_ShortFix:
 
         fixed = rm.fix_short_positions(pf, mock_tiger, prices)
         assert fixed >= 1
-        # 修复后 AAPL 持仓应 ≥ 0
+        # After the fix, AAPL holdings should be ≥ 0
         assert pf.positions.get("AAPL", -1) >= 0, "Position should be non-negative after fix"
 
 
-# ── P1-4: v1 fallback降级 ────────────────────────────────────
+# ── P1-4: v1 fallback ────────────────────────────────────
 
 class TestP14_V1Fallback:
-    """P1-4: v1 fallback 降级 — 指数退避重试逻辑。"""
+    """P1-4: v1 fallback — exponential backoff retry logic."""
 
     def test_retry_http_call_exists(self):
-        """_retry_http_call 方法存在于 TradingPipeline。"""
+        """_retry_http_call method exists on TradingPipeline."""
         path = os.path.join(_PROJ_ROOT, "trading_pipeline.py")
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
@@ -711,30 +711,30 @@ class TestP14_V1Fallback:
         )
 
     def test_exponential_backoff_logic(self):
-        """_retry_http_call 包含指数退避: wait = 2 ** attempt。"""
+        """_retry_http_call includes exponential backoff: wait = 2 ** attempt."""
         path = os.path.join(_PROJ_ROOT, "trading_pipeline.py")
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
-        # 指数退避特征: 2 ** attempt 或 2**attempt
+        # Exponential-backoff signature: 2 ** attempt or 2**attempt
         assert "2 ** attempt" in source or "2**attempt" in source or "2** attempt" in source, (
             "Retry logic must use exponential backoff (2 ** attempt)"
         )
 
     def test_max_retries_configurable(self):
-        """_retry_http_call 接受 max_retries 参数。"""
+        """_retry_http_call accepts a max_retries parameter."""
         path = os.path.join(_PROJ_ROOT, "trading_pipeline.py")
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
         assert "max_retries" in source, "Retry function must accept max_retries parameter"
 
 
-# ── P1-5: 前端推送 ──────────────────────────────────────────
+# ── P1-5: Frontend push ──────────────────────────────────────────
 
 class TestP15_WebSocketPush:
-    """P1-5: 前端推送 — WsPusher 不抛异常。"""
+    """P1-5: Frontend push — WsPusher must not raise."""
 
     def test_wspusher_disabled_no_exception(self):
-        """WsPusher enabled=False 时 push 不抛异常。"""
+        """WsPusher push must not raise when enabled=False."""
         import asyncio
         from shared.ws_pusher import WsPusher
 
@@ -748,7 +748,7 @@ class TestP15_WebSocketPush:
         asyncio.run(_test())
 
     def test_wspusher_no_url_no_exception(self):
-        """WsPusher api_url="" 时 push 不抛异常。"""
+        """WsPusher push must not raise when api_url=""."""
         import asyncio
         from shared.ws_pusher import WsPusher
 
@@ -760,19 +760,19 @@ class TestP15_WebSocketPush:
         asyncio.run(_test())
 
     def test_wspusher_unreachable_no_exception(self):
-        """WsPusher 推送到不可达端点时不抛异常 (graceful degradation)。"""
+        """WsPusher must not raise when pushing to an unreachable endpoint (graceful degradation)."""
         import asyncio
         from shared.ws_pusher import WsPusher
 
         async def _test():
-            # 端口大概率未使用
+            # Port is almost certainly unused
             wp = WsPusher(api_url="http://127.0.0.1:1", enabled=True, timeout=0.5)
             await wp.push_step_update(1, 1, {"test": "data"})
             await wp.push_alert("test", "test message")
             await wp.push_summary(1, {"test": "summary"})
             await wp.close()
 
-        # 不应抛异常
+        # Must not raise
         try:
             asyncio.run(_test())
         except Exception as e:
@@ -784,18 +784,18 @@ class TestP15_WebSocketPush:
 # ───────────────────────────────────────────────────────────────
 
 
-# ── P2-1: Git自动同步 ───────────────────────────────────────
+# ── P2-1: Git auto-sync ───────────────────────────────────────
 
 class TestP21_GitAutoSync:
-    """P2-1: Git 自动同步 — GIT_AUTO_SYNC=False 时不调用。"""
+    """P2-1: Git auto-sync — must not be called when GIT_AUTO_SYNC=False."""
 
     def test_git_sync_disabled_in_trading_pipeline(self):
-        """trading_pipeline.py 中 GIT_AUTO_SYNC=False 时不调用 git_sync。"""
+        """trading_pipeline.py must not call git_sync when GIT_AUTO_SYNC=False."""
         path = os.path.join(_PROJ_ROOT, "trading_pipeline.py")
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
-        # 验证 GIT_AUTO_SYNC 控制逻辑存在
+        # Verify GIT_AUTO_SYNC control logic exists
         assert "GIT_AUTO_SYNC" in source, (
             "trading_pipeline.py must check GIT_AUTO_SYNC before git sync"
         )
@@ -804,14 +804,14 @@ class TestP21_GitAutoSync:
         )
 
     def test_pipeline_config_default_auto_sync_false(self):
-        """PipelineConfig 默认 GIT_AUTO_SYNC=False。"""
+        """PipelineConfig defaults GIT_AUTO_SYNC=False."""
         from configs.pipeline_config import PipelineConfig
 
         cfg = PipelineConfig()
         assert cfg.GIT_AUTO_SYNC is False, "Default GIT_AUTO_SYNC should be False"
 
     def test_git_sync_module_no_git_dir(self):
-        """git_sync 在非 git 目录返回 False (不抛异常)。"""
+        """git_sync returns False in a non-git directory (does not raise)."""
         import tempfile
         from shared.git_sync import git_sync
 
@@ -821,15 +821,15 @@ class TestP21_GitAutoSync:
 
 
 # ───────────────────────────────────────────────────────────────
-# Step 2 continued: PipelineConfig 字段完整性
+# Step 2 continued: PipelineConfig field completeness
 # ───────────────────────────────────────────────────────────────
 
 
 class TestPipelineConfigFields:
-    """PipelineConfig 包含所有新增 v2.2 字段。"""
+    """PipelineConfig includes all new v2.2 fields."""
 
     def test_all_new_fields_present(self):
-        """验证 PipelineConfig 包含所有 P0-P1 新增字段。"""
+        """Verify PipelineConfig includes all new P0-P1 fields."""
         from configs.pipeline_config import PipelineConfig
 
         cfg = PipelineConfig()
@@ -849,21 +849,21 @@ class TestPipelineConfigFields:
             assert hasattr(cfg, field_name), f"PipelineConfig missing field: {field_name}"
 
     def test_execution_mode_default_paper(self):
-        """EXECUTION_MODE 默认 'paper'。"""
+        """EXECUTION_MODE defaults to 'paper'."""
         from configs.pipeline_config import PipelineConfig
 
         cfg = PipelineConfig()
         assert cfg.EXECUTION_MODE == "paper"
 
     def test_leverage_limit_default(self):
-        """LEVERAGE_LIMIT 默认 1.001。"""
+        """LEVERAGE_LIMIT defaults to 1.001."""
         from configs.pipeline_config import PipelineConfig
 
         cfg = PipelineConfig()
         assert cfg.LEVERAGE_LIMIT == 1.001
 
     def test_v1_fallback_retries_default(self):
-        """V1_FALLBACK_RETRIES 默认 3。"""
+        """V1_FALLBACK_RETRIES defaults to 3."""
         from configs.pipeline_config import PipelineConfig
 
         cfg = PipelineConfig()
@@ -876,31 +876,31 @@ class TestPipelineConfigFields:
 
 
 class TestRiskManagerAdditional:
-    """RiskManager 补充测试 (check_order, 边界条件)。"""
+    """RiskManager additional tests (check_order, edge cases)."""
 
     def test_check_order_passes_normal(self):
-        """check_order 对正常买单通过。"""
+        """check_order passes a normal buy."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
         rm.sync_portfolio_value(100000.0, 100000.0)
-        rm.daily_start_value = 100000.0  # 确保已初始化
+        rm.daily_start_value = 100000.0  # ensure initialized
         report = rm.check_order("AAPL", "buy", 50, 180.0)
         assert report.passed is True, f"Normal buy should pass, got: {report.reason}"
 
     def test_check_order_rejected_insufficient_cash(self):
-        """check_order 资金不足时拒绝。"""
+        """check_order rejects when cash is insufficient."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=1000.0)
         rm.sync_portfolio_value(1000.0, 1000.0)
         rm.daily_start_value = 1000.0
-        # 尝试买 1000 股 @ $180 = $180,000 (远超现金)
+        # Attempt to buy 1000 shares @ $180 = $180,000 (far above cash)
         report = rm.check_order("AAPL", "buy", 1000, 180.0)
         assert report.passed is False
 
     def test_check_order_min_trade_value(self):
-        """check_order 低于最小交易额时拒绝。"""
+        """check_order rejects below the minimum trade value."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
@@ -911,7 +911,7 @@ class TestRiskManagerAdditional:
         assert report.passed is False
 
     def test_record_trade(self):
-        """record_trade 递增 trades_today。"""
+        """record_trade increments trades_today."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0, max_daily_trades=10)
@@ -922,7 +922,7 @@ class TestRiskManagerAdditional:
         assert rm.trades_today == 2
 
     def test_get_status(self):
-        """get_status 返回完整状态字典。"""
+        """get_status returns a complete status dict."""
         from shared.risk_manager import RiskManager
 
         rm = RiskManager(initial_capital=100000.0)
@@ -938,12 +938,12 @@ class TestRiskManagerAdditional:
 
 
 # ───────────────────────────────────────────────────────────────
-# Step 2 continued: TigerExecutor 边界条件
+# Step 2 continued: TigerExecutor edge cases
 # ───────────────────────────────────────────────────────────────
 
 
 class TestTigerExecutorEdgeCases:
-    """TigerExecutor 边界条件测试。"""
+    """TigerExecutor edge-case tests."""
 
     @staticmethod
     def _make_mock_portfolio(initial_capital=100000.0):
@@ -967,7 +967,7 @@ class TestTigerExecutorEdgeCases:
         return rm
 
     def test_invalid_mode_raises(self):
-        """无效 mode 抛 ValueError。"""
+        """Invalid mode raises ValueError."""
         from shared.tiger_executor import TigerExecutor
 
         with pytest.raises(ValueError, match="mode must be"):
@@ -979,7 +979,7 @@ class TestTigerExecutorEdgeCases:
             )
 
     def test_hold_returns_none(self):
-        """HOLD 信号返回 None。"""
+        """HOLD signal returns None."""
         from shared.tiger_executor import TigerExecutor
 
         executor = TigerExecutor(
@@ -992,7 +992,7 @@ class TestTigerExecutorEdgeCases:
         assert result is None, "HOLD should return None"
 
     def test_invalid_decision_returns_none(self):
-        """无效 decision 返回 None。"""
+        """Invalid decision returns None."""
         from shared.tiger_executor import TigerExecutor
 
         executor = TigerExecutor(
@@ -1005,7 +1005,7 @@ class TestTigerExecutorEdgeCases:
         assert result is None
 
     def test_zero_price_returns_none(self):
-        """price=0 返回 None。"""
+        """price=0 returns None."""
         from shared.tiger_executor import TigerExecutor
 
         executor = TigerExecutor(
@@ -1018,7 +1018,7 @@ class TestTigerExecutorEdgeCases:
         assert result is None
 
     def test_execute_rebalance_empty_weights(self):
-        """空权重返回空列表。"""
+        """Empty weights return an empty list."""
         from shared.tiger_executor import TigerExecutor
 
         executor = TigerExecutor(
@@ -1031,7 +1031,7 @@ class TestTigerExecutorEdgeCases:
         assert result == []
 
     def test_get_execution_summary(self):
-        """get_execution_summary 返回摘要。"""
+        """get_execution_summary returns a summary."""
         from shared.tiger_executor import TigerExecutor
 
         executor = TigerExecutor(
@@ -1048,15 +1048,15 @@ class TestTigerExecutorEdgeCases:
 
 
 # ───────────────────────────────────────────────────────────────
-# Step 2 continued: PortfolioManager 补充测试
+# Step 2 continued: PortfolioManager additional tests
 # ───────────────────────────────────────────────────────────────
 
 
 class TestPortfolioManagerAdditional:
-    """PortfolioManager 补充测试。"""
+    """PortfolioManager additional tests."""
 
     def test_execute_trade_buy(self):
-        """execute_trade BUY 正确更新持仓。"""
+        """execute_trade BUY updates holdings correctly."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -1067,7 +1067,7 @@ class TestPortfolioManagerAdditional:
         assert pf.cash == 100000.0 - 18000.0
 
     def test_execute_trade_sell(self):
-        """execute_trade SELL 正确更新持仓。"""
+        """execute_trade SELL updates holdings correctly."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -1080,7 +1080,7 @@ class TestPortfolioManagerAdditional:
         assert pf.cash == 82000.0 + 9000.0
 
     def test_execute_trade_insufficient_cash(self):
-        """execute_trade BUY 资金不足时返回 None。"""
+        """execute_trade BUY returns None when cash is insufficient."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=1000.0)
@@ -1088,7 +1088,7 @@ class TestPortfolioManagerAdditional:
         assert trade is None
 
     def test_execute_trade_no_position_sell(self):
-        """execute_trade SELL 无持仓时返回 None。"""
+        """execute_trade SELL returns None when there is no position."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -1096,7 +1096,7 @@ class TestPortfolioManagerAdditional:
         assert trade is None
 
     def test_get_metrics(self):
-        """get_metrics 返回完整指标。"""
+        """get_metrics returns a complete metrics dict."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -1110,7 +1110,7 @@ class TestPortfolioManagerAdditional:
             assert key in metrics, f"get_metrics missing key: {key}"
 
     def test_update_value(self):
-        """update_value 更新总价值。"""
+        """update_value updates total value."""
         from shared.portfolio_manager import PortfolioManager
 
         pf = PortfolioManager(initial_capital=100000.0)
@@ -1122,15 +1122,15 @@ class TestPortfolioManagerAdditional:
 
 
 # ───────────────────────────────────────────────────────────────
-# Step 2 continued: DailyState 测试
+# Step 2 continued: DailyState tests
 # ───────────────────────────────────────────────────────────────
 
 
 class TestDailyState:
-    """DailyState 测试。"""
+    """DailyState tests."""
 
     def test_init_defaults(self):
-        """DailyState 初始化默认值。"""
+        """DailyState initializes default values."""
         from shared.daily_state import DailyState
 
         ds = DailyState()
@@ -1138,7 +1138,7 @@ class TestDailyState:
         assert ds.trade_date is not None
 
     def test_record_trade(self):
-        """record_trade 递增计数器。"""
+        """record_trade increments the counter."""
         from shared.daily_state import DailyState
 
         ds = DailyState()
@@ -1147,7 +1147,7 @@ class TestDailyState:
         assert ds.trades_today == 1
 
     def test_check_date_roll_no_roll(self):
-        """同一天 check_date_roll 返回 False。"""
+        """check_date_roll returns False on the same day."""
         from shared.daily_state import DailyState
 
         ds = DailyState()
@@ -1155,7 +1155,7 @@ class TestDailyState:
         assert result is False, "Same day should not roll"
 
     def test_reset_for_new_day(self):
-        """reset_for_new_day 重置所有计数器。"""
+        """reset_for_new_day resets all counters."""
         from shared.daily_state import DailyState
 
         ds = DailyState(daily_start_value=100000.0)
@@ -1170,10 +1170,10 @@ class TestDailyState:
 # ───────────────────────────────────────────────────────────────
 
 class TestExistingTestCompatibility:
-    """验证现有测试文件的兼容性。"""
+    """Verify compatibility of existing test files."""
 
     def test_v22_tests_are_self_contained(self):
-        """确保本测试文件无 backend 模块级导入。"""
+        """Ensure this test file has no module-level backend imports."""
         import inspect
         path = os.path.join(_PROJ_ROOT, "tests", "test_v22_verification.py")
         with open(path, "r", encoding="utf-8") as f:
@@ -1184,7 +1184,7 @@ class TestExistingTestCompatibility:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            # 检查模块级 backend 导入
+            # Check for module-level backend imports
             if stripped.startswith("from backend.") or stripped.startswith("import backend."):
                 leading = len(line) - len(line.lstrip())
                 if leading == 0:

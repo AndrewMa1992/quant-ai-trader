@@ -1,5 +1,5 @@
 """
-分析接口路由 - 实时交易信号
+Analysis API routes — live trading signals.
 """
 from datetime import datetime
 from typing import Optional
@@ -34,9 +34,9 @@ def init_signal_history(sh_ref):
 
 @router.get("/latest-signals")
 async def get_latest_signals():
-    """获取最新信号"""
+    """Return the latest signals."""
     if strategy is None:
-        return {"error": "策略未初始化"}
+        return {"error": "Strategy is not initialized"}
     return {
         "signals": {
             ticker: signal
@@ -48,25 +48,25 @@ async def get_latest_signals():
 
 @router.get("/ensemble-status")
 async def get_ensemble_status():
-    """获取融合引擎状态"""
+    """Return ensemble engine status."""
     if ensemble is None:
-        return {"error": "融合引擎未初始化"}
+        return {"error": "Ensemble engine is not initialized"}
     return ensemble.get_status()
 
 
 @router.get("/strategy-status")
 async def get_strategy_status():
-    """获取策略状态"""
+    """Return strategy status."""
     if strategy is None:
-        return {"error": "策略未初始化"}
+        return {"error": "Strategy is not initialized"}
     return strategy.get_status()
 
 
 @router.get("/backtest-results")
 async def get_backtest_results():
-    """获取回测结果"""
+    """Return backtest results."""
     if backtester is None:
-        return {"error": "回测引擎未初始化"}
+        return {"error": "Backtester is not initialized"}
     return {
         name: {k: v for k, v in result.items() if k != "value_history"}
         for name, result in backtester.results.items()
@@ -75,23 +75,23 @@ async def get_backtest_results():
 
 @router.post("/run-backtest")
 async def run_backtest():
-    """运行回测"""
-    return {"message": "回测已排队", "status": "pending"}
+    """Run a backtest."""
+    return {"message": "Backtest queued", "status": "pending"}
 
 
 @router.post("/run-analysis")
 async def run_analysis(req: RunAnalysisRequest = None):
-    """运行一次分析循环，返回信号卡片"""
+    """Run one analysis cycle and return signal cards."""
     global strategy, signal_history
     if strategy is None:
-        return {"status": "error", "message": "策略未初始化"}
+        return {"status": "error", "message": "Strategy is not initialized"}
 
     from backend.data_engine import MarketDataEngine, DataPipeline
 
-    # 确定需要分析的 tickers
+    # Determine tickers to analyze
     tickers = req.tickers if req and req.tickers else settings.DATA_ALL_TICKERS
 
-    # 获取市场数据
+    # Fetch market data
     engine = MarketDataEngine()
     pipeline = DataPipeline()
 
@@ -106,7 +106,7 @@ async def run_analysis(req: RunAnalysisRequest = None):
                 if processed is not None:
                     features = processed.values if hasattr(processed, 'values') else processed
                     data_dict[ticker] = {"features": features}
-                # 获取最新价格（兼容大小写列名）
+                # Latest price (compatible with mixed-case column names)
                 if 'Close' in df.columns:
                     price = float(df['Close'].iloc[-1])
                 elif 'close' in df.columns:
@@ -119,20 +119,20 @@ async def run_analysis(req: RunAnalysisRequest = None):
 
     if not data_dict:
         return {
-            "status": "error", "message": "无法获取市场数据",
+            "status": "error", "message": "Unable to fetch market data",
             "signals": {}, "total": 0,
         }
 
-    # 执行分析
+    # Run analysis
     try:
         strategy.analyze_and_trade(tickers, data_dict, prices)
     except Exception as e:
         return {
-            "status": "error", "message": f"分析失败: {str(e)}",
+            "status": "error", "message": f"Analysis failed: {str(e)}",
             "signals": {}, "total": 0,
         }
 
-    # 构建信号卡片并写入历史
+    # Build signal cards and persist history
     signal_cards = {}
     for ticker, signal in strategy.last_signals.items():
         card = SignalCard(
@@ -159,9 +159,9 @@ async def run_analysis(req: RunAnalysisRequest = None):
 
 @router.get("/signal-history")
 async def get_signal_history(ticker: Optional[str] = Query(None)):
-    """获取信号历史"""
+    """Return signal history."""
     if signal_history is None:
-        return {"status": "error", "message": "信号历史未初始化"}
+        return {"status": "error", "message": "Signal history is not initialized"}
     if ticker:
         return {"ticker": ticker, "history": signal_history.get_history(ticker)}
     return signal_history.get_all_history()

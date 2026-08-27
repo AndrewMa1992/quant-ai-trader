@@ -1,4 +1,4 @@
-"""scripts/auto_retrain.py – 每周六自动训练全部5个模型，带验证和自动重试。
+"""scripts/auto_retrain.py – Auto-train all 5 models every Saturday, with validation and automatic retry.
 
 Usage: python scripts/auto_retrain.py [--dry-run]
 """

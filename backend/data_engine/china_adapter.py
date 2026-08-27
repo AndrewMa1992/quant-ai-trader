@@ -1,13 +1,13 @@
 """
-中国网络适配器 — 替代 yfinance 的数据源
-优先使用中国境内可访问的 API：
-  - efinance / 东方财富直连 API 用于美股历史数据 (需在中国大陆)
-  - 腾讯财经 API (qt.gtimg.cn) 用于港股历史 + 全市场实时行情
-  - 新浪财经 API (hq.sinajs.cn) 作为实时行情备选
-  - yfinance 作为海外网络最终备选
+China-network data adapter — yfinance replacement.
+Prefers APIs reachable from mainland China:
+  - efinance / East Money direct API for US historical bars (requires mainland access)
+  - Tencent Finance API (qt.gtimg.cn) for HK history + cross-market realtime quotes
+  - Sina Finance API (hq.sinajs.cn) as a realtime fallback
+  - yfinance as the overseas-network last resort
 
-所有中国境内 API 均不依赖 Google/Yahoo 等被墙服务。
-数据源会按优先级自动切换，适配不同网络环境。
+None of the China-reachable APIs depend on Google/Yahoo (often blocked).
+Sources auto-failover by priority to fit different network environments.
 """
 
 import json
@@ -22,7 +22,7 @@ from loguru import logger
 
 
 # ============================================================
-# 东方财富直连 API (比 efinance 更可控)
+# East Money direct API (more controllable than efinance)
 # ============================================================
 _EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 _EASTMONEY_HEADERS = {
@@ -30,28 +30,28 @@ _EASTMONEY_HEADERS = {
     "Referer": "https://quote.eastmoney.com/",
 }
 
-# 腾讯财经 API
+# Tencent Finance API
 _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 _TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q="
 
 
 def _eastmoney_secid(ticker: str) -> str:
-    """转换为东方财富 secid 格式: 市场.代码 — 港股5位"""
+    """Convert to East Money secid format: market.code — HK is 5 digits."""
     if ticker.endswith(".HK"):
         code = ticker.replace(".HK", "").zfill(5)
-        return f"116.{code}"  # 港股
+        return f"116.{code}"  # HK
     if ticker.endswith(".SI"):
         code = ticker.replace(".SI", "")
-        return f"122.{code}"  # 新加坡
-    # 美股: 105=纳斯达克, 106=NYSE
+        return f"122.{code}"  # Singapore
+    # US: 105=Nasdaq, 106=NYSE
     return f"105.{ticker}"
 
 
 def _tencent_kline_code(ticker: str) -> str:
-    """转换为腾讯 KLine API 代码 — 港股必须是5位数字"""
+    """Convert to Tencent KLine API code — HK must be 5 digits."""
     if ticker.endswith(".HK"):
         code = ticker.replace(".HK", "")
-        # 港股代码必须5位，左补零: 0700 → 00700
+        # HK codes must be 5 digits, left-padded: 0700 → 00700
         code = code.zfill(5)
         return f"hk{code}"
     if ticker.endswith(".SI"):
@@ -67,7 +67,7 @@ def _tencent_kline_code(ticker: str) -> str:
 
 
 def _tencent_quote_code(ticker: str) -> str:
-    """转换为腾讯实时行情代码 — 港股5位数字"""
+    """Convert to Tencent realtime quote code — HK is 5 digits."""
     if ticker.endswith(".HK"):
         code = ticker.replace(".HK", "").zfill(5)
         return f"r_hk{code}"
@@ -84,7 +84,7 @@ def _tencent_quote_code(ticker: str) -> str:
 
 
 # ============================================================
-# 历史数据获取 — 东方财富直连
+# Historical data — East Money direct
 # ============================================================
 
 def get_history_eastmoney(
@@ -93,13 +93,13 @@ def get_history_eastmoney(
     interval: str = "1d",
 ) -> pd.DataFrame:
     """
-    通过东方财富 API 获取历史K线（美股+港股均可用）
-    需要在中国大陆或有东方财富 API 访问权限
+    Fetch historical bars via the East Money API (US + HK).
+    Requires mainland China access or East Money API permission.
     """
     secid = _eastmoney_secid(ticker)
     market = "HK" if ticker.endswith(".HK") else "US"
 
-    # period → 数据条数
+    # period → bar count
     period_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1250, "10y": 2500}
     count = period_map.get(period, 730)
 
@@ -107,7 +107,7 @@ def get_history_eastmoney(
     klt_map = {"1d": 101, "1wk": 102, "1mo": 103}
     klt = klt_map.get(interval, 101)
 
-    # 日期范围
+    # Date range
     end_date = datetime.now().strftime("%Y%m%d")
     days = period_map.get(period, 730)
     beg_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
@@ -120,7 +120,7 @@ def get_history_eastmoney(
         "rtntype": 6,
         "secid": secid,
         "klt": klt,
-        "fqt": 1,  # 前复权
+        "fqt": 1,  # forward-adjusted
     }
 
     try:
@@ -154,16 +154,16 @@ def get_history_eastmoney(
         df["ticker"] = ticker
         df["market"] = market
 
-        logger.info(f"✅ [东方财富] {ticker} 获取完成: {len(df)} 行")
+        logger.info(f"✅ [East Money] {ticker} fetch complete: {len(df)} rows")
         return df
 
     except Exception as e:
-        logger.debug(f"东方财富 API {ticker} 失败: {e}")
+        logger.debug(f"East Money API {ticker} failed: {e}")
         return pd.DataFrame()
 
 
 # ============================================================
-# 历史数据获取 — 腾讯财经
+# Historical data — Tencent Finance
 # ============================================================
 
 def get_history_tencent(
@@ -172,8 +172,8 @@ def get_history_tencent(
     interval: str = "1d",
 ) -> pd.DataFrame:
     """
-    通过腾讯财经 API 获取历史K线
-    港股效果好（全量数据），美股只有少量数据点
+    Fetch historical bars via the Tencent Finance API.
+    Strong for HK (full history); US typically has only a few points.
     """
     code = _tencent_kline_code(ticker)
     market = "HK" if ticker.endswith(".HK") else "US"
@@ -201,9 +201,9 @@ def get_history_tencent(
 
         kline_data = data["data"][stock_key].get("qfqday") or data["data"][stock_key].get("day") or []
         if not kline_data or len(kline_data) < 3:
-            return pd.DataFrame()  # 腾讯美股只返回1-2个点，不采用
+            return pd.DataFrame()  # Tencent US often returns 1-2 points; skip
 
-        # 腾讯数据可能有7列（第7列是分红信息dict），只取前6列
+        # Tencent rows may have 7 columns (7th is a dividend dict); keep the first 6
         rows = []
         for row in kline_data:
             if len(row) >= 6:
@@ -219,16 +219,16 @@ def get_history_tencent(
         df["ticker"] = ticker
         df["market"] = market
 
-        logger.info(f"✅ [腾讯] {ticker} 获取完成: {len(df)} 行")
+        logger.info(f"✅ [Tencent] {ticker} fetch complete: {len(df)} rows")
         return df
 
     except Exception as e:
-        logger.debug(f"腾讯 API {ticker} 失败: {e}")
+        logger.debug(f"Tencent API {ticker} failed: {e}")
         return pd.DataFrame()
 
 
 # ============================================================
-# 历史数据获取 — efinance
+# Historical data — efinance
 # ============================================================
 
 def get_history_efinance(
@@ -236,7 +236,7 @@ def get_history_efinance(
     period: str = "2y",
     interval: str = "1d",
 ) -> pd.DataFrame:
-    """通过 efinance 获取历史数据（美股效果好，港股不稳定）"""
+    """Fetch history via efinance (strong for US; HK is unstable)."""
     import efinance as ef
 
     market = "HK" if ticker.endswith(".HK") else "US"
@@ -250,9 +250,14 @@ def get_history_efinance(
         if df is None or df.empty:
             return pd.DataFrame()
 
+        # efinance returns Chinese OHLCV column names; map via unicode escapes
         df = df.rename(columns={
-            "日期": "timestamp", "开盘": "open", "收盘": "close",
-            "最高": "high", "最低": "low", "成交量": "volume",
+            "\u65e5\u671f": "timestamp",
+            "\u5f00\u76d8": "open",
+            "\u6536\u76d8": "close",
+            "\u6700\u9ad8": "high",
+            "\u6700\u4f4e": "low",
+            "\u6210\u4ea4\u91cf": "volume",
         })
 
         df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -266,16 +271,16 @@ def get_history_efinance(
         df["ticker"] = ticker
         df["market"] = market
 
-        logger.info(f"✅ [efinance] {ticker} 获取完成: {len(df)} 行")
+        logger.info(f"✅ [efinance] {ticker} fetch complete: {len(df)} rows")
         return df
 
     except Exception as e:
-        logger.debug(f"efinance {ticker} 失败: {e}")
+        logger.debug(f"efinance {ticker} failed: {e}")
         return pd.DataFrame()
 
 
 # ============================================================
-# 历史数据获取 — yfinance (海外备选)
+# Historical data — yfinance (overseas fallback)
 # ============================================================
 
 def get_history_yfinance(
@@ -283,7 +288,7 @@ def get_history_yfinance(
     period: str = "2y",
     interval: str = "1d",
 ) -> pd.DataFrame:
-    """yfinance 最终备选（仅海外网络可用）"""
+    """yfinance last resort (overseas networks only)."""
     try:
         import yfinance as yf
         market = "HK" if ticker.endswith(".HK") else "US"
@@ -307,20 +312,20 @@ def get_history_yfinance(
         raw["market"] = market
         raw.index.name = "timestamp"
 
-        logger.info(f"✅ [yfinance] {ticker} 获取完成: {len(raw)} 行")
+        logger.info(f"✅ [yfinance] {ticker} fetch complete: {len(raw)} rows")
         return raw
 
     except Exception as e:
-        logger.debug(f"yfinance {ticker} 失败: {e}")
+        logger.debug(f"yfinance {ticker} failed: {e}")
         return pd.DataFrame()
 
 
 # ============================================================
-# 实时行情获取 — 腾讯财经
+# Realtime quotes — Tencent Finance
 # ============================================================
 
 def get_realtime_quote_tencent(ticker: str) -> Optional[Dict]:
-    """通过腾讯财经 API 获取实时行情"""
+    """Fetch a realtime quote via the Tencent Finance API."""
     code = _tencent_quote_code(ticker)
     market = "HK" if ticker.endswith(".HK") else "US"
 
@@ -359,16 +364,16 @@ def get_realtime_quote_tencent(ticker: str) -> Optional[Dict]:
         }
 
     except Exception as e:
-        logger.debug(f"腾讯行情 {ticker} 失败: {e}")
+        logger.debug(f"Tencent quote {ticker} failed: {e}")
         return None
 
 
 # ============================================================
-# 实时行情获取 — 新浪财经
+# Realtime quotes — Sina Finance
 # ============================================================
 
 def get_realtime_quote_sina(ticker: str) -> Optional[Dict]:
-    """通过新浪财经 API 获取实时行情"""
+    """Fetch a realtime quote via the Sina Finance API."""
     market = "HK" if ticker.endswith(".HK") else "US"
 
     try:
@@ -424,21 +429,21 @@ def get_realtime_quote_sina(ticker: str) -> Optional[Dict]:
         return None
 
     except Exception as e:
-        logger.debug(f"新浪行情 {ticker} 失败: {e}")
+        logger.debug(f"Sina quote {ticker} failed: {e}")
         return None
 
 
 # ============================================================
-# 统一接口
+# Unified interface
 # ============================================================
 
 class ChinaDataAdapter:
     """
-    中国网络数据适配器
-    自动选择可用的数据源，优先中国境内 API
-    数据源优先级：
-      美股: 东方财富直连 → efinance → 腾讯 → yfinance
-      港股: 腾讯 → 东方财富直连 → efinance → yfinance
+    China-network data adapter.
+    Auto-selects an available source, preferring China-reachable APIs.
+    Priority:
+      US: East Money direct → efinance → Tencent → yfinance
+      HK: Tencent → East Money direct → efinance → yfinance
     """
 
     def __init__(self):
@@ -453,7 +458,7 @@ class ChinaDataAdapter:
         interval: str = "1d",
         force_refresh: bool = False,
     ) -> pd.DataFrame:
-        """获取历史K线 — 按优先级尝试各数据源"""
+        """Fetch historical bars — try sources in priority order."""
         cache_key = f"{ticker}_{period}_{interval}"
 
         if not force_refresh and cache_key in self.cache:
@@ -463,21 +468,21 @@ class ChinaDataAdapter:
 
         market = "HK" if ticker.endswith(".HK") else "US"
 
-        # 按市场选择优先级
+        # Priority by market
         if market == "HK":
             sources = [
-                ("腾讯", lambda: get_history_tencent(ticker, period, interval)),
-                ("东方财富", lambda: get_history_eastmoney(ticker, period, interval)),
+                ("Tencent", lambda: get_history_tencent(ticker, period, interval)),
+                ("East Money", lambda: get_history_eastmoney(ticker, period, interval)),
                 ("efinance", lambda: get_history_efinance(ticker, period, interval)),
             ]
         else:
             sources = [
-                ("东方财富", lambda: get_history_eastmoney(ticker, period, interval)),
+                ("East Money", lambda: get_history_eastmoney(ticker, period, interval)),
                 ("efinance", lambda: get_history_efinance(ticker, period, interval)),
-                ("腾讯", lambda: get_history_tencent(ticker, period, interval)),
+                ("Tencent", lambda: get_history_tencent(ticker, period, interval)),
             ]
 
-        # 依次尝试中国境内数据源
+        # Try China-reachable sources in order
         for name, fn in sources:
             try:
                 df = fn()
@@ -488,7 +493,7 @@ class ChinaDataAdapter:
             except Exception:
                 continue
 
-        # 最终备选: yfinance
+        # Last resort: yfinance
         df = get_history_yfinance(ticker, period, interval)
         if not df.empty:
             self.cache[cache_key] = df
@@ -498,10 +503,10 @@ class ChinaDataAdapter:
 
     def health_check(self) -> Dict[str, bool | str]:
         """
-        快速探测各数据源可达性
-        
-        使用轻量 ticker (SPY) 快速测试各源，每个源 5 秒超时。
-        失败不阻塞，返回各源状态和当前主数据源。
+        Quickly probe reachability of each data source.
+
+        Uses a light ticker (SPY) with a 5-second timeout per source.
+        Failures do not block; returns per-source status and the current primary.
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -509,7 +514,7 @@ class ChinaDataAdapter:
         sources: Dict[str, bool] = {}
 
         def _probe(name: str, fn) -> tuple:
-            """探测单个数据源，5秒超时"""
+            """Probe a single source with a 5-second timeout."""
             try:
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(fn)
@@ -520,7 +525,7 @@ class ChinaDataAdapter:
                 pass
             return (name, False)
 
-        # 并行探测所有源（轻量请求：仅最近 1 月数据）
+        # Probe all sources in parallel (light request: last 1 month only)
         period = "1mo"
         probes = [
             ("eastmoney", lambda: get_history_eastmoney(test_ticker, period=period)),
@@ -539,12 +544,12 @@ class ChinaDataAdapter:
                 except Exception:
                     results[future_map[future]] = False
 
-        # 确保所有源都有结果
+        # Ensure every source has a result
         for name, _ in probes:
             results.setdefault(name, False)
 
-        # 确定主数据源（按优先级第一个可用的）
-        primary = "yfinance"  # 默认回退
+        # Primary = first available source by priority
+        primary = "yfinance"  # default fallback
         priority = ["eastmoney", "efinance", "tencent", "yfinance"]
         for src in priority:
             if results.get(src, False):
@@ -554,13 +559,13 @@ class ChinaDataAdapter:
         return {**results, "primary": primary}
 
     def get_realtime_quote(self, ticker: str) -> Optional[Dict]:
-        """获取实时行情 — 腾讯优先，新浪备选"""
-        # 腾讯
+        """Fetch a realtime quote — Tencent first, Sina fallback."""
+        # Tencent
         quote = get_realtime_quote_tencent(ticker)
         if quote and quote.get("price", 0) > 0:
             return quote
 
-        # 新浪
+        # Sina
         quote = get_realtime_quote_sina(ticker)
         if quote and quote.get("price", 0) > 0:
             return quote
@@ -585,5 +590,5 @@ class ChinaDataAdapter:
             return None
 
 
-# 全局单例
+# Global singleton
 china_data_adapter = ChinaDataAdapter()

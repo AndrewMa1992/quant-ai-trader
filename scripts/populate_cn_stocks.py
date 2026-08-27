@@ -1,4 +1,4 @@
-"""添加 CN A 股核心股票到 ticker_info 表。
+"""Insert core CN A-share stocks into the ticker_info table.
 
 One-time script: inserts core Shanghai 50 + Shenzhen Component Index
 stocks into the ``ticker_info`` table with proper ``.SH`` / ``.SZ``
@@ -20,35 +20,35 @@ from datetime import datetime
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(_PROJECT_ROOT)
 
-# 上证50 (Shanghai) + 深证成指核心 (Shenzhen) 成分股
+# SSE 50 (Shanghai) + SZSE Component core (Shenzhen) constituents
 CN_STOCKS: list[tuple[str, str, str, str]] = [
-    # ── 上证50 (Shanghai) ──
-    ("600000.SH", "浦发银行", "CN", "银行"),
-    ("600036.SH", "招商银行", "CN", "银行"),
-    ("600519.SH", "贵州茅台", "CN", "白酒"),
-    ("600276.SH", "恒瑞医药", "CN", "医药"),
-    ("600030.SH", "中信证券", "CN", "证券"),
-    ("600887.SH", "伊利股份", "CN", "食品"),
-    ("600406.SH", "国电南瑞", "CN", "电力"),
-    ("600050.SH", "中国联通", "CN", "通信"),
-    ("601318.SH", "中国平安", "CN", "保险"),
-    ("601166.SH", "兴业银行", "CN", "银行"),
-    ("601398.SH", "工商银行", "CN", "银行"),
-    ("601857.SH", "中国石油", "CN", "石油"),
-    ("601288.SH", "农业银行", "CN", "银行"),
-    ("601988.SH", "中国银行", "CN", "银行"),
-    ("601628.SH", "中国人寿", "CN", "保险"),
-    # ── 深证成指核心 (Shenzhen) ──
-    ("000001.SZ", "平安银行", "CN", "银行"),
-    ("000002.SZ", "万科A", "CN", "地产"),
-    ("000063.SZ", "中兴通讯", "CN", "通信"),
-    ("000333.SZ", "美的集团", "CN", "家电"),
-    ("000651.SZ", "格力电器", "CN", "家电"),
-    ("000858.SZ", "五粮液", "CN", "白酒"),
-    ("002594.SZ", "比亚迪", "CN", "汽车"),
-    ("002415.SZ", "海康威视", "CN", "安防"),
-    ("300750.SZ", "宁德时代", "CN", "电池"),
-    ("300059.SZ", "东方财富", "CN", "证券"),
+    # ── SSE 50 (Shanghai) ──
+    ("600000.SH", "SPD Bank", "CN", "Banking"),
+    ("600036.SH", "China Merchants Bank", "CN", "Banking"),
+    ("600519.SH", "Kweichow Moutai", "CN", "Liquor"),
+    ("600276.SH", "Hengrui Medicine", "CN", "Pharma"),
+    ("600030.SH", "CITIC Securities", "CN", "Securities"),
+    ("600887.SH", "Yili", "CN", "Food"),
+    ("600406.SH", "NARI Technology", "CN", "Power"),
+    ("600050.SH", "China Unicom", "CN", "Telecom"),
+    ("601318.SH", "Ping An Insurance", "CN", "Insurance"),
+    ("601166.SH", "Industrial Bank", "CN", "Banking"),
+    ("601398.SH", "ICBC", "CN", "Banking"),
+    ("601857.SH", "PetroChina", "CN", "Oil"),
+    ("601288.SH", "Agricultural Bank of China", "CN", "Banking"),
+    ("601988.SH", "Bank of China", "CN", "Banking"),
+    ("601628.SH", "China Life Insurance", "CN", "Insurance"),
+    # ── SZSE Component core (Shenzhen) ──
+    ("000001.SZ", "Ping An Bank", "CN", "Banking"),
+    ("000002.SZ", "China Vanke A", "CN", "Real Estate"),
+    ("000063.SZ", "ZTE", "CN", "Telecom"),
+    ("000333.SZ", "Midea Group", "CN", "Home Appliances"),
+    ("000651.SZ", "Gree Electric", "CN", "Home Appliances"),
+    ("000858.SZ", "Wuliangye", "CN", "Liquor"),
+    ("002594.SZ", "BYD", "CN", "Auto"),
+    ("002415.SZ", "Hikvision", "CN", "Security"),
+    ("300750.SZ", "CATL", "CN", "Batteries"),
+    ("300059.SZ", "East Money", "CN", "Securities"),
 ]
 
 

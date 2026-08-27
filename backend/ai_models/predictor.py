@@ -1,6 +1,6 @@
 """
-Transformer / PatchTST 价格预测器
-基于 PyTorch 的时间序列 Transformer
+Transformer / PatchTST price predictor.
+PyTorch time-series Transformer.
 """
 import math
 import numpy as np
@@ -124,10 +124,10 @@ class TransformerPredictor:
         self.scaler_std = None
         self._is_trained = False
         self._untrained_warned = False
-        logger.info(f"Transformer 预测器初始化 (device: {self.device})")
+        logger.info(f"Transformer predictor initialized (device: {self.device})")
 
     def build_model(self, n_vars=40, seq_len=60, pred_len=5):
-        # ★ 量化基金级：更大的模型 (d_model 128→256, layers 4→6, d_ff 256→512)
+        # Institutional-grade: larger model (d_model 128→256, layers 4→6, d_ff 256→512)
         d_model = getattr(model_config, 'TRANSFORMER_D_MODEL_LARGE', 256)
         n_heads = getattr(model_config, 'TRANSFORMER_N_HEADS_LARGE', 8)
         n_layers = getattr(model_config, 'TRANSFORMER_N_LAYERS_LARGE', 6)
@@ -141,12 +141,12 @@ class TransformerPredictor:
             n_layers=n_layers, d_ff=d_ff,
             dropout=settings.MODEL_TRANSFORMER_DROPOUT,
         ).to(self.device)
-        logger.info(f"模型构建: {sum(p.numel() for p in self.model.parameters()):,} 参数")
+        logger.info(f"Model built: {sum(p.numel() for p in self.model.parameters()):,} parameters")
         return self.model
 
     def train(self, X_train, y_train, X_val=None, y_val=None, n_vars=40,
               epochs=None, lr=None, return_val_loss=False, use_amp: bool = False):
-        """Transformer 训练 — 支持 Walk-forward 参数覆盖, FP16 混合精度, Warmup + CosineAnnealing"""
+        """Transformer training — walk-forward param overrides, FP16 mixed precision, warmup + CosineAnnealing."""
         self.build_model(n_vars=n_vars)
         # Re-evaluate device from env in case it changed since __init__
         import os
@@ -158,15 +158,15 @@ class TransformerPredictor:
                 self.device = torch.device(env_device)
         self.model = self.model.to(self.device)
 
-        # 使用参数或默认配置
+        # Use arguments or default config
         _epochs = epochs if epochs is not None else settings.MODEL_TRANSFORMER_EPOCHS
         _lr = lr if lr is not None else settings.MODEL_TRANSFORMER_LEARNING_RATE
 
-        # GPU 混合精度训练设置
+        # GPU mixed-precision setup
         amp_enabled = use_amp and self.device.type == 'cuda'
         scaler = torch.cuda.amp.GradScaler() if amp_enabled else None
 
-        # 清理 NaN/Inf
+        # Sanitize NaN/Inf
         X_train = np.nan_to_num(X_train, nan=0.0, posinf=1.0, neginf=-1.0)
         y_train = np.nan_to_num(y_train, nan=0.0, posinf=1.0, neginf=-1.0)
 
@@ -185,17 +185,17 @@ class TransformerPredictor:
         loader = DataLoader(TensorDataset(X_t, y_t), batch_size=settings.MODEL_TRANSFORMER_BATCH_SIZE, shuffle=True)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=_lr)
 
-        # CosineAnnealingWarmRestarts 学习率调度器
+        # CosineAnnealingWarmRestarts LR scheduler
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer, T_0=20, T_mult=2, eta_min=1e-6
         )
 
-        # Warmup: 前5个epoch线性增加学习率
+        # Warmup: linearly increase LR over the first 5 epochs
         warmup_epochs = 5
 
         self.model.train()
         for epoch in range(_epochs):
-            # Warmup 阶段: 线性增加 lr
+            # Warmup phase: linear LR ramp
             if epoch < warmup_epochs:
                 lr_scale = (epoch + 1) / warmup_epochs
                 for param_group in optimizer.param_groups:
@@ -221,7 +221,7 @@ class TransformerPredictor:
                     optimizer.step()
                 loss_total += loss.item()
 
-            # Warmup 后再用 scheduler
+            # Apply scheduler after warmup
             if epoch >= warmup_epochs:
                 scheduler.step()
 
@@ -231,7 +231,7 @@ class TransformerPredictor:
 
         self._is_trained = True
 
-        # 计算验证损失（如果提供了验证集）
+        # Validation loss (if a val set is provided)
         val_loss = None
         if return_val_loss and X_val is not None and y_val is not None:
             X_val = np.nan_to_num(X_val, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -246,14 +246,14 @@ class TransformerPredictor:
                 val_loss = F.smooth_l1_loss(pred_val[:, :, 1], yv_t[:, :, 1]).item()
 
         if not return_val_loss:
-            logger.info("Transformer 训练完成！")
+            logger.info("Transformer training complete.")
 
         return val_loss if return_val_loss else None
 
     def predict(self, X):
         if self.model is None:
             if not self._untrained_warned:
-                logger.warning("Transformer 模型未训练，返回降级预测结果")
+                logger.warning("Transformer is untrained; returning a degraded prediction")
                 self._untrained_warned = True
             return {
                 "prediction_1d": {"low": 0.0, "mid": 0.0, "high": 0.0},
@@ -288,7 +288,7 @@ class TransformerPredictor:
         path = MODELS_DIR / name
         torch.save({"model_state": self.model.state_dict(), "scaler_mean": self.scaler_mean,
                      "scaler_std": self.scaler_std}, path)
-        logger.info(f"模型已保存: {path}")
+        logger.info(f"Model saved: {path}")
 
     def load(self, name="transformer_latest.pt"):
         path = MODELS_DIR / name

@@ -40,7 +40,7 @@ class DailyState:
         """
         today: str = datetime.now().strftime("%Y-%m-%d")
         if today != self.trade_date:
-            logger.info(f"📅 交易日切换: {self.trade_date} → {today}")
+            logger.info(f"📅 Trading-day rollover: {self.trade_date} → {today}")
             return True
         return False
 
@@ -55,7 +55,7 @@ class DailyState:
         self.daily_start_value = portfolio_value
         self.trades_today = 0
         logger.info(
-            f"📅 DailyState 重置: date={self.trade_date}, "
+            f"📅 DailyState reset: date={self.trade_date}, "
             f"start_value=${portfolio_value:,.2f}"
         )
 

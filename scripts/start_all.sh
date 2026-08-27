@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
-# Quant AI Trader — 一键启动 (macOS)
-# 启动顺序: Backend → AutoTrader → Watchdog
+# Quant AI Trader — one-click start (macOS)
+# Start order: Backend → AutoTrader → Watchdog
 # ============================================================
 set -e
 
@@ -18,21 +18,21 @@ echo "  Project: $PROJ_ROOT"
 echo "============================================"
 echo ""
 
-# 1. 杀掉已有进程 (避免端口冲突)
+# 1. Kill existing processes (avoid port conflicts)
 echo "[1/4] Cleaning up old processes..."
 pkill -f "run_backend.py" 2>/dev/null && echo "  Old backend killed" || true
 pkill -f "auto_trader.py" 2>/dev/null && echo "  Old trader killed" || true
 pkill -f "watchdog.py" 2>/dev/null && echo "  Old watchdog killed" || true
 sleep 2
 
-# 2. 启动 Backend (FastAPI)
+# 2. Start Backend (FastAPI)
 echo ""
 echo "[2/4] Starting Backend (FastAPI :8001)..."
 nohup "$PYTHON" run_backend.py > "$LOG_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "  Backend PID: $BACKEND_PID"
 
-# 等待 backend 就绪
+# Wait for backend to become ready
 echo "  Waiting for backend..."
 for i in $(seq 1 30); do
     if curl -s http://localhost:8001/health > /dev/null 2>&1; then
@@ -42,14 +42,14 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# 3. 启动 AutoTrader
+# 3. Start AutoTrader
 echo ""
 echo "[3/4] Starting AutoTrader (5min cycle, 24/7)..."
 nohup "$PYTHON" auto_trader.py --interval 300 > "$LOG_DIR/trader.log" 2>&1 &
 TRADER_PID=$!
 echo "  AutoTrader PID: $TRADER_PID"
 
-# 4. 启动 Watchdog（守护 backend + trader）
+# 4. Start Watchdog (guards backend + trader)
 echo ""
 echo "[4/4] Starting Watchdog..."
 nohup "$PYTHON" scripts/watchdog.py > "$LOG_DIR/watchdog_stdout.log" 2>&1 &

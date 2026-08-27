@@ -1,112 +1,112 @@
-# PRD: 实时交易信号面板
+# PRD: Real-Time Trading Signal Panel
 
-| 项目 | 内容 |
+| Item | Content |
 |------|------|
-| 产品 | quant-ai-trader — 量化 AI 美股/港股交易系统 |
-| 版本 | v1.0 |
-| 状态 | 待评审 |
+| Product | quant-ai-trader — quantitative AI US / HK equity trading system |
+| Version | v1.0 |
+| Status | Pending review |
 
 ---
 
-## 1. 产品目标
+## 1. Product Goal
 
-**一句话**：为 AI 交易系统提供实时、可视化的交易信号视图，让用户一眼看清每只股票的买卖判断、多模型共识程度和仓位建议。
-
----
-
-## 2. 用户故事
-
-- **US-1**：作为一名量化交易员，我希望一键触发全部分析流程，立即看到 18 只持仓标的的 buy/sell/hold 信号，以便快速掌握当前市场判断。
-- **US-2**：作为一名风控人员，我希望查看每只信号背后的模型分解（Transformer / RL / Sentiment / Technical 各自的打分和置信度），以便判断信号是否可靠。
-- **US-3**：作为一名策略研究者，我希望观察信号的历史变化趋势，了解模型判断是否稳定，以及信号强度随时间如何演变。
+**In one sentence**: Give the AI trading system a real-time, visual signal view so users can see each name's buy / sell / hold call, multi-model consensus, and position recommendation at a glance.
 
 ---
 
-## 3. 需求列表
+## 2. User Stories
 
-### P0 — 核心功能
+- **US-1**: As a quantitative trader, I want to trigger the full analysis pipeline with one click and immediately see buy / sell / hold signals for all 18 holdings, so I can quickly understand the current market view.
+- **US-2**: As a risk officer, I want to inspect the model breakdown behind each signal (Transformer / RL / Sentiment / Technical scores and confidences), so I can judge whether the signal is reliable.
+- **US-3**: As a strategy researcher, I want to observe how signals change over time, to see whether model judgment is stable and how signal strength evolves.
 
-| ID | 需求 | 说明 |
+---
+
+## 3. Requirements List
+
+### P0 — Core Features
+
+| ID | Requirement | Description |
 |----|------|------|
-| P0-1 | **一键运行分析** | 面板上提供"运行分析"按钮，调用后端触发全流程：获取实时数据 → 各模型推理 → 信号融合 → 返回结果。需覆盖全部 18 只股票。 |
-| P0-2 | **信号卡片展示** | 每只股票一张信号卡片，展示：股票代码、决策（buy/sell/hold，用颜色 badge 区分）、信号强度（0~100%）、置信度（0~100%）、建议仓位（0~100%）。 |
-| P0-3 | **模型贡献分解** | 每张信号卡片可展开查看各子模型的详细贡献：Transformer（方向+置信）、RL Agent（action 均值）、Sentiment（信号+强度）、Technical（指标+强度）。显示权重和融合后的 ensemble_score。 |
-| P0-4 | **排队/加载状态** | 点击"运行分析"后显示加载动画；后端处理时前端轮询 /api/analysis/strategy-status 或 /api/analysis/latest-signals，直到分析完成或超时。 |
+| P0-1 | **One-click run analysis** | The panel provides a "Run analysis" button that calls the backend to trigger the full flow: fetch live data -> run each model -> fuse signals -> return results. Must cover all 18 names. |
+| P0-2 | **Signal-card display** | One signal card per name showing: ticker, decision (buy / sell / hold, color-coded badge), signal strength (0–100%), confidence (0–100%), recommended position (0–100%). |
+| P0-3 | **Model-contribution breakdown** | Each signal card can expand to show per-model contributions: Transformer (direction + confidence), RL Agent (mean action), Sentiment (signal + strength), Technical (indicator + strength). Display weights and the fused `ensemble_score`. |
+| P0-4 | **Queue / loading state** | After clicking "Run analysis", show a loading animation; while the backend runs, the frontend polls `/api/analysis/strategy-status` or `/api/analysis/latest-signals` until analysis completes or times out. |
 
-### P1 — 重要功能
+### P1 — Important Features
 
-| ID | 需求 | 说明 |
+| ID | Requirement | Description |
 |----|------|------|
-| P1-1 | **信号历史趋势** | 对每只信号，记录最近 N 轮（如 20 轮）的 decision/strength 变化，用迷你折线图展示信号强度趋势和决策变化时间线。 |
-| P1-2 | **自动定时刷新** | 面板支持自动刷新模式（默认每 30 秒轮询一次），用户可手动开关或调整刷新间隔。轮询时只拉取最新信号，不重新触发全量分析。 |
-| P1-3 | **信号强度可视化** | 信号强度改用进度条或 gauge 图形展示，而非纯数字。buy 方向绿色渐深，sell 方向红色渐深，hold 显示为灰色。 |
-| P1-4 | **信号筛选与排序** | 支持按决策类型（buy/sell/hold）筛选、按强度排序，让用户快速聚焦高置信度信号。 |
+| P1-1 | **Signal history trend** | For each signal, record the last N cycles (e.g. 20) of decision / strength changes, shown as a sparkline of strength and a decision-change timeline. |
+| P1-2 | **Automatic timed refresh** | The panel supports auto-refresh (default poll every 30 seconds). Users can toggle it or change the interval. Polling only fetches the latest signals; it does not re-trigger full analysis. |
+| P1-3 | **Signal-strength visualization** | Show strength as a progress bar or gauge rather than a raw number. Buy deepens green; sell deepens red; hold is gray. |
+| P1-4 | **Signal filter and sort** | Filter by decision type (buy / sell / hold) and sort by strength so users can focus on high-confidence signals. |
 
 ---
 
-## 4. UI 示意图
+## 4. UI Sketch
 
-### 布局结构（Signal Panel 区域）
+### Layout (Signal Panel region)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  [运行分析] [自动刷新: 30s ▼]  上次更新: 14:32:05          │
+│  [Run analysis] [Auto-refresh: 30s ▼]  Last update: 14:32:05 │
 ├─────────────────────────────────────────────────────────────┤
-│ 全部(18) | Buy(5) | Sell(3) | Hold(10)   [按强度排序 ▼]    │
+│ All(18) | Buy(5) | Sell(3) | Hold(10)   [Sort by strength ▼] │
 ├─────────────────────────────────────────────────────────────┤
-│ ┌─── 信号卡片 ──────────────────────────────────────┐       │
-│ │ AAPL    [BUY]   强度 ████████░░ 80%  置信 75%      │       │
-│ │                   建议仓位: 15%                      │       │
-│ │ ─── 模型贡献 ────────────────────────────────────  │       │
-│ │  Transformer: ↗ 涨  置信 82%   权重 0.30           │       │
-│ │  RL Agent:    buy action 0.42  权重 0.25           │       │
-│ │  Sentiment:   看多  强度 0.65   权重 0.25           │       │
-│ │  Technical:   buy  强度 0.55   权重 0.20           │       │
-│ │  └─ Ensemble Score: 0.62 → 共识较强                │       │
-│ │                                      [📈 趋势 ▸]  │       │
-│ └────────────────────────────────────────────────────┘       │
-│ ┌─── 信号卡片 ──────────────────────────────────────┐       │
-│ │ TSLA    [SELL]  强度 ██████░░░░ 55%  置信 60%     │       │
-│ │ ...                                               │       │
-│ └────────────────────────────────────────────────────┘       │
-│ ... 更多卡片 ...                                             │
-│                                                             │
-│ ┌─── 信号趋势详情 (展开后) ─────────────────────────┐       │
-│ │   [折线图: 信号强度 vs 时间]                       │       │
-│ │   [色点标注: 绿色 buy, 红色 sell, 灰色 hold]      │       │
-│ └────────────────────────────────────────────────────┘       │
+│ ┌─── Signal card ───────────────────────────────────────┐   │
+│ │ AAPL    [BUY]   Strength ████████░░ 80%  Conf 75%     │   │
+│ │                   Suggested size: 15%                 │   │
+│ │ ─── Model contribution ────────────────────────────── │   │
+│ │  Transformer: ↗ up  conf 82%   weight 0.30            │   │
+│ │  RL Agent:    buy action 0.42  weight 0.25            │   │
+│ │  Sentiment:   bullish  strength 0.65   weight 0.25    │   │
+│ │  Technical:   buy  strength 0.55   weight 0.20        │   │
+│ │  └─ Ensemble Score: 0.62 -> strong consensus          │   │
+│ │                                      [Trend ▸]        │   │
+│ └────────────────────────────────────────────────────────┘   │
+│ ┌─── Signal card ───────────────────────────────────────┐   │
+│ │ TSLA    [SELL]  Strength ██████░░░░ 55%  Conf 60%     │   │
+│ │ ...                                                   │   │
+│ └────────────────────────────────────────────────────────┘   │
+│ ... more cards ...                                           │
+│                                                              │
+│ ┌─── Signal trend detail (expanded) ────────────────────┐   │
+│ │   [Line chart: signal strength vs time]               │   │
+│ │   [Color dots: green buy, red sell, gray hold]        │   │
+│ └────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**关键设计要点**：
+**Key design points**:
 
-- 信号卡片采用当前 Dashboard.vue 右侧"交易信号"区域的卡片样式，但信息更丰富
-- 新增顶部操作栏：运行分析按钮 + 自动刷新开关
-- 筛选 tab 行：快速切换 buy/sell/hold/全部
-- 每张卡片默认收起模型贡献详情，点击展开
-- 趋势按钮弹出抽屉或覆盖层展示历史信号折线图
-- 信号强度进度条：buy 方向绿色，sell 方向红色，hold 灰色
+- Signal cards reuse the current Dashboard.vue right-side "Trading signals" card style, with richer information
+- New top action bar: Run analysis button + auto-refresh toggle
+- Filter tab row: quickly switch buy / sell / hold / all
+- Each card collapses model-contribution detail by default; click to expand
+- The trend button opens a drawer or overlay with the historical signal line chart
+- Strength progress bar: buy green, sell red, hold gray
 
 ---
 
-## 5. 待确认问题
+## 5. Open Questions
 
-| # | 问题 | 建议决策 |
+| # | Question | Recommended decision |
 |---|------|----------|
-| Q1 | **运行分析按钮触发哪个后端接口？** | 建议新增 POST `/api/analysis/run-analysis` 接口，触发全流程数据获取 → 模型推理 → 信号融合，返回所有 18 只信号的完整结果。 |
-| Q2 | **模型贡献的 details 字段格式是否对齐？** | 当前 `ensemble.py` 返回的 `details` 字段包含 score/weight/confidence，推荐前端直接消费。但前端需要将 score(-1~1) 映射为可视化的"方向+强度"。 |
-| Q3 | **信号历史数据存在哪里？** | 建议后端增加 `SignalHistory` 类，以 ticker 为 key 维护最近 20 轮信号快照。可复用现有 `last_signals` 结构。不需要额外数据库。 |
-| Q4 | **自动刷新的轮询接口？** | 复用 GET `/api/analysis/latest-signals`。但注意当前接口依赖 `strategy.last_signals`（分析循环跑完后才有数据）。需确保长时间无分析时返回"无信号"而非 error。 |
-| Q5 | **18 只股票的完整列表在哪？** | Dashboard 中有 `usTickers` 和 `hkTickers`，建议抽取为共享配置或在后端 `/api/config/tickers` 暴露。 |
-| Q6 | **信号强度进度条的颜色阈值？** | 建议：strength >= 0.6 深色，0.3~0.6 中色，< 0.3 浅色。buy 用绿色系，sell 用红色系，hold 统一灰色。 |
-| Q7 | **是否需支持手动干预信号？** | 本期不实现。用户只能查看信号，不能手动修改。 |
+| Q1 | **Which backend endpoint does the Run analysis button call?** | Add POST `/api/analysis/run-analysis` to trigger the full flow (data fetch -> model inference -> signal fusion) and return complete results for all 18 signals. |
+| Q2 | **Are model-contribution `details` fields aligned?** | Current `ensemble.py` `details` includes score / weight / confidence; the frontend should consume them directly. The frontend must map score (-1 to 1) to a visual "direction + strength". |
+| Q3 | **Where is signal history stored?** | Add a backend `SignalHistory` class keyed by ticker, keeping the last 20 signal snapshots. Reuse the existing `last_signals` structure. No extra database. |
+| Q4 | **Which endpoint for auto-refresh polling?** | Reuse GET `/api/analysis/latest-signals`. Note it currently depends on `strategy.last_signals` (populated only after an analysis cycle). When no analysis has run for a long time, return "no signals" rather than an error. |
+| Q5 | **Where is the complete list of 18 names?** | Dashboard has `usTickers` and `hkTickers`; extract them as shared config or expose them via backend `/api/config/tickers`. |
+| Q6 | **Color thresholds for the strength progress bar?** | strength >= 0.6 dark, 0.3–0.6 mid, < 0.3 light. Buy uses greens, sell uses reds, hold is uniform gray. |
+| Q7 | **Should users be able to override signals manually?** | Not in this release. Users can view signals only; they cannot edit them. |
 
 ---
 
-## 6. 技术实现建议
+## 6. Technical Implementation Notes
 
-| 层次 | 建议 |
+| Layer | Recommendation |
 |------|------|
-| 后端 | 新增 `POST /api/analysis/run-analysis` 接口，按 TICKER_LIST 遍历 → 调用 DataPipeline 获取特征 → 调用各模型推理 → SignalEnsemble.fuse_signals → 存入 MemorySignalStore → 返回全部结果 |
-| 前端 | 信号面板独立为 `SignalPanel.vue` 组件，从 Dashboard 拆出。复用现有 `portfolioStore.updateSignals`。新增轮询逻辑和趋势图表（ECharts mini chart）。 |
-| 数据流 | run-analysis(一次性) → 返回全量信号 → 前端渲染；auto-refresh(间隔轮询) → GET /api/analysis/latest-signals → 增量更新 UI |
+| Backend | Add `POST /api/analysis/run-analysis`; iterate `TICKER_LIST` -> DataPipeline features -> per-model inference -> SignalEnsemble.fuse_signals -> MemorySignalStore -> return all results |
+| Frontend | Extract the signal panel into `SignalPanel.vue` from Dashboard. Reuse existing `portfolioStore.updateSignals`. Add polling and a trend chart (ECharts mini chart). |
+| Data flow | run-analysis (one-shot) -> return full signals -> frontend render; auto-refresh (interval poll) -> GET /api/analysis/latest-signals -> incremental UI update |

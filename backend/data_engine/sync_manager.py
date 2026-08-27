@@ -1,7 +1,7 @@
 """
-同步状态管理器
-管理增量同步状态，通过 sync_status 表读取/写入同步进度。
-支持分页游标、断点续传和全量同步判断。
+Sync-status manager.
+Tracks incremental sync progress via the sync_status table.
+Supports paging cursors, resume-from-checkpoint, and full-sync decisions.
 """
 import sqlite3
 from datetime import datetime, timedelta
@@ -14,14 +14,14 @@ from configs.settings import settings
 
 class SyncManager:
     """
-    同步状态管理器
+    Sync-status manager.
 
-    管理所有数据类型的同步进度：
-    - 记录每种 sync_type 的上次同步时间
-    - 保存分页游标以支持断点续传
-    - 判断是否需要全量同步
+    Tracks progress for every data type:
+    - last sync time per sync_type
+    - paging cursor for resume-from-checkpoint
+    - whether a full sync is required
 
-    用法:
+    Usage:
         mgr = SyncManager(store.historical_store)
         last = mgr.get_last_sync("orders")
         mgr.update_sync("orders", cursor="page_3", records=50)
@@ -29,36 +29,36 @@ class SyncManager:
             run_full_sync()
     """
 
-    # 默认全量同步的最长间隔（小时）
+    # Default max interval between full syncs (hours)
     DEFAULT_FULL_SYNC_INTERVAL = 24
-    # 各类型推荐的全量同步间隔
+    # Recommended full-sync interval by type
     SYNC_INTERVALS = {
         "orders": 24,
         "transactions": 24,
         "fundamentals": 24,
         "assets": 1,
-        "calendar": 168,        # 每周
+        "calendar": 168,        # weekly
         "capital_flow": 24,
         "corporate_events": 24,
-        "positions": 0.05,       # 3 分钟（总是增量）
+        "positions": 0.05,       # 3 minutes (always incremental)
     }
 
     def __init__(self, db_path: Optional[Path] = None):
         """
         Args:
-            db_path: 数据库文件路径，默认使用全局配置
+            db_path: database file path; defaults to the global config
         """
         self.db_path = str(db_path or DB_PATH)
         self._ensure_table()
 
     def _get_conn(self) -> sqlite3.Connection:
-        """获取数据库连接"""
+        """Return a database connection."""
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
     def _ensure_table(self):
-        """确保 sync_status 表存在"""
+        """Ensure the sync_status table exists."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("""
@@ -76,23 +76,23 @@ class SyncManager:
         """)
         conn.commit()
         conn.close()
-        logger.debug("sync_status 表已就绪")
+        logger.debug("sync_status table ready")
 
     # ================================================================
-    # 读取
+    # Reads
     # ================================================================
 
     def get_last_sync(self, sync_type: str) -> Dict:
         """
-        获取指定类型的上次同步信息
+        Return last-sync info for a given type.
 
         Args:
-            sync_type: 同步类型 (orders/transactions/fundamentals/etc)
+            sync_type: sync type (orders/transactions/fundamentals/etc)
 
         Returns:
             { sync_type, last_sync_time, last_success_time, last_cursor,
               records_synced, status, error_message, next_scheduled_time }
-            如果从未同步过，返回默认值
+            Default values if this type has never synced
         """
         conn = self._get_conn()
         cursor = conn.cursor()
@@ -127,7 +127,7 @@ class SyncManager:
         }
 
     def get_all_sync_status(self) -> Dict[str, Dict]:
-        """获取所有同步类型的状态"""
+        """Return status for every sync type."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT sync_type, last_sync_time, last_success_time, "
@@ -147,7 +147,7 @@ class SyncManager:
         return result
 
     # ================================================================
-    # 写入
+    # Writes
     # ================================================================
 
     def update_sync(
@@ -160,22 +160,22 @@ class SyncManager:
         next_scheduled_time: Optional[str] = None,
     ):
         """
-        更新同步状态
+        Update sync status.
 
         Args:
-            sync_type: 同步类型
-            cursor: 分页游标（用于断点续传）
-            records: 本次同步的记录数
-            status: 状态 (idle/running/success/error)
-            error_message: 错误信息
-            next_scheduled_time: 下次计划执行时间
+            sync_type: sync type
+            cursor: paging cursor (for resume-from-checkpoint)
+            records: records synced this run
+            status: status (idle/running/success/error)
+            error_message: error details
+            next_scheduled_time: next scheduled run time
         """
         now = datetime.now().isoformat()
 
         conn = self._get_conn()
         cursor_exec = conn.cursor()
 
-        # 先读取现有记录
+        # Read existing row first
         cursor_exec.execute(
             "SELECT last_cursor, records_synced FROM sync_status WHERE sync_type = ?",
             (sync_type,)
@@ -185,11 +185,11 @@ class SyncManager:
         existing_cursor = existing[0] if existing else None
         existing_records = existing[1] if existing else 0
 
-        # 更新时间字段
+        # Time fields
         last_sync_time = now
         last_success_time = now if status in ("success", "idle") else None
 
-        # 合并游标和记录数
+        # Merge cursor and record counts
         final_cursor = cursor or existing_cursor
         add_records = records or 0
         total_records = existing_records + add_records if existing else add_records
@@ -221,31 +221,31 @@ class SyncManager:
             )
 
     def start_sync(self, sync_type: str):
-        """标记同步为运行中"""
+        """Mark a sync as running."""
         self._set_status(sync_type, "running")
 
     def mark_error(self, sync_type: str, error_message: str):
-        """标记同步错误"""
+        """Mark a sync error."""
         self.update_sync(sync_type, status="error", error_message=error_message)
 
     def mark_success(self, sync_type: str, records: int = 0, cursor: Optional[str] = None):
-        """标记同步成功"""
+        """Mark a successful sync."""
         self.update_sync(sync_type, status="success", records=records, cursor=cursor)
 
     # ================================================================
-    # 判断
+    # Decisions
     # ================================================================
 
     def needs_full_sync(self, sync_type: str, max_age_hours: Optional[float] = None) -> bool:
         """
-        检查是否需要全量同步
+        Check whether a full sync is required.
 
         Args:
-            sync_type: 同步类型
-            max_age_hours: 最大同步间隔（小时），None 使用默认值
+            sync_type: sync type
+            max_age_hours: max interval in hours; None uses the default
 
         Returns:
-            True 如果从未同步或上次同步超过指定间隔
+            True if never synced or last success is older than the interval
         """
         status = self.get_last_sync(sync_type)
 
@@ -264,21 +264,21 @@ class SyncManager:
             return True
 
     def is_syncing(self, sync_type: str) -> bool:
-        """检查是否正在同步中"""
+        """Return whether a sync is currently running."""
         status = self.get_last_sync(sync_type)
         return status["status"] == "running"
 
     def is_error(self, sync_type: str) -> bool:
-        """检查是否出错"""
+        """Return whether the last sync ended in error."""
         status = self.get_last_sync(sync_type)
         return status["status"] == "error"
 
     # ================================================================
-    # 内部方法
+    # Internals
     # ================================================================
 
     def _set_status(self, sync_type: str, status: str):
-        """仅更新状态字段"""
+        """Update only the status field."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("""
@@ -294,19 +294,19 @@ class SyncManager:
         conn.close()
 
     def reset(self, sync_type: str):
-        """重置某类型的同步状态（用于强制全量同步）"""
+        """Reset one type's sync status (used to force a full sync)."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM sync_status WHERE sync_type = ?", (sync_type,))
         conn.commit()
         conn.close()
-        logger.info(f"🔄 重置同步状态: {sync_type}")
+        logger.info(f"🔄 Reset sync status: {sync_type}")
 
     def reset_all(self):
-        """重置所有同步状态"""
+        """Reset all sync status rows."""
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM sync_status")
         conn.commit()
         conn.close()
-        logger.info("🔄 重置所有同步状态")
+        logger.info("🔄 Reset all sync status")

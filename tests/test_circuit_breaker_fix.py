@@ -193,7 +193,7 @@ class TestDailyLossCheck:
         report = rm.check_circuit_breaker()
         assert report.circuit_breaker is True, \
             f"6% daily loss should trigger. Got: {report.circuit_breaker}"
-        assert any("当日亏损" in v for v in report.violations)
+        assert any("Daily loss" in v for v in report.violations)
 
     def test_daily_loss_3pct_no_breaker(self):
         """3% daily loss → no breaker."""
@@ -331,7 +331,7 @@ class TestSyncThenCheckIntegration:
 
         # But drawdown violation is NOT in the violations list
         # (the anomaly protection skipped it)
-        dd_violations = [v for v in report.violations if "回撤" in v]
+        dd_violations = [v for v in report.violations if "drawdown" in v.lower()]
         assert len(dd_violations) == 0, \
             f"Drawdown should NOT appear in violations (anomaly protection). " \
             f"Violations: {report.violations}"
@@ -344,4 +344,4 @@ class TestSyncThenCheckIntegration:
 
         report2 = rm.check_circuit_breaker()
         assert report2.circuit_breaker is True
-        assert "熔断冷却中" in report2.violations[0]
+        assert "cooldown" in report2.violations[0].lower() or "cooling" in report2.violations[0].lower()

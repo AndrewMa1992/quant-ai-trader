@@ -1,7 +1,7 @@
 """
-Trading Pipeline 启动脚本 — 替代 v1 auto_trader.py
-==================================================
-启动六微服务交易管线，定时执行 T+0 交易周期。
+Trading Pipeline launcher — replaces v1 auto_trader.py
+======================================================
+Start the six-microservice trading pipeline and run T+0 cycles on a schedule.
 """
 import asyncio
 import sys
@@ -17,7 +17,7 @@ from loguru import logger
 from trading_pipeline import TradingPipeline
 from configs.pipeline_config import pipeline_config
 
-# 日志配置
+# Logging config
 logger.add(
     "logs/pipeline_{time}.log",
     rotation="1 day",
@@ -28,9 +28,9 @@ logger.add(
 
 
 async def main() -> None:
-    """启动交易管线主循环。"""
+    """Start the trading pipeline main loop."""
     logger.info("=" * 60)
-    logger.info("Quant AI Trader v2 — Trading Pipeline 启动")
+    logger.info("Quant AI Trader v2 — Trading Pipeline starting")
     logger.info(f"  Cycle Interval: {pipeline_config.CYCLE_INTERVAL_SECONDS}s")
     logger.info(f"  Trading Hours Only: {pipeline_config.TRADING_HOURS_ONLY}")
     logger.info(f"  Max Tickers/Cycle: {pipeline_config.MAX_TICKERS_PER_CYCLE}")
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("⏹ 收到停止信号，管线已关闭")
+        logger.info("⏹ Stop signal received, pipeline closed")
     except Exception as e:
-        logger.exception(f"❌ 管线异常退出: {e}")
+        logger.exception(f"❌ Pipeline exited with error: {e}")
         sys.exit(1)

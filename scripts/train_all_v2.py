@@ -1,6 +1,6 @@
 """
-V2 全量模型训练脚本
-数据下载 → 因子计算 → 模型训练 (GBDT → Transformer → TCN → TFT → RL)
+V2 full-model training script
+Data download → factor computation → model training (GBDT → Transformer → TCN → TFT → RL)
 """
 import sys
 import os
@@ -20,10 +20,10 @@ from configs.factor_registry import FACTOR_REGISTRY
 setup_logger()
 
 # ============================================================
-# Step 1: 下载数据
+# Step 1: Download data
 # ============================================================
 def download_data(tickers: list, market: str = "US", years: int = 2):
-    """下载 yfinance 历史数据"""
+    """Download yfinance historical data."""
     import yfinance as yf
     import time
     
@@ -50,30 +50,30 @@ def download_data(tickers: list, market: str = "US", years: int = 2):
             pass
         
         if (i + 1) % 20 == 0:
-            logger.info(f"  下载进度: {i+1}/{len(tickers)}")
+            logger.info(f"  Download progress: {i+1}/{len(tickers)}")
     
-    logger.info(f"下载完成: {downloaded} 新文件")
+    logger.info(f"Download complete: {downloaded} new files")
     return downloaded
 
 
 # ============================================================
-# Step 2: 计算因子
+# Step 2: Compute factors
 # ============================================================
 def compute_factors_for_training():
-    """计算所有已下载标的的因子，返回训练数据"""
+    """Compute factors for all downloaded tickers and return training data."""
     from services.factor_service.engine.factor_engine import FactorEngine
 
     data_dir = Path("data/daily")
     parquet_files = list(data_dir.glob("*.parquet"))
     
     if not parquet_files:
-        logger.error("无数据文件，请先下载数据")
+        logger.error("No data files; download data first")
         return None, None
     
     engine = FactorEngine()
     # register_all() registers TECHNICAL/FUNDAMENTAL/... factor instances
     engine.register_all()
-    logger.info(f"已注册 {len(engine.factors)} 个因子")
+    logger.info(f"Registered {len(engine.factors)} factors")
     
     all_features = []
     for fpath in parquet_files[:100]:  # Limit to 100 for speed
@@ -99,20 +99,20 @@ def compute_factors_for_training():
             continue
     
     if not all_features:
-        logger.error("因子计算失败")
+        logger.error("Factor computation failed")
         return None, None
     
     combined = pd.concat(all_features, ignore_index=True).dropna()
-    logger.info(f"训练数据集: {len(combined)} 行 × {combined.shape[1]} 列, {len(all_features)} 标的")
+    logger.info(f"Training dataset: {len(combined)} rows × {combined.shape[1]} cols, {len(all_features)} tickers")
     
     return combined, engine
 
 
 # ============================================================
-# Step 3: 训练模型 (Walk-Forward 严格时间序)
+# Step 3: Train models (Walk-Forward, strict time order)
 # ============================================================
 def train_models(data: pd.DataFrame):
-    """用 Walk-Forward 训练全部模型，严格时间序，杜绝未来信息泄露。"""
+    """Train all models with Walk-Forward, strict time order, no look-ahead leakage."""
     from services.model_train_service.trainers.gbdt_trainer import GBDTTrainer
     from services.model_train_service.trainers.transformer_trainer import TransformerTrainer
     from services.model_train_service.framework.walk_forward import WalkForwardValidator
@@ -120,17 +120,17 @@ def train_models(data: pd.DataFrame):
     models_dir = Path("data/models")
     models_dir.mkdir(parents=True, exist_ok=True)
     
-    # 排除非特征列
+    # Exclude non-feature columns
     exclude = ["ticker", "date", "open", "high", "low", "close", "adj_close", 
                "volume", "fwd_ret_1d", "fwd_ret_5d", "fwd_ret_20d"]
     feature_cols = [c for c in data.columns if c not in exclude and not c.startswith("fwd_ret")]
     
     # Use 5-day forward return as target
     if "fwd_ret_5d" not in data.columns:
-        logger.error("缺少 fwd_ret_5d 目标列")
+        logger.error("Missing fwd_ret_5d target column")
         return
     
-    logger.info(f"特征: {len(feature_cols)} 列, 样本: {len(data)}")
+    logger.info(f"Features: {len(feature_cols)} cols, samples: {len(data)}")
     
     # ── Prepare features & targets ──────────────────────────
     X = data[feature_cols].copy()
@@ -235,14 +235,14 @@ def train_models(data: pd.DataFrame):
     
     # ── Summary ─────────────────────────────────────────────
     logger.info("=" * 50)
-    logger.info(f"Walk-Forward 完成: {len(wf_results)} folds")
+    logger.info(f"Walk-Forward complete: {len(wf_results)} folds")
     for name, scores in results.items():
         if scores:
             mean_s = np.mean(scores)
             std_s = np.std(scores)
             logger.info(f"  {name}: mean_acc={mean_s:.4f} ± {std_s:.4f} ({len(scores)} folds)")
     
-    # ── MLflow 注册最佳模型 ─────────────────────────────────
+    # ── MLflow: register the best models ─────────────────────────────────
     try:
         from services.model_train_service.mlflow_manager import MLflowManager
         
@@ -273,9 +273,9 @@ def train_models(data: pd.DataFrame):
                     "step_size": 90,
                 },
             )
-        logger.info("MLflow 注册完成")
+        logger.info("MLflow registration complete")
     except Exception as e:
-        logger.warning(f"MLflow 注册跳过: {e}")
+        logger.warning(f"MLflow registration skipped: {e}")
     
     return results
 
@@ -285,25 +285,25 @@ def train_models(data: pd.DataFrame):
 # ============================================================
 if __name__ == "__main__":
     logger.info("=" * 60)
-    logger.info(" Quant AI Trader v2 - 全量模型训练")
-    logger.info(f" 时间: {datetime.now()}")
+    logger.info(" Quant AI Trader v2 - Full-model training")
+    logger.info(f" Time: {datetime.now()}")
     logger.info("=" * 60)
     
     # Step 1: Download data
-    logger.info("\n[1/3] 下载历史数据...")
+    logger.info("\n[1/3] Downloading historical data...")
     us_symbols = [s["ticker"] for s in US_STOCKS[:50]]  # Top 50 US
     download_data(us_symbols, "US", years=2)
     
     # Step 2: Compute factors & build dataset
-    logger.info("\n[2/3] 计算因子...")
+    logger.info("\n[2/3] Computing factors...")
     data, engine = compute_factors_for_training()
     
     if data is None:
-        logger.error("无法构建训练数据集")
+        logger.error("Unable to build training dataset")
         sys.exit(1)
     
     # Step 3: Train models
-    logger.info("\n[3/3] 训练模型...")
+    logger.info("\n[3/3] Training models...")
     results = train_models(data)
     
-    logger.info("\n全部训练完成!")
+    logger.info("\nAll training complete!")

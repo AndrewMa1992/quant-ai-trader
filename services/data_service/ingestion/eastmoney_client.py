@@ -1,4 +1,4 @@
-"""services/data_service/ingestion/eastmoney_client.py – 东方财富行情客户端.
+"""services/data_service/ingestion/eastmoney_client.py – Eastmoney market-data client.
 
 Fetches historical K-line data from Eastmoney's public API.
 Supports A-share (SH/SZ) tickers with automatic secid conversion.
@@ -18,7 +18,7 @@ from loguru import logger
 
 
 class EastmoneyClient:
-    """东方财富 (Eastmoney) historical K-line data client.
+    """Eastmoney historical K-line data client.
 
     Fetches daily OHLCV data for Chinese A-share tickers from the
     public Eastmoney push API. Handles SH/SZ prefix detection.

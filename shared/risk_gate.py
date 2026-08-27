@@ -1,12 +1,12 @@
 """
-Risk Gate — 交易管线风控统一入口
-=================================
-下单前统一过闸（机构级）：
-0. KillSwitch — 持久化紧急停机
-1. CircuitBreaker.allow_order() — 熔断器
-2. Barra 因子暴露检查 — 不超过 BARRA_EXPOSURE_MAX_Z
-3. VaR 检查 — 日 VaR < VAR_LIMIT_PCT × 组合价值
-4. CVaR 检查 — CVaR < CVAR_LIMIT_PCT × 组合价值
+Risk Gate — unified risk-control entry for the trading pipeline
+===============================================================
+Institutional pre-trade gates:
+0. KillSwitch — durable emergency halt
+1. CircuitBreaker.allow_order() — circuit breaker
+2. Barra factor-exposure check — must not exceed BARRA_EXPOSURE_MAX_Z
+3. VaR check — daily VaR < VAR_LIMIT_PCT × portfolio value
+4. CVaR check — CVaR < CVAR_LIMIT_PCT × portfolio value
 5. Gross / Net / Single exposure — RISK_LIMITS
 """
 from dataclasses import dataclass, field
@@ -20,7 +20,7 @@ from configs.pipeline_config import pipeline_config
 
 @dataclass
 class RiskResult:
-    """风控检查结果"""
+    """Risk-check result."""
     passed: bool
     reason: str
     warnings: List[str] = field(default_factory=list)
@@ -28,11 +28,11 @@ class RiskResult:
 
 
 class RiskGate:
-    """风控统一入口（KillSwitch + CB + Barra + VaR + CVaR + Exposure）。
+    """Unified risk-control entry (KillSwitch + CB + Barra + VaR + CVaR + Exposure).
 
-    依赖:
+    Dependencies:
         - circuit_breaker: services.execution_service.monitor.circuit_breaker.CircuitBreaker
-        - risk_service_url: risk-service (8015) 的 base URL
+        - risk_service_url: base URL of risk-service (8015)
         - constraints: dict of constraint parameters
     """
 
@@ -71,18 +71,18 @@ class RiskGate:
         portfolio_state: Dict,
         signal_strength: float,
     ) -> RiskResult:
-        """依次执行四道风控检查。
+        """Run the four-layer risk checks in order.
 
         Args:
-            ticker: 股票代码
-            quantity: 拟交易股数
-            price: 拟交易价格
-            portfolio_state: 组合快照 {total_value, cash, positions, ...}
-            signal_strength: 信号强度 ∈ [-1, 1]
+            ticker: Stock ticker
+            quantity: Intended share quantity
+            price: Intended trade price
+            portfolio_state: Portfolio snapshot {total_value, cash, positions, ...}
+            signal_strength: Signal strength ∈ [-1, 1]
 
         Returns:
-            RiskResult: 全部通过 → passed=True
-                        任一不通过 → passed=False + reason
+            RiskResult: all gates pass → passed=True
+                        any gate fails → passed=False + reason
         """
         order_value: float = quantity * price
         warnings: List[str] = []
@@ -165,11 +165,11 @@ class RiskGate:
         if exposure_result.get("warning"):
             warnings.append(exposure_result["warning"])
 
-        # 全部通过
+        # All gates passed
         if warnings:
             logger.info(
-                f"✅ RiskGate 通过 ({ticker}) | "
-                f"警告 {len(warnings)}: {warnings}"
+                f"✅ RiskGate passed ({ticker}) | "
+                f"{len(warnings)} warning(s): {warnings}"
             )
         return RiskResult(passed=True, reason="ALL_PASSED", warnings=warnings)
 
@@ -178,7 +178,7 @@ class RiskGate:
     async def _check_circuit_breaker(
         self, ticker: str, quantity: int, price: float
     ) -> Dict:
-        """Gate 1: 熔断器检查。
+        """Gate 1: circuit-breaker check.
 
         Calls CircuitBreaker.allow_order() if available.
         """
@@ -252,7 +252,7 @@ class RiskGate:
         return ",".join(tickers), ",".join(f"{w:.6f}" for w in norm)
 
     async def _check_barra_exposure(self, portfolio_state: Dict) -> Dict:
-        """Gate 2: Barra 因子暴露检查。
+        """Gate 2: Barra factor-exposure check.
 
         Fetches current exposures from risk-service and checks
         that no factor Z-score exceeds BARRA_EXPOSURE_MAX_Z.
@@ -310,10 +310,10 @@ class RiskGate:
         order_value: float,
         portfolio_state: Dict,
     ) -> Dict:
-        """Gate 3: VaR 检查。
+        """Gate 3: VaR check.
 
         GET risk-service:/api/v2/risk/var
-        校验日 VaR < VAR_LIMIT_PCT × portfolio_value
+        Assert daily VaR < VAR_LIMIT_PCT × portfolio_value
         """
         if not pipeline_config.ENABLE_RISK_CHECKS:
             return {"passed": True}
@@ -367,10 +367,10 @@ class RiskGate:
         order_value: float,
         portfolio_state: Dict,
     ) -> Dict:
-        """Gate 4: CVaR 检查。
+        """Gate 4: CVaR check.
 
         GET risk-service:/api/v2/risk/cvar
-        校验 CVaR < CVAR_LIMIT_PCT × portfolio_value
+        Assert CVaR < CVAR_LIMIT_PCT × portfolio_value
         """
         if not pipeline_config.ENABLE_RISK_CHECKS:
             return {"passed": True}

@@ -1,8 +1,8 @@
-"""验证 FastAPI 应用能正常加载"""
+"""Verify that the FastAPI application loads successfully."""
 import sys
 sys.path.insert(0, '.')
 
-# 这不会启动服务器，只是验证应用对象能被创建
+# Does not start the server; only verifies that the app object can be created.
 from backend.main import app
 
 print(f"FastAPI app: {app.title} v{app.version}")

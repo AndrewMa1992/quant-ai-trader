@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Quant AI Trader - 实盘就绪评估与改进路线图 PDF 报告"""
+"""Quant AI Trader - Live Trading Readiness Assessment and Improvement Roadmap PDF Report"""
 import os
 from fpdf import FPDF
 from datetime import datetime
@@ -18,15 +18,15 @@ class Report(FPDF):
             return
         self.set_font("CN", "", 7)
         self.set_text_color(120,120,120)
-        self.cell(0, 4, "Quant AI Trader | 实盘就绪评估报告", align="L")
-        self.cell(0, 4, f"第{self.page_no()}页", align="R", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 4, "Quant AI Trader | Live Trading Readiness Report", align="L")
+        self.cell(0, 4, f"Page {self.page_no()}", align="R", new_x="LMARGIN", new_y="NEXT")
         self.ln(2)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("CN", "", 7)
         self.set_text_color(150,150,150)
-        self.cell(0, 10, f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 机密", align="C")
+        self.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | Confidential", align="C")
 
     def s(self, text, level=1):
         if level == 1:
@@ -105,7 +105,7 @@ class Report(FPDF):
         self.cell(0, 13, "Quant AI Trader", align="C", new_x="LMARGIN", new_y="NEXT")
         self.set_font("CN", "", 16)
         self.set_text_color(80,80,80)
-        self.cell(0, 10, "实盘就绪评估与改进路线图", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 10, "Live Trading Readiness Assessment and Improvement Roadmap", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(15)
         mid = self.w / 2
         self.set_draw_color(15,50,110)
@@ -114,9 +114,9 @@ class Report(FPDF):
         self.ln(15)
         self.set_font("CN", "", 10)
         self.set_text_color(120,120,120)
-        self.cell(0, 7, f"报告日期: {datetime.now().strftime('%Y年%m月%d日')}", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 7, "版本: v1.0 | 机密", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 7, "市场覆盖: 美股 | 港股 | 新加坡 | 澳洲 | 新西兰", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 7, f"Report date: {datetime.now().strftime('%Y-%m-%d')}", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 7, "Version: v1.0 | Confidential", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 7, "Market coverage: US | HK | Singapore | Australia | New Zealand", align="C", new_x="LMARGIN", new_y="NEXT")
 
 
 pdf = Report()
@@ -125,173 +125,173 @@ pdf.cover()
 
 # ========== Section 1 ==========
 pdf.add_page()
-pdf.s("一、系统当前状态总览")
+pdf.s("1. Current System Status Overview")
 
-pdf.s("1.1 核心指标", level=2)
+pdf.s("1.1 Key Metrics", level=2)
 rows = [
-    ["初始资金", "$1,000,000 USD"],
-    ["当前资产", "$998,061 USD (Cycle 4)"],
-    ["累计盈亏", "-$1,939 (-0.19%)"],
-    ["资金部署率", "98.3% ($17,280 现金)"],
-    ["股票池规模", "500 只 (US 186 + HK 157 + SG 97 + AU 30 + NZ 30)"],
-    ["每轮分析", "50 只, 5 分钟周期"],
-    ["交易模式", "Paper Trading (模拟盘)"],
-    ["老虎账号", "模拟: 21837535188693626 / 实盘: 20874631"],
+    ["Initial capital", "$1,000,000 USD"],
+    ["Current NAV", "$998,061 USD (Cycle 4)"],
+    ["Cumulative P&L", "-$1,939 (-0.19%)"],
+    ["Capital deployed", "98.3% ($17,280 cash)"],
+    ["Universe size", "500 names (US 186 + HK 157 + SG 97 + AU 30 + NZ 30)"],
+    ["Analysis per cycle", "50 names, 5-minute cycle"],
+    ["Trading mode", "Paper Trading (simulated)"],
+    ["Tiger account", "Paper: 21837535188693626 / Live: 20874631"],
 ]
-pdf.table(["指标", "数值"], rows, [60, 110])
+pdf.table(["Metric", "Value"], rows, [60, 110])
 
-pdf.s("1.2 AI 模型架构", level=2)
+pdf.s("1.2 AI Model Architecture", level=2)
 rows2 = [
-    ["Transformer (PatchTST)", "545K 参数, 60天回看", "权重 35%", "活跃"],
-    ["PPO 强化学习", "30K timesteps, 191维状态", "权重 25%", "活跃"],
-    ["GNN 跨股票关联", "6行业聚类, 实时相关性", "权重 10%", "活跃"],
-    ["技术指标", "趋势/RSI/波动率", "权重 20%", "活跃"],
-    ["FinBERT 情绪分析", "模拟模式(无数据)", "权重 10%", "休眠"],
+    ["Transformer (PatchTST)", "545K params, 60-day lookback", "Weight 35%", "Active"],
+    ["PPO reinforcement learning", "30K timesteps, 191-dim state", "Weight 25%", "Active"],
+    ["GNN cross-stock correlation", "6-sector clustering, live correlation", "Weight 10%", "Active"],
+    ["Technical indicators", "Trend/RSI/volatility", "Weight 20%", "Active"],
+    ["FinBERT sentiment", "Simulated mode (no data)", "Weight 10%", "Idle"],
 ]
-pdf.table(["模型", "规格", "集成权重", "状态"], rows2, [40, 60, 25, 25])
+pdf.table(["Model", "Spec", "Ensemble weight", "Status"], rows2, [40, 60, 25, 25])
 
-pdf.s("1.3 信号质量", level=2)
+pdf.s("1.3 Signal Quality", level=2)
 rows3 = [
-    ["置信度范围", "84-100%", "优秀"],
-    ["每轮买入信号", "~20 只", "活跃"],
-    ["每轮卖出信号", "~23 只", "活跃"],
-    ["跨市场覆盖", "美股 + 新加坡(已触发)", "港股待开市"],
-    ["最小交易额", "$1,000 USD", "--"],
-    ["最大单仓", "20% ($200K)", "风控合规"],
+    ["Confidence range", "84-100%", "Excellent"],
+    ["Buy signals per cycle", "~20 names", "Active"],
+    ["Sell signals per cycle", "~23 names", "Active"],
+    ["Cross-market coverage", "US + Singapore (triggered)", "HK pending open"],
+    ["Minimum trade size", "$1,000 USD", "--"],
+    ["Max single position", "20% ($200K)", "Risk compliant"],
 ]
-pdf.table(["指标", "数值", "评价"], rows3, [50, 60, 50])
+pdf.table(["Metric", "Value", "Assessment"], rows3, [50, 60, 50])
 
 # ========== Section 2 ==========
 pdf.add_page()
-pdf.s("二、实盘就绪度评估")
+pdf.s("2. Live Trading Readiness Assessment")
 
-pdf.s("2.1 老虎证券账户状态", level=2)
+pdf.s("2.1 Tiger Brokers Account Status", level=2)
 pdf.text(
-    "当前配置有两个老虎证券账号:"
+    "Two Tiger Brokers accounts are currently configured:"
 )
-pdf.bullet("模拟账号 21837535188693626 - 当前使用中, Paper Trading 模式")
-pdf.bullet("实盘账号 20874631 - 已识别, 未启用")
+pdf.bullet("Paper account 21837535188693626 - currently in use, Paper Trading mode")
+pdf.bullet("Live account 20874631 - identified, not enabled")
 pdf.text(
-    "切换方式: 在 .env 文件中设置 TIGER_PAPER_TRADING=false 并配置 TIGER_ACCOUNT=20874631"
+    "Switchover: set TIGER_PAPER_TRADING=false in the .env file and configure TIGER_ACCOUNT=20874631"
 )
 
-pdf.s("2.2 实盘就绪度检查清单", level=2)
+pdf.s("2.2 Live Trading Readiness Checklist", level=2)
 checks = [
-    ["资金到账", "老虎实盘账号需入金", "待确认", "P0"],
-    ["交易权限", "美股/港股/新加坡股交易权限", "已开通", "P0"],
-    ["API 连接", "Tiger API 模拟盘已验证", "通过", "P0"],
-    ["AI 模型", "三引擎融合, 置信度 84-100%", "就绪", "P1"],
-    ["风控系统", "仓位/止损/波动率多层风控", "就绪", "P1"],
-    ["多币种", "USD/HKD/SGD/AUD/NZD 自动兑换", "就绪", "P1"],
-    ["信号质量", "20+ 买入信号/周期", "就绪", "P1"],
-    ["资金部署", "98% 部署率, 分散 11+ 持仓", "就绪", "P1"],
-    ["合规审查", "跨境券商整治进行中", "风险", "P0"],
+    ["Funding received", "Tiger live account requires a deposit", "Pending confirm", "P0"],
+    ["Trading permissions", "US/HK/Singapore equity trading rights", "Enabled", "P0"],
+    ["API connectivity", "Tiger API paper trading verified", "Pass", "P0"],
+    ["AI models", "Three-engine ensemble, confidence 84-100%", "Ready", "P1"],
+    ["Risk system", "Position/stop-loss/volatility multi-layer risk", "Ready", "P1"],
+    ["Multi-currency", "USD/HKD/SGD/AUD/NZD auto conversion", "Ready", "P1"],
+    ["Signal quality", "20+ buy signals per cycle", "Ready", "P1"],
+    ["Capital deployment", "98% deployed, diversified across 11+ holdings", "Ready", "P1"],
+    ["Compliance review", "Cross-border broker crackdown underway", "Risk", "P0"],
 ]
-pdf.table(["检查项", "说明", "状态", "优先级"], checks, [35, 65, 25, 22])
+pdf.table(["Check item", "Notes", "Status", "Priority"], checks, [35, 65, 25, 22])
 
-pdf.s("2.3 实盘就绪评分", level=2)
-pdf.text("综合评分: 7.5 / 10")
-pdf.bullet("技术就绪度: 9/10 — AI 模型、风控、多币种、自动化全部就绪")
-pdf.bullet("资金就绪度: 5/10 — 实盘账号已识别, 但需确认入金和交易权限")
-pdf.bullet("合规就绪度: 6/10 — 存在跨境券商政策风险, 需持续关注")
+pdf.s("2.3 Live Trading Readiness Score", level=2)
+pdf.text("Overall score: 7.5 / 10")
+pdf.bullet("Technical readiness: 9/10 — AI models, risk, multi-currency, and automation are all ready")
+pdf.bullet("Funding readiness: 5/10 — live account identified, but deposit and trading permissions need confirmation")
+pdf.bullet("Compliance readiness: 6/10 — cross-border broker policy risk remains; ongoing monitoring required")
 
-pdf.green_box("结论: 技术层面已具备实盘条件。建议完成资金和合规确认后, 先以小额资金(建议 $10,000)试运行 1 周, 验证实盘链路后再加仓。")
+pdf.green_box("Conclusion: technically ready for live trading. After funding and compliance confirmation, run a small-size trial (recommended $10,000) for 1 week to validate the live path before scaling.")
 
-pdf.s("2.4 实盘切换步骤", level=2)
-pdf.text("第一步: 确认老虎实盘账号 20874631 已入金并有交易权限")
-pdf.text("第二步: 修改 .env 文件:")
+pdf.s("2.4 Live Switchover Steps", level=2)
+pdf.text("Step 1: Confirm Tiger live account 20874631 is funded and has trading permissions")
+pdf.text("Step 2: Update the .env file:")
 pdf.bullet("TIGER_ACCOUNT=20874631")
 pdf.bullet("TIGER_PAPER_TRADING=false")
-pdf.text("第三步: 先在单市场(美股)运行, 验证下单/成交/撤单全链路")
-pdf.text("第四步: 确认无误后扩展至全部 5 个市场")
+pdf.text("Step 3: Run on a single market (US) first and validate the full order/fill/cancel path")
+pdf.text("Step 4: After confirmation, expand to all 5 markets")
 
-pdf.red_box("风险提示: 在切换实盘前, 务必先在模拟盘验证所有新功能(RL/GNN/多币种)运行稳定至少 1 周。当前系统仅运行 4 个周期, 样本量不足。")
+pdf.red_box("Risk notice: before switching to live, validate all new features (RL/GNN/multi-currency) on paper for at least 1 week. The system has only run 4 cycles so far, which is insufficient sample size.")
 
 # ========== Section 3 ==========
 pdf.add_page()
-pdf.s("三、改进路线图")
+pdf.s("3. Improvement Roadmap")
 
-pdf.s("3.1 短期改进 (1-2 周)", level=2)
-pdf.text("目标: 稳定当前系统, 修复已知问题, 提高模拟盘收益")
+pdf.s("3.1 Short-term Improvements (1-2 weeks)", level=2)
+pdf.text("Goal: stabilize the current system, fix known issues, and improve paper-trading returns")
 items1 = [
-    ["P0", "修复 Transformer 模型加载", "health 显示 false, 模型未正常加载", "提升信号质量"],
-    ["P0", "港股开市验证", "等待周一港股开市, 验证信号/交易全链路", "确认港股通路"],
-    ["P1", "新加坡/澳洲/新西兰验证", "等待各市场开市验证数据/信号/交易", "确认多市场通路"],
-    ["P1", "情绪分析接入新闻API", "FinBERT 目前返回 0, 接入 NewsAPI 或 yfinance news", "增加 10% 信号权重"],
-    ["P1", "模拟盘收益跟踪", "建立收益曲线、最大回撤、Sharpe 实时面板", "量化评估策略"],
-    ["P2", "RL 模型增量训练", "基于最新数据微调 PPO, 提升动作质量", "提升 RL 置信度"],
+    ["P0", "Fix Transformer model loading", "health shows false; model not loaded correctly", "Improve signal quality"],
+    ["P0", "HK market open validation", "Wait for Monday HK open; validate full signal/trade path", "Confirm HK connectivity"],
+    ["P1", "SG/AU/NZ validation", "Wait for each market open to validate data/signals/trades", "Confirm multi-market path"],
+    ["P1", "Sentiment via news API", "FinBERT currently returns 0; integrate NewsAPI or yfinance news", "Add 10% signal weight"],
+    ["P1", "Paper P&L tracking", "Build live return curve, max drawdown, and Sharpe dashboard", "Quantify strategy"],
+    ["P2", "RL incremental training", "Fine-tune PPO on latest data to improve action quality", "Improve RL confidence"],
 ]
-pdf.table(["优先级", "项目", "说明", "收益"], items1, [18, 45, 75, 38])
+pdf.table(["Priority", "Item", "Notes", "Benefit"], items1, [18, 45, 75, 38])
 
-pdf.s("3.2 中期改进 (3-6 周)", level=2)
-pdf.text("目标: 实现 GNN+TFT 混合架构, 达到 Sharpe 2.0+")
+pdf.s("3.2 Medium-term Improvements (3-6 weeks)", level=2)
+pdf.text("Goal: implement a GNN+TFT hybrid architecture targeting Sharpe 2.0+")
 items2 = [
-    ["P0", "Graph Attention Network", "构建动态股票关系图, 行业/相关性嵌入", "Sharpe +0.3-0.5"],
-    ["P0", "Temporal Fusion Transformer", "替代 PatchTST, 多尺度预测+可解释性", "Sharpe +0.3-0.5"],
-    ["P1", "Multi-Agent RL", "每只股票独立 Agent + 中央评论家协调", "Sharpe +0.2"],
-    ["P1", "回测框架完善", "Walk-forward 回测, 12 个月滚动验证", "策略可信度"],
-    ["P2", "实盘小额试运行", "$10K 试跑 1 周, 验证成交/滑点/手续费", "实盘验证"],
-    ["P2", "Docker 容器化部署", "标准化运行环境, 消除环境依赖问题", "运维可靠性"],
+    ["P0", "Graph Attention Network", "Build a dynamic stock graph with sector/correlation embeddings", "Sharpe +0.3-0.5"],
+    ["P0", "Temporal Fusion Transformer", "Replace PatchTST; multi-scale forecast + interpretability", "Sharpe +0.3-0.5"],
+    ["P1", "Multi-Agent RL", "Per-stock independent agent + central critic coordination", "Sharpe +0.2"],
+    ["P1", "Backtest framework", "Walk-forward backtest with 12-month rolling validation", "Strategy credibility"],
+    ["P2", "Live small-size trial", "$10K trial for 1 week; validate fills/slippage/fees", "Live validation"],
+    ["P2", "Docker containerization", "Standardize runtime and remove environment drift", "Ops reliability"],
 ]
-pdf.table(["优先级", "项目", "说明", "收益"], items2, [18, 48, 75, 38])
+pdf.table(["Priority", "Item", "Notes", "Benefit"], items2, [18, 48, 75, 38])
 
-pdf.s("3.3 长期愿景 (3-6 个月)", level=2)
-pdf.text("目标: 全自动多市场对冲基金级量化系统")
+pdf.s("3.3 Long-term Vision (3-6 months)", level=2)
+pdf.text("Goal: a fully automated multi-market hedge-fund-grade quantitative system")
 items3 = [
-    ["GNN + TFT 混合模型", "跨股票 + 跨市场 + 跨时间尺度融合, Sharpe 2.5+"],
-    ["期权对冲层", "通过美股期权对冲尾部风险, 降低最大回撤 50%"],
-    ["高频数据接入", "分钟级/秒级数据, 事件驱动交易"],
-    ["A 股接入 (政策明朗后)", "沪深港通 2500+ 标的, 扩大股票池"],
-    ["加密货币扩展", "BTC/ETH 现货接入, 24/7 全天候交易"],
-    ["Web 管理面板", "实时 P&L、风险仪表盘、一键启停"],
+    ["GNN + TFT hybrid model", "Cross-stock + cross-market + cross-horizon fusion, Sharpe 2.5+"],
+    ["Options hedge overlay", "Hedge tail risk with US equity options; cut max drawdown 50%"],
+    ["High-frequency data", "Minute/second-level data and event-driven trading"],
+    ["A-share access (after policy clarity)", "Stock Connect 2500+ names; expand the universe"],
+    ["Crypto expansion", "BTC/ETH spot access; 24/7 trading"],
+    ["Web admin panel", "Live P&L, risk dashboard, one-click start/stop"],
 ]
-pdf.table(["项目", "说明"], items3, [50, 125])
+pdf.table(["Item", "Notes"], items3, [50, 125])
 
 # ========== Section 4 ==========
 pdf.add_page()
-pdf.s("四、风险与对策")
+pdf.s("4. Risks and Mitigations")
 
 risks = [
-    ["跨境券商政策风险", "高", "证监会整治跨境券商,\n老虎/富途/长桥受影响", "关注政策动态;\n保持模拟盘为主;\n探索香港持牌券商替代方案"],
-    ["模型过拟合风险", "中", "训练数据有限,\n市场结构变化时失效", "3 个月滚动重训练;\nWalk-forward 验证;\n集成多样化"],
-    ["流动性风险", "中", "新加坡/澳洲/新西兰\n小盘股流动性差", "ADV > $1M 过滤器;\n单仓 20% 上限;\n滑点预留"],
-    ["汇率风险", "低", "SGD/AUD/NZD 波动", "已实现多币种自动兑换;\n待加入对冲层"],
-    ["技术故障风险", "中", "进程崩溃/网络中断/\nAPI 限流", "Docker 容器化;\n健康检查+自动重启;\n异常告警"],
+    ["Cross-border broker policy risk", "High", "Regulator crackdown on cross-border brokers;\nTiger/Futu/Longbridge affected", "Monitor policy developments;\nkeep paper as primary;\nexplore HK-licensed broker alternatives"],
+    ["Model overfitting risk", "Medium", "Limited training data;\nbreaks when market structure shifts", "Retrain on a 3-month rolling window;\nWalk-forward validation;\nensemble diversification"],
+    ["Liquidity risk", "Medium", "Singapore/Australia/New Zealand\nsmall-caps are illiquid", "ADV > $1M filter;\n20% single-name cap;\nslippage buffer"],
+    ["FX risk", "Low", "SGD/AUD/NZD volatility", "Multi-currency auto conversion in place;\nhedge overlay still pending"],
+    ["Technical failure risk", "Medium", "Process crash / network outage /\nAPI rate limits", "Docker containerization;\nhealth checks + auto-restart;\nexception alerts"],
 ]
-pdf.table(["风险", "等级", "描述", "对策"], risks, [38, 14, 55, 68])
+pdf.table(["Risk", "Level", "Description", "Mitigation"], risks, [38, 14, 55, 68])
 
-pdf.s("五、关键时间节点", level=2)
+pdf.s("5. Key Milestones", level=2)
 
-pdf.text("即日起:")
-pdf.bullet("确认老虎实盘账号 20874631 入金金额和交易权限")
-pdf.bullet("修复 Transformer 模型加载问题")
+pdf.text("Effective immediately:")
+pdf.bullet("Confirm deposit amount and trading permissions for Tiger live account 20874631")
+pdf.bullet("Fix Transformer model loading")
 
-pdf.text("本周 (5/22 - 5/25):")
-pdf.bullet("美股继续模拟盘运行, 积累至少 200 周期数据")
-pdf.bullet("周一(5/26)港股开市, 验证港股信号和交易")
+pdf.text("This week (5/22 - 5/25):")
+pdf.bullet("Continue US paper trading and accumulate at least 200 cycles of data")
+pdf.bullet("Monday (5/26) HK market opens; validate HK signals and trades")
 
-pdf.text("下周 (5/26 - 6/1):")
-pdf.bullet("完成至少 500 周期的模拟盘回测数据")
-pdf.bullet("生成模拟盘绩效报告 (Sharpe / 最大回撤 / 胜率)")
-pdf.bullet("若模拟盘 Sharpe > 1.5, 启动实盘 $10K 试运行")
+pdf.text("Next week (5/26 - 6/1):")
+pdf.bullet("Complete at least 500 cycles of paper-trading backtest data")
+pdf.bullet("Produce a paper-trading performance report (Sharpe / max drawdown / win rate)")
+pdf.bullet("If paper Sharpe > 1.5, start a live $10K trial")
 
-pdf.yellow_box("建议实盘启动日期: 2026年6月1日 (周一), 条件: 模拟盘稳定运行 1 周以上, Sharpe > 1.5, 所有市场信号链路正常。")
+pdf.yellow_box("Recommended live start date: 1 June 2026 (Monday), subject to: paper running stably for 1+ week, Sharpe > 1.5, and signal paths healthy across all markets.")
 
-pdf.s("六、总结", level=2)
+pdf.s("6. Summary", level=2)
 
 pdf.green_box(
-    "Quant AI Trader 技术层面已达到准实盘水准: AI 三引擎(Transformer+RL+GNN)融合, "
-    "500 只跨 5 市场股票池, 98% 资金部署率, 信号置信度 84-100%。\n\n"
-    "核心差距在三个非技术维度: (1) 实盘账号需确认入金; (2) 模拟盘运行时间不足(仅 4 周期); "
-    "(3) 跨境券商政策不确定性。\n\n"
-    "建议按本报告第五章的时间表稳步推进, 优先积累模拟盘数据, 同步确认实盘账号, "
-    "在 6 月初以小额资金启动实盘验证。"
+    "Quant AI Trader is technically at near-live quality: three-engine AI fusion (Transformer+RL+GNN), "
+    "a 500-name universe across 5 markets, 98% capital deployment, and 84-100% signal confidence.\n\n"
+    "The remaining gap is in three non-technical dimensions: (1) live account funding must be confirmed; "
+    "(2) paper runtime is too short (only 4 cycles); (3) cross-border broker policy uncertainty.\n\n"
+    "Follow the timeline in Section 5: prioritize accumulating paper data, confirm the live account in parallel, "
+    "and start a small-size live validation in early June."
 )
 
 pdf.ln(5)
 pdf.set_font("CN", "B", 10)
 pdf.set_text_color(15, 50, 110)
-pdf.cell(0, 7, "--- 报告完 ---", align="C")
+pdf.cell(0, 7, "--- End of Report ---", align="C")
 
 # Save
 out = r"G:\workbuddyspace\Claw\quant-ai-trader\docs\live_trading_readiness_report.pdf"

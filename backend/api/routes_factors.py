@@ -1,5 +1,5 @@
 """
-因子数据接口路由 - 从DB读取真实因子定义、IC分析、相关性矩阵
+Factor data API routes — factor definitions, IC analysis, and correlation matrix from the DB.
 """
 from pathlib import Path
 from typing import Optional
@@ -14,19 +14,19 @@ DB_PATH = Path(__file__).parent.parent.parent / "data" / "quant_trader.db"
 
 
 def _get_conn() -> sqlite3.Connection:
-    """获取因子数据库连接（带WAL优化）"""
+    """Open a factor-database connection (WAL-optimized)."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
 
 # ================================================================
-# GET /factors — 因子定义列表（含IC统计）
+# GET /factors — factor definition list (with IC stats)
 # ================================================================
 
 @router.get("/factors")
 async def get_factors(category: Optional[str] = Query(None)):
-    """获取所有活跃因子定义及IC统计信息"""
+    """Return all active factor definitions and IC statistics."""
     try:
         if not DB_PATH.exists():
             return {"factors": [], "note": f"Factor database not found at {DB_PATH}"}
@@ -81,12 +81,12 @@ async def get_factors(category: Optional[str] = Query(None)):
 
 
 # ================================================================
-# GET /ic-analysis — IC时间序列分析
+# GET /ic-analysis — IC time-series analysis
 # ================================================================
 
 @router.get("/ic-analysis")
 async def get_ic_analysis(factor_name: Optional[str] = Query(None)):
-    """获取因子IC时间序列数据"""
+    """Return factor IC time-series data."""
     try:
         if not DB_PATH.exists():
             return {"ic_data": []}
@@ -129,12 +129,12 @@ async def get_ic_analysis(factor_name: Optional[str] = Query(None)):
 
 
 # ================================================================
-# GET /correlation — 因子相关性矩阵
+# GET /correlation — factor correlation matrix
 # ================================================================
 
 @router.get("/correlation")
 async def get_factor_correlation():
-    """获取因子间的相关性矩阵"""
+    """Return the inter-factor correlation matrix."""
     try:
         if not DB_PATH.exists():
             return {"factors": [], "matrix": []}
@@ -142,7 +142,7 @@ async def get_factor_correlation():
         conn = _get_conn()
         cursor = conn.cursor()
 
-        # 获取所有活跃因子
+        # Load all active factors
         cursor.execute("""
             SELECT factor_id, name FROM factor_definitions 
             WHERE is_active = 1 
@@ -159,12 +159,12 @@ async def get_factor_correlation():
         id_to_idx = {fid: i for i, fid in enumerate(factor_ids)}
         n = len(factor_names)
 
-        # 初始化矩阵（对角为1.0，其余为0.0）
+        # Initialize matrix (diagonal 1.0, elsewhere 0.0)
         matrix = [[0.0] * n for _ in range(n)]
         for i in range(n):
             matrix[i][i] = 1.0
 
-        # 读取相关性数据填充矩阵
+        # Fill matrix from stored correlation data
         cursor.execute("""
             SELECT factor_id_1, factor_id_2, correlation 
             FROM factor_correlation
@@ -177,7 +177,7 @@ async def get_factor_correlation():
                 i, j = id_to_idx[f1], id_to_idx[f2]
                 corr_val = round(row["correlation"], 4)
                 matrix[i][j] = corr_val
-                matrix[j][i] = corr_val  # 对称矩阵
+                matrix[j][i] = corr_val  # Symmetric matrix
 
         conn.close()
         return {"factors": factor_names, "matrix": matrix}
