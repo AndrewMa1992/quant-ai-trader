@@ -269,29 +269,29 @@ class TigerClient:
 
         await self._rate_limit_wait()
         try:
-            from tigeropen.common.consts import OrderType, Action
+            from shared.tiger_account import should_use_paper_account
+            from shared.tiger_orders import submit_stock_order
 
-            action = Action.BUY if side.upper() == "BUY" else Action.SELL
-            otype = OrderType.MARKET if order_type.upper() == "MKT" else OrderType.LIMIT
-            price = limit_price if otype == OrderType.LIMIT else None
-
-            order = await asyncio.to_thread(
-                self._trade_client.place_order,
-                contract=None,  # Tiger resolves by symbol
-                action=action,
-                order_type=otype,
-                quantity=quantity,
-                limit_price=price,
+            result = await asyncio.to_thread(
+                submit_stock_order,
+                self._trade_client,
+                account=self._account,
+                ticker=ticker,
+                side=side,
+                quantity=int(quantity),
+                order_type=order_type,
+                limit_price=limit_price,
+                quote_client=self._quote_client,
+                paper=should_use_paper_account(self._account),
             )
-
-            return {
-                "order_id": getattr(order, "order_id", ""),
-                "ticker": ticker,
-                "side": side.upper(),
-                "quantity": quantity,
-                "order_type": order_type.upper(),
-                "status": "SUBMITTED",
-            }
+            if not result.get("order_id"):
+                raise ExecutionError(
+                    f"Order placement failed: {ticker}",
+                    details={"error": result.get("error") or "no order id"},
+                )
+            return result
+        except ExecutionError:
+            raise
         except Exception as e:
             logger.error(f"Tiger place_order failed for {ticker}: {e}")
             raise ExecutionError(f"Order placement failed: {ticker}", details={"error": str(e)})
