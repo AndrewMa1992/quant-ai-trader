@@ -345,13 +345,27 @@ if (-not $SkipFrontend) {
     }
 }
 
+# Easy public ports. Services stay on 8001 (API) and 5180 (frontend).
+# 80  -> API gateway, 8080 -> frontend. Skip when the gateway itself binds 80.
+if ($GatewayPort -ne 80) {
+    netsh interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0 | Out-Null
+    netsh interface portproxy add v4tov4 listenport=80 listenaddress=0.0.0.0 connectport=$GatewayPort connectaddress=127.0.0.1 | Out-Null
+    netsh interface portproxy delete v4tov4 listenport=8080 listenaddress=0.0.0.0 | Out-Null
+    netsh interface portproxy add v4tov4 listenport=8080 listenaddress=0.0.0.0 connectport=5180 connectaddress=127.0.0.1 | Out-Null
+    netsh advfirewall firewall delete rule name="QAT-HTTP-80" | Out-Null
+    netsh advfirewall firewall add rule name="QAT-HTTP-80" dir=in action=allow protocol=TCP localport=80 | Out-Null
+    netsh advfirewall firewall delete rule name="QAT-HTTP-8080" | Out-Null
+    netsh advfirewall firewall add rule name="QAT-HTTP-8080" dir=in action=allow protocol=TCP localport=8080 | Out-Null
+    Write-Host "[ok] Public forward 80 -> $GatewayPort and 8080 -> 5180"
+}
+
 Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
 Write-Host "  API:      http://127.0.0.1:$GatewayPort/health"
 Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
-Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA - preferred)"
-Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
+Write-Host "  Public API:      http://<host>/           (port 80 -> $GatewayPort)"
+Write-Host "  Public frontend: http://<host>:8080/      (port 8080 -> 5180)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"
