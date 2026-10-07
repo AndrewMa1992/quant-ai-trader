@@ -4,6 +4,7 @@ WsPusher — push cycle / tiger snapshots to API gateway WS bridge.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Optional
 
 import httpx
@@ -19,7 +20,11 @@ class WsPusher:
         enabled: bool = True,
         timeout: float = 3.0,
     ) -> None:
-        self.api_url: str = api_url.rstrip("/") if api_url else "http://127.0.0.1:8001"
+        default_url = os.getenv(
+            "QAT_GATEWAY_URL",
+            "http://127.0.0.1:" + os.getenv("QAT_API_PORT", "8001"),
+        ).rstrip("/")
+        self.api_url: str = api_url.rstrip("/") if api_url else default_url
         self.enabled: bool = enabled
         self.timeout: float = timeout
         self._http: Optional[httpx.AsyncClient] = None

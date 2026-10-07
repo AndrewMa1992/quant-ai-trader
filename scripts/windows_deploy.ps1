@@ -112,8 +112,11 @@ Get-Content ".env" | ForEach-Object {
 $env:PYTHONPATH = $Root
 $env:QAT_PROJECT_ROOT = $Root
 
+$GatewayPort = 8001
+if ($env:QAT_API_PORT -match '^\d+$') { $GatewayPort = [int]$env:QAT_API_PORT }
+
 if ($OpenFirewall) {
-    $ports = @(8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180)
+    $ports = @($GatewayPort, 8011, 8012, 8013, 8014, 8015, 8016, 5180)
     foreach ($p in $ports) {
         $rule = "QAT-Port-$p"
         if (-not (Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue)) {
@@ -195,6 +198,8 @@ function Start-QatService {
         "@echo off",
         ("set PYTHONPATH={0}" -f $Root),
         ("set QAT_PROJECT_ROOT={0}" -f $Root),
+        ("set QAT_API_PORT={0}" -f $GatewayPort),
+        ("set QAT_GATEWAY_URL=http://127.0.0.1:{0}" -f $GatewayPort),
         ("set QAT_TIGER_PRIVATE_KEY_PATH={0}" -f (Join-Path $Root "certs\tiger_private_key.pem")),
         ("cd /d {0}" -f $Root),
         $runLine
@@ -211,8 +216,12 @@ function Start-QatService {
     Start-Sleep -Seconds 1
 }
 
+if ($GatewayPort -eq 80) {
+    netsh interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0 | Out-Null
+    Write-Host "[ok] Cleared portproxy on 80 so the gateway can bind it"
+}
 Write-Host "[..] starting backend services..."
-Start-QatService "api-gateway"    "api_gateway.main:app"                  8001
+Start-QatService "api-gateway"    "api_gateway.main:app"                  $GatewayPort
 Start-QatService "data-service"    "services.data_service.main:app"         8011
 Start-QatService "factor-service"  "services.factor_service.main:app"       8012
 Start-QatService "model-train"     "services.model_train_service.main:app"  8013
@@ -294,11 +303,11 @@ function Test-LocalUrl([string]$Url) {
 Write-Host "[..] waiting for gateway health..."
 $healthy = $false
 for ($i = 0; $i -lt 45; $i++) {
-    if (Test-LocalUrl "http://127.0.0.1:8001/health") { $healthy = $true; break }
+    if (Test-LocalUrl "http://127.0.0.1:$GatewayPort/health") { $healthy = $true; break }
     Start-Sleep -Seconds 2
 }
 if ($healthy) {
-    Write-Host "[ok] Gateway healthy  http://127.0.0.1:8001/health"
+    Write-Host "[ok] Gateway healthy  http://127.0.0.1:$GatewayPort/health"
 } else {
     Write-Host "[ERR] Gateway NOT healthy - API calls from UI will be 502"
     $errLog = Join-Path $Root "logs\api-gateway.err.log"
@@ -339,7 +348,7 @@ if (-not $SkipFrontend) {
 Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
-Write-Host "  API:      http://127.0.0.1:8001/health"
+Write-Host "  API:      http://127.0.0.1:$GatewayPort/health"
 Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
 Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA - preferred)"
 Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
