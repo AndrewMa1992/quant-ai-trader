@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, nextTick } from 'vue'
 import XmCard from '@/components/ui/XmCard.vue'
+import { apiErrorMessage } from '@/api'
 import { listLogs, tailLog, type LogFileInfo, type LogTail } from '@/api/logsApi'
 
 const files = ref<LogFileInfo[]>([])
@@ -44,8 +45,8 @@ async function refreshList() {
     if (!selected.value && data.files.length) {
       await select(data.files[0].name)
     }
-  } catch (e: any) {
-    error.value = e?.parsedError?.message || String(e)
+  } catch (e: unknown) {
+    error.value = apiErrorMessage(e)
   }
 }
 
@@ -57,8 +58,8 @@ async function refreshTail() {
     tail.value = await tailLog(selected.value, tailLines.value, grep.value || undefined)
     await nextTick()
     if (bodyEl.value) bodyEl.value.scrollTop = bodyEl.value.scrollHeight
-  } catch (e: any) {
-    error.value = e?.parsedError?.message || String(e)
+  } catch (e: unknown) {
+    error.value = apiErrorMessage(e)
   } finally {
     loading.value = false
   }

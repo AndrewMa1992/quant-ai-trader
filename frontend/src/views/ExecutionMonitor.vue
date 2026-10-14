@@ -7,6 +7,7 @@ import OrderSliceProgress from '@/components/execution/OrderSliceProgress.vue'
 import { useExecutionStore } from '@/stores/useExecutionStore'
 import { executionApi } from '@/api/executionApi'
 import { tradeApi, type TradeRecord } from '@/api/tradeApi'
+import type { BadgeVariant } from '@/types/ui'
 
 const execStore = useExecutionStore()
 
@@ -140,7 +141,7 @@ function mapOrder(t: Record<string, unknown>): OrderRow {
   }
 }
 
-function statusBadge(status: string): string {
+function statusBadge(status: string): BadgeVariant {
   switch (status) {
     case 'filled': return 'success'
     case 'partial': return 'warning'
@@ -271,7 +272,7 @@ function fillPct(order: OrderRow): number {
               </div>
             </td>
             <td>
-              <XmBadge :variant="statusBadge(log.status) as any">{{ log.status }}</XmBadge>
+              <XmBadge :variant="statusBadge(log.status)">{{ log.status }}</XmBadge>
             </td>
             <td class="text-xs text-xm-text-tertiary">{{ log.timestamp }}</td>
           </tr>

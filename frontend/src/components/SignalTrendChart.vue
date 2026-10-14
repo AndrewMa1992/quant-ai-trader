@@ -6,8 +6,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
-import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
+import { init, use, type ECharts } from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, MarkPointComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+use([LineChart, GridComponent, MarkPointComponent, CanvasRenderer])
 
 interface SignalPoint {
   cycle?: number
@@ -39,7 +43,7 @@ function renderChart() {
   if (!chartRef.value || !props.history.length) return
 
   if (!chart) {
-    chart = echarts.init(chartRef.value, null, { renderer: 'canvas' })
+    chart = init(chartRef.value, undefined, { renderer: 'canvas' })
   }
 
   const data = props.history
