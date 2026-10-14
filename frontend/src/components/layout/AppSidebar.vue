@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
   { path: '/orders', name: 'OrderHistory', label: 'Orders', icon: 'Ord' },
   { path: '/data', name: 'DataExplorer', label: 'Data', icon: 'Data' },
   { path: '/sync', name: 'DataSyncDashboard', label: 'Sync', icon: 'Sync' },
+  { path: '/logs', name: 'LogViewer', label: 'Logs', icon: 'Log' },
 ]
 
 const activeIndex = computed(() => navItems.findIndex((item) => item.name === route.name))

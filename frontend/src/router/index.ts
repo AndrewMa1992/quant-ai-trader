@@ -51,6 +51,11 @@ const routes: RouteRecordRaw[] = [
     name: 'DataSyncDashboard',
     component: () => import('../views/DataSyncDashboard.vue'),
   },
+  {
+    path: '/logs',
+    name: 'LogViewer',
+    component: () => import('../views/LogViewer.vue'),
+  },
 ]
 
 const router = createRouter({
