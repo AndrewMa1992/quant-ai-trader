@@ -23,6 +23,10 @@ x-app-common: &app-common
     QAT_REDIS_PORT: "6379"
     QAT_REDIS_URL: redis://:${QAT_REDIS_PASSWORD:-redis_secret}@redis:6379/0
     QAT_REDIS_PASSWORD: ${QAT_REDIS_PASSWORD:-redis_secret}
+    QAT_GATEWAY_URL: http://api-gateway:8001
+    QAT_TIGER_PAPER_TRADING: "true"
+    QAT_TIGER_SANDBOX: "false"
+    QAT_TIGER_SYNC_INTERVAL_SEC: "15"
     QAT_MLFLOW_TRACKING_URI: http://mlflow:5000
     QAT_SVC_DATA_HOST: data-service
     QAT_SVC_FACTOR_HOST: factor-service
@@ -34,6 +38,7 @@ x-app-common: &app-common
     - ./data:/app/data
     - ./cache:/app/cache
     - ./logs:/app/logs
+    - ./certs:/app/certs:ro
   networks:
     - qat-network
   depends_on:
@@ -235,13 +240,23 @@ services:
   trading-pipeline:
     <<: *app-common
     container_name: qat-trading-pipeline
-    command: python trading_pipeline.py --once
-    restart: "no"
+    # Continuous paper loop. US names only. Live account is not used.
+    command: python trading_pipeline.py --interval 300
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      QAT_EXECUTION_MODE: paper
+      QAT_TRADING_SIMULATION_MODE: "true"
+      QAT_TIGER_PAPER_TRADING: "true"
+      QAT_MARKET_ROTATION: US
+      QAT_ENABLED_MARKETS: US
     depends_on:
       api-gateway:
         condition: service_started
-    profiles:
-      - pipeline
+      execution-service:
+        condition: service_started
+      model-infer:
+        condition: service_started
 
 volumes:
   pgdata:

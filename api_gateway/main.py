@@ -202,10 +202,10 @@ async def health_check(request: Request) -> HealthResponse:
     # ── Redis check with 2s timeout ──────────────────────────
     async def _check_redis() -> str:
         redis = await get_redis()
-        if redis.is_degraded:
-            return redis.mode
-        await redis.ping()
-        return redis.mode
+        # ping() retries a previously failed connection instead of staying
+        # latched on the in-memory fallback.
+        ok = await redis.ping()
+        return "healthy" if ok else redis.mode
 
     try:
         redis_status = await asyncio.wait_for(_check_redis(), timeout=2.0)

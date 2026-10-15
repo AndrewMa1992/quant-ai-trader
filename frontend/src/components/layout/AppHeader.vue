@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/useExecutionStore'
-import { wsStatus } from '@/composables/useRealtimeSync'
+import { lastTigerAt, wsStatus } from '@/composables/useRealtimeSync'
 import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 const route = useRoute()
@@ -49,6 +49,13 @@ const liveLabel = computed(() => {
   return 'Offline'
 })
 
+const tigerClock = computed(() => {
+  if (!lastTigerAt.value) return ''
+  const parsed = new Date(lastTigerAt.value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleTimeString('en-GB', { hour12: false })
+})
+
 const liveDotClass = computed(() => {
   if (wsStatus.value === 'connected') return 'bg-risk-green animate-pulse'
   if (wsStatus.value === 'connecting') return 'bg-amber-400 animate-pulse'
@@ -78,6 +85,7 @@ const liveDotClass = computed(() => {
       <div class="flex items-center gap-2" :title="`WS ${wsStatus}`">
         <span class="w-2 h-2 rounded-full" :class="liveDotClass" />
         <span class="text-xs text-xm-text-secondary font-medium">{{ liveLabel }}</span>
+        <span v-if="tigerClock" class="text-xs text-xm-text-tertiary font-mono">{{ tigerClock }}</span>
       </div>
 
       <!-- Clock -->
