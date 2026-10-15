@@ -226,25 +226,27 @@ if (-not $SkipFrontend) {
     if (-not $SkipInstall) {
         & $NpmCmd install
     }
+    if ($SkipInstall -and -not (Test-Path "node_modules")) {
+        Write-Host "[..] node_modules missing - running npm install"
+        & $NpmCmd install
+    }
     $distIndex = Join-Path $Root "frontend\dist\index.html"
     $built = $false
-    # CD uses -SkipInstall often - reuse dist to cut downtime (gateway serves SPA)
-    if ((Test-Path $distIndex) -and $SkipInstall) {
-        Write-Host "[ok] reuse existing frontend\dist (faster CD)"
-        $built = $true
-    }
-    if (-not $built) {
-        try {
-            & $NpmCmd run build
-            if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
-        } catch {
-            Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
-        }
+    # Always rebuild so a GitHub update reaches the UI. Keep the old dist if the build fails.
+    try {
+        & $NpmCmd run build
+        if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
+    } catch {
+        Write-Host "[warn] npm run build failed: $($_.Exception.Message)"
     }
     if (-not $built) {
         Write-Host "[..] retry with npx vite build (skip vue-tsc)..."
         & $NpmCmd exec -- vite build
         if (($LASTEXITCODE -eq 0) -and (Test-Path $distIndex)) { $built = $true }
+    }
+    if (-not $built -and (Test-Path $distIndex)) {
+        Write-Host "[warn] frontend build failed; keeping existing dist"
+        $built = $true
     }
     if (-not $built) {
         Write-Host "[ERR] frontend dist missing - UI will not start on :5180"
@@ -336,13 +338,26 @@ if (-not $SkipFrontend) {
     }
 }
 
+function Set-QatPortProxy([int]$ListenPort, [int]$ConnectPort) {
+    netsh interface portproxy delete v4tov4 listenport=$ListenPort listenaddress=0.0.0.0 | Out-Null
+    netsh interface portproxy add v4tov4 listenport=$ListenPort listenaddress=0.0.0.0 connectport=$ConnectPort connectaddress=127.0.0.1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[ok] portproxy $ListenPort -> 127.0.0.1:$ConnectPort"
+    } else {
+        Write-Host "[warn] portproxy $ListenPort -> $ConnectPort failed (run as Admin)"
+    }
+}
+
+Set-QatPortProxy 80 8001
+Set-QatPortProxy 8080 5180
+
 Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
 Write-Host "  API:      http://127.0.0.1:8001/health"
 Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
-Write-Host "  Public UI: http://3.106.139.233:8001/  (gateway SPA - preferred)"
-Write-Host "  Public :5180 http://3.106.139.233:5180 (needs AWS SG allow if used)"
+Write-Host "  Public UI: http://<host>/  (port 80 -> gateway :8001)"
+Write-Host "  Public frontend: http://<host>:8080/  (port 8080 -> :5180)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"
