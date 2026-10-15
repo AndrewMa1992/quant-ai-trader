@@ -1,7 +1,7 @@
 """
-Market data engine - data-acquisition layer aligned with top quant funds.
-Prefers China-reachable sources (efinance + Tencent/Sina APIs);
-yfinance is the overseas-network fallback.
+Market data engine.
+US history comes from Tiger quotes, then yfinance, then the China feed.
+Other markets try the China feed first.
 """
 import os
 import re
@@ -119,7 +119,8 @@ class MarketDataEngine:
     ) -> pd.DataFrame:
         """
         Fetch historical OHLCV bars.
-        Prefers China-reachable sources (efinance + Tencent API); yfinance is fallback.
+        US names try Tiger quotes, then yfinance, then the China feed.
+        Other markets try the China feed first.
 
         Args:
             ticker: symbol (US: AAPL, HK: 0700.HK or 00700)
@@ -145,12 +146,38 @@ class MarketDataEngine:
         try:
             logger.info(f"📥 [{market}] {display} fetching history: period={period}, interval={interval}")
 
-            # Prefer China-reachable sources
-            df = china_data_adapter.get_historical_data(yf_ticker, period, interval, force_refresh)
+            # US names on an overseas host fail the China feed. Try the broker
+            # and yfinance before spending a request on East Money.
+            if market == "US":
+                loaders = (
+                    ("tiger", lambda: self._history_from_tiger(yf_ticker, period)),
+                    ("yfinance", lambda: self._history_from_yfinance(yf_ticker, period, interval)),
+                    ("china", lambda: china_data_adapter.get_historical_data(yf_ticker, period, interval, force_refresh)),
+                )
+            else:
+                loaders = (
+                    ("china", lambda: china_data_adapter.get_historical_data(yf_ticker, period, interval, force_refresh)),
+                    ("yfinance", lambda: self._history_from_yfinance(yf_ticker, period, interval)),
+                    ("tiger", lambda: self._history_from_tiger(yf_ticker, period)),
+                )
+
+            df = pd.DataFrame()
+            source = ""
+            for name, loader in loaders:
+                try:
+                    candidate = loader()
+                except Exception as exc:
+                    logger.debug(f"{name} history failed for {yf_ticker}: {exc}")
+                    candidate = pd.DataFrame()
+                if candidate is not None and not getattr(candidate, "empty", True):
+                    df = candidate
+                    source = name
+                    break
 
             if df.empty:
-                logger.warning(f"⚠️ [{market}] {display} China data source returned no data (ticker={yf_ticker})")
+                logger.warning(f"⚠️ [{market}] {display} no bars from tiger, yfinance, or China feed")
                 return pd.DataFrame()
+            logger.info(f"📥 [{market}] {display} bars from {source}: {len(df)} rows")
 
             # Normalize column names across sources
             col_map = {"Open": "open", "High": "high", "Low": "low",
@@ -263,6 +290,267 @@ class MarketDataEngine:
     # ================================================================
     # Tiger Brokers adapter (reserved)
     # ================================================================
+
+    def warm_history(
+        self,
+        tickers: List[str],
+        period: str = "2y",
+        interval: str = "1d",
+    ) -> int:
+        """Fill the short-lived cache for US names before a cycle walks them.
+
+        One Tiger ``get_bars`` call covers a batch. Names still missing are
+        loaded with a single yfinance download. Returns how many symbols
+        were cached.
+        """
+        pending: List[str] = []
+        for ticker in tickers:
+            yf_ticker = self.normalize_ticker(ticker)
+            if self.detect_market(yf_ticker) != "US":
+                continue
+            cache_key = f"{yf_ticker}_{period}_{interval}"
+            cached = self.cache.get(cache_key)
+            if cached is not None and not getattr(cached, "empty", True):
+                continue
+            pending.append(yf_ticker)
+        if not pending:
+            return 0
+
+        filled = self._warm_from_tiger_batch(pending, period, interval)
+        missing = [
+            ticker for ticker in pending
+            if self.cache.get(f"{ticker}_{period}_{interval}") is None
+            or getattr(self.cache.get(f"{ticker}_{period}_{interval}"), "empty", True)
+        ]
+        filled += self._warm_from_yfinance_batch(missing, period, interval)
+        logger.info(f"warm_history cached {filled}/{len(pending)} US names")
+        return filled
+
+    @staticmethod
+    def _history_bar_limit(period: str) -> int:
+        limits = {
+            "5d": 10, "1mo": 30, "3mo": 70, "6mo": 140,
+            "1y": 260, "2y": 520, "5y": 1200, "10y": 2500, "max": 2500,
+        }
+        return limits.get(period, 520)
+
+    @staticmethod
+    def _tiger_error_is_fatal(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        needles = (
+            "token", "permission", "unauthorized", "private key",
+            "not configured", "forbidden", "invalid key", "quote permission",
+        )
+        return any(needle in msg for needle in needles)
+
+    def _ensure_tiger_quote(self):
+        """Return a cached QuoteClient. A connect failure disables Tiger bars."""
+        if getattr(self, "_tiger_quote_failed", False):
+            return None
+        quote = getattr(self, "_tiger_quote", None)
+        if quote is not None:
+            return quote
+        try:
+            from shared.tiger_sdk import connect
+
+            _trade, quote = connect()
+        except Exception as exc:
+            logger.info(f"Tiger quote connect failed: {exc}")
+            self._tiger_quote_failed = True
+            self._tiger_quote = None
+            return None
+        if quote is None:
+            self._tiger_quote_failed = True
+            return None
+        self._tiger_quote = quote
+        return quote
+
+    def _store_history_cache(
+        self,
+        ticker: str,
+        period: str,
+        interval: str,
+        df: pd.DataFrame,
+        source: str,
+    ) -> None:
+        cache_key = f"{ticker}_{period}_{interval}"
+        self.cache[cache_key] = df
+        self._last_fetch[cache_key] = datetime.now()
+        logger.info(f"📥 [{self.detect_market(ticker)}] {ticker} bars from {source}: {len(df)} rows")
+
+    def _normalize_ohlcv(self, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+        """Lowercase OHLCV with a timezone-naive DatetimeIndex."""
+        if df is None or getattr(df, "empty", True):
+            return pd.DataFrame()
+        work = self._coerce_bar_index(df)
+        if work.empty or not isinstance(work.index, pd.DatetimeIndex):
+            return pd.DataFrame()
+        rename = {
+            "open": "open", "high": "high", "low": "low",
+            "close": "close", "volume": "volume",
+            "adj_close": "adj_close",
+        }
+        keep = [col for col in rename if col in work.columns]
+        if "close" not in keep:
+            return pd.DataFrame()
+        work = work[keep].apply(pd.to_numeric, errors="coerce")
+        work = work.dropna(subset=["close"])
+        if work.empty:
+            return pd.DataFrame()
+        work.index.name = "timestamp"
+        work["ticker"] = ticker
+        work["market"] = self.detect_market(ticker)
+        return work
+
+    @staticmethod
+    def _coerce_bar_index(df: pd.DataFrame) -> pd.DataFrame:
+        work = df.copy()
+        work.columns = [str(col).lower().replace(" ", "_") for col in work.columns]
+        if isinstance(work.columns, pd.MultiIndex):
+            work.columns = [
+                "_".join(str(part).lower() for part in col if part not in ("", None))
+                for col in work.columns
+            ]
+        if "time" in work.columns and not isinstance(work.index, pd.DatetimeIndex):
+            raw = work["time"]
+            if pd.api.types.is_numeric_dtype(raw):
+                parsed = pd.to_datetime(raw, unit="ms", errors="coerce")
+                if parsed.isna().all():
+                    parsed = pd.to_datetime(raw, errors="coerce")
+            else:
+                parsed = pd.to_datetime(raw, errors="coerce")
+            work = work.drop(columns=["time"])
+            work.index = parsed
+        if not isinstance(work.index, pd.DatetimeIndex):
+            if pd.api.types.is_numeric_dtype(work.index):
+                parsed = pd.to_datetime(work.index, unit="ms", errors="coerce")
+                if parsed.isna().all():
+                    parsed = pd.to_datetime(work.index, errors="coerce")
+                work.index = parsed
+            else:
+                work.index = pd.to_datetime(work.index, errors="coerce")
+        work = work[~work.index.isna()]
+        if isinstance(work.index, pd.DatetimeIndex) and work.index.tz is not None:
+            work.index = work.index.tz_localize(None)
+        work.index.name = "timestamp"
+        return work
+
+    def _split_tiger_bars(self, bars, tickers: List[str]) -> Dict[str, pd.DataFrame]:
+        if bars is None or getattr(bars, "empty", True):
+            return {}
+        df = bars.copy()
+        df.columns = [str(col).lower() for col in df.columns]
+        symbol_col = next((col for col in ("symbol", "ticker") if col in df.columns), None)
+        frames: Dict[str, pd.DataFrame] = {}
+        if symbol_col:
+            for symbol, part in df.groupby(symbol_col):
+                key = str(symbol).upper()
+                frame = self._normalize_ohlcv(part.drop(columns=[symbol_col]), key)
+                if not frame.empty:
+                    frames[key] = frame
+            return frames
+        if len(tickers) == 1:
+            key = tickers[0].upper()
+            frame = self._normalize_ohlcv(df, key)
+            if not frame.empty:
+                frames[key] = frame
+        return frames
+
+    def _warm_from_tiger_batch(self, tickers: List[str], period: str, interval: str) -> int:
+        quote = self._ensure_tiger_quote()
+        if quote is None or not tickers:
+            return 0
+        limit = self._history_bar_limit(period)
+        filled = 0
+        for start in range(0, len(tickers), 20):
+            batch = tickers[start:start + 20]
+            try:
+                bars = quote.get_bars(symbols=batch, period="day", limit=limit)
+            except Exception as exc:
+                logger.info(f"Tiger batch bars failed ({len(batch)} names): {exc}")
+                if self._tiger_error_is_fatal(exc):
+                    self._tiger_quote_failed = True
+                    self._tiger_quote = None
+                    break
+                continue
+            for ticker, frame in self._split_tiger_bars(bars, batch).items():
+                self._store_history_cache(ticker, period, interval, frame, "tiger")
+                filled += 1
+        return filled
+
+    def _warm_from_yfinance_batch(self, tickers: List[str], period: str, interval: str) -> int:
+        if not tickers:
+            return 0
+        try:
+            import yfinance as yf
+
+            raw = yf.download(
+                tickers=tickers,
+                period=period,
+                interval=interval,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                auto_adjust=False,
+            )
+        except Exception as exc:
+            logger.info(f"yfinance batch failed: {exc}")
+            return 0
+        if raw is None or getattr(raw, "empty", True):
+            return 0
+        filled = 0
+        for ticker in tickers:
+            part = self._slice_download(raw, ticker)
+            frame = self._normalize_ohlcv(part, ticker)
+            if frame.empty:
+                continue
+            self._store_history_cache(ticker, period, interval, frame, "yfinance")
+            filled += 1
+        return filled
+
+    @staticmethod
+    def _slice_download(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
+        if not isinstance(raw.columns, pd.MultiIndex):
+            return raw
+        wanted = ticker.upper()
+        for level in (0, 1):
+            for value in raw.columns.get_level_values(level):
+                if str(value).upper() != wanted:
+                    continue
+                if level == 0:
+                    return raw[value]
+                return raw.xs(value, axis=1, level=1)
+        return pd.DataFrame()
+
+    def _history_from_yfinance(self, ticker: str, period: str, interval: str) -> pd.DataFrame:
+        from backend.data_engine.china_adapter import get_history_yfinance
+
+        frame = get_history_yfinance(ticker, period=period, interval=interval)
+        return self._normalize_ohlcv(frame, ticker)
+
+    def _history_from_tiger(self, ticker: str, period: str) -> pd.DataFrame:
+        """Daily bars from the Tiger quote client. Empty when the SDK is down.
+
+        A bad symbol does not disable quotes for the rest of the universe.
+        Only a failed connection, or an auth/permission error, does that.
+        """
+        quote = self._ensure_tiger_quote()
+        if quote is None:
+            return pd.DataFrame()
+        try:
+            bars = quote.get_bars(
+                symbols=[ticker],
+                period="day",
+                limit=self._history_bar_limit(period),
+            )
+        except Exception as exc:
+            logger.info(f"Tiger bars unavailable for {ticker}: {exc}")
+            if self._tiger_error_is_fatal(exc):
+                self._tiger_quote_failed = True
+                self._tiger_quote = None
+            return pd.DataFrame()
+        frames = self._split_tiger_bars(bars, [ticker])
+        return frames.get(ticker.upper(), pd.DataFrame())
 
     def _tiger_get_historical(self, ticker: str, **kwargs) -> pd.DataFrame:
         """

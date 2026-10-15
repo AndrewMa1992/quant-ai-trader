@@ -506,6 +506,7 @@ class TradingPipeline:
 
         # Step 3: Run Inference
         signals: List[Dict] = await self._run_inference(factor_df, tickers)
+        self._attach_latest_prices(signals, data)
         if not signals:
             logger.warning("No valid signals, skipping this cycle")
             return None
@@ -795,6 +796,8 @@ class TradingPipeline:
                 from services.data_service.storage.parquet_store import ParquetStore
                 store = ParquetStore()
                 for ticker, d in result.items():
+                    if isinstance(d, dict) and "ohlcv" in d:
+                        continue
                     if isinstance(d, dict) and "features" in d:
                         features = d["features"]
                         if isinstance(features, np.ndarray) and features.ndim == 2:
@@ -818,12 +821,34 @@ class TradingPipeline:
             engine = MarketDataEngine()
             pipeline = DataPipeline()
             data_dict: Dict = {}
+            try:
+                engine.warm_history(tickers, period="2y", interval="1d")
+            except Exception as exc:
+                logger.info(f"history warm skipped: {exc}")
             errors: int = 0
+            store = None
+            try:
+                from services.data_service.storage.parquet_store import ParquetStore
+
+                store = ParquetStore()
+            except Exception:
+                store = None
 
             for ticker in tickers:
                 try:
                     df = engine.get_historical_data(ticker, period="2y", interval="1d")
                     if df is not None and not df.empty:
+                        if store is not None:
+                            try:
+                                store.write_daily(ticker, df)
+                            except Exception as exc:
+                                logger.debug(f"daily parquet skip {ticker}: {exc}")
+                        try:
+                            from shared.nn_samples import record_daily_window
+
+                            record_daily_window(ticker, df)
+                        except Exception as exc:
+                            logger.debug(f"nn sample skip {ticker}: {exc}")
                         processed = pipeline.process(df)
                         if processed is not None:
                             fcols = [
@@ -831,14 +856,24 @@ class TradingPipeline:
                                 if c in processed.columns
                             ]
                             if len(fcols) >= 30:
-                                data_dict[ticker] = {
+                                close_px = 0.0
+                                for col in ("close", "Close"):
+                                    if col in df.columns:
+                                        close_px = float(df[col].iloc[-1])
+                                        break
+                                if close_px <= 0 and "close" in processed.columns:
+                                    close_px = float(processed["close"].iloc[-1])
+                                payload = {
                                     "features": processed[fcols].values,
-                                    "close": (
-                                        float(df["Close"].iloc[-1])
-                                        if "Close" in df.columns
-                                        else float(processed.iloc[-1, 0])
-                                    ),
+                                    "close": close_px,
                                 }
+                                ohlcv_cols = [
+                                    col for col in ("open", "high", "low", "close", "volume")
+                                    if col in df.columns
+                                ]
+                                if ohlcv_cols:
+                                    payload["ohlcv"] = df[ohlcv_cols].copy()
+                                data_dict[ticker] = payload
                     else:
                         errors += 1
                 except Exception:
@@ -865,13 +900,24 @@ class TradingPipeline:
         """
         t0: float = time.time()
         if self.factor_engine is None or not data:
-            logger.warning("  Step 2: FactorEngine stub — returning empty DataFrame")
-            return pd.DataFrame({"ticker": list(data.keys())})
+            logger.warning("  Step 2: FactorEngine stub — scoring from daily returns")
+            rows = []
+            for ticker, payload in (data or {}).items():
+                row = {"ticker": str(ticker)}
+                ohlcv = payload.get("ohlcv") if isinstance(payload, dict) else None
+                self._stamp_return_score(row, ohlcv)
+                rows.append(row)
+            return pd.DataFrame(rows)
 
         try:
             # Convert v1 fallback format → DataFrame dict for FactorEngine
             dfs: dict = {}
+            ohlcv_by_ticker: dict = {}
             for ticker, d in data.items():
+                if isinstance(d, dict) and isinstance(d.get("ohlcv"), pd.DataFrame):
+                    ohlcv_by_ticker[ticker] = d["ohlcv"]
+                    dfs[ticker] = d["ohlcv"]
+                    continue
                 if isinstance(d, dict) and "features" in d:
                     features = d["features"]
                     if isinstance(features, np.ndarray) and features.ndim == 2:
@@ -897,9 +943,12 @@ class TradingPipeline:
                             row[col] = float(fdf[col].iloc[-1])
                         except (IndexError, ValueError):
                             row[col] = 0.0
+                    self._stamp_return_score(row, ohlcv_by_ticker.get(ticker))
                     rows.append(row)
                 else:
-                    rows.append({"ticker": str(ticker)})
+                    row = {"ticker": str(ticker)}
+                    self._stamp_return_score(row, ohlcv_by_ticker.get(ticker))
+                    rows.append(row)
 
             factor_df = pd.DataFrame(rows)
             elapsed: float = time.time() - t0
@@ -1021,10 +1070,50 @@ class TradingPipeline:
             logger.error(f"Step 3 inference failed: {e}", exc_info=True)
             return self._factor_score_fallback(factor_df, tickers)
 
+    @staticmethod
+    def _stamp_return_score(row: dict, ohlcv) -> None:
+        """Keep a 21-day return on the factor row when the engine did not."""
+        if any(str(key).upper() in {"F001", "F002", "F014"} for key in row):
+            return
+        if not isinstance(ohlcv, pd.DataFrame) or "close" not in getattr(ohlcv, "columns", []):
+            return
+        if len(ohlcv) < 22:
+            return
+        close = pd.to_numeric(ohlcv["close"], errors="coerce")
+        ret21 = close.pct_change(21).iloc[-1]
+        if pd.notna(ret21):
+            row["F001"] = float(ret21)
+
+    @staticmethod
+    def _attach_latest_prices(signals, data: Dict) -> None:
+        """Copy the fetched close onto signals so the risk gate can size orders."""
+        if not signals or not isinstance(data, dict):
+            return
+        for sig in signals:
+            if not isinstance(sig, dict):
+                continue
+            try:
+                px = float(sig.get("price") or sig.get("close") or 0)
+            except (TypeError, ValueError):
+                px = 0.0
+            if px > 0:
+                sig["price"] = px
+                continue
+            row = data.get(sig.get("ticker"))
+            if not isinstance(row, dict):
+                continue
+            try:
+                px = float(row.get("close") or 0)
+            except (TypeError, ValueError):
+                px = 0.0
+            if px > 0:
+                sig["price"] = px
+                sig["close"] = px
+
     def _factor_score_fallback(self, factor_df, tickers: List[str]) -> List[Dict]:
         """When models return no signals, rank by simple factor score so paper can trade.
 
-        Prefer momentum-like columns; otherwise mean of numeric factor columns.
+        Prefer momentum-like columns. Raw OHLC and volume are not scores.
         """
         if factor_df is None or getattr(factor_df, "empty", True):
             return []
@@ -1032,18 +1121,21 @@ class TradingPipeline:
             df = factor_df.copy()
             if "ticker" not in df.columns:
                 return []
+            skip = {"ticker", "open", "high", "low", "close", "volume", "adj_close"}
+            prefer_keys = (
+                "mom", "ret", "momentum", "trend", "alpha",
+                "f001", "f002", "f003", "f004", "f014",
+            )
             prefer = [
                 c
                 for c in df.columns
-                if any(
-                    k in str(c).lower()
-                    for k in ("mom", "ret", "momentum", "trend", "alpha")
-                )
+                if str(c).lower() not in skip
+                and any(k in str(c).lower() for k in prefer_keys)
             ]
             num_cols = [
                 c
                 for c in (prefer or list(df.columns))
-                if c != "ticker" and pd.api.types.is_numeric_dtype(df[c])
+                if str(c).lower() not in skip and pd.api.types.is_numeric_dtype(df[c])
             ]
             if not num_cols:
                 return []
