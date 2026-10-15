@@ -47,8 +47,15 @@ function Write-Log([string]$Msg) {
 
 function Invoke-Git {
     param([string]$GitExe, [string[]]$GitArgs)
-    & $GitExe -c "safe.directory=$RepoRoot" -C $RepoRoot @GitArgs
-    return $LASTEXITCODE
+    # Capture git's text so a success message is not treated as a failed exit code.
+    $output = & $GitExe -c "safe.directory=$RepoRoot" -C $RepoRoot @GitArgs 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    if ($output -and $output.Trim()) {
+        foreach ($line in ($output.Trim() -split "\r?\n")) {
+            if ($line) { Write-Log ("git " + $line) }
+        }
+    }
+    return $code
 }
 
 function Ensure-Repo {
