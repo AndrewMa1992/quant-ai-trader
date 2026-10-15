@@ -1071,6 +1071,32 @@ class TradingPipeline:
             return self._factor_score_fallback(factor_df, tickers)
 
     @staticmethod
+    def _order_quantity(
+        cash: float,
+        nav: float,
+        strength: float,
+        price: float,
+        single_order_limit: float = 0.02,
+    ) -> int:
+        """Share count that stays inside the circuit breaker's single-order limit.
+
+        The breaker rejects when ``quantity * price / NAV`` is above that limit.
+        Sizing off 20% of cash was above it, so every signal was blocked.
+        """
+        if price <= 0:
+            return 0
+        strength_frac = min(abs(float(strength or 0.0)), 0.20)
+        cash_budget = max(float(cash or 0.0), 0.0) * strength_frac
+        if nav and nav > 0 and single_order_limit and single_order_limit > 0:
+            cap = float(nav) * float(single_order_limit) * 0.95
+            budget = min(cash_budget, cap) if cash_budget > 0 else 0.0
+        else:
+            budget = cash_budget
+        if budget <= 0:
+            return 0
+        return int(budget / float(price))
+
+    @staticmethod
     def _stamp_return_score(row: dict, ohlcv) -> None:
         """Keep a 21-day return on the factor row when the engine did not."""
         if any(str(key).upper() in {"F001", "F002", "F014"} for key in row):
@@ -1212,13 +1238,20 @@ class TradingPipeline:
                 rejected.append(f"{ticker}: invalid price")
                 continue
 
-            quantity: int = int(
-                self.portfolio.cash
-                * min(abs(signal_strength), 0.20)
-                / price
+            limit = 0.02
+            breaker = getattr(self, "circuit_breaker", None)
+            if breaker is not None and getattr(breaker, "single_order_limit", None):
+                limit = float(breaker.single_order_limit)
+            quantity: int = self._order_quantity(
+                self.portfolio.cash,
+                self.portfolio.total_value,
+                signal_strength,
+                price,
+                single_order_limit=limit,
             )
             if quantity < 1:
-                quantity = 1
+                rejected.append(f"{ticker}: order smaller than 1 share under the single-order cap")
+                continue
 
             result: RiskResult = await self.risk_gate.check(
                 ticker=ticker,

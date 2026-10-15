@@ -143,6 +143,11 @@ class MarketDataEngine:
             if last_fetch and (datetime.now() - last_fetch).seconds < 300:
                 return self.cache[cache_key]
 
+        # warm_history already tried Tiger and yfinance for US names.
+        # Walking East Money for the rest just delays the paper order.
+        if market == "US" and getattr(self, "_us_history_settled", False):
+            return pd.DataFrame()
+
         try:
             logger.info(f"📥 [{market}] {display} fetching history: period={period}, interval={interval}")
 
@@ -314,6 +319,7 @@ class MarketDataEngine:
                 continue
             pending.append(yf_ticker)
         if not pending:
+            self._us_history_settled = True
             return 0
 
         filled = self._warm_from_tiger_batch(pending, period, interval)
@@ -322,7 +328,11 @@ class MarketDataEngine:
             if self.cache.get(f"{ticker}_{period}_{interval}") is None
             or getattr(self.cache.get(f"{ticker}_{period}_{interval}"), "empty", True)
         ]
-        filled += self._warm_from_yfinance_batch(missing, period, interval)
+        yf_filled = self._warm_from_yfinance_batch(missing, period, interval)
+        filled += yf_filled
+        if missing and yf_filled == 0:
+            logger.info(f"yfinance batch added no bars for {len(missing)} US names")
+        self._us_history_settled = True
         logger.info(f"warm_history cached {filled}/{len(pending)} US names")
         return filled
 
@@ -335,8 +345,16 @@ class MarketDataEngine:
         return limits.get(period, 520)
 
     @staticmethod
+    def _tiger_history_quota(exc: Exception) -> bool:
+        """Tiger paper quotes cap historical symbols (the occupied-symbol error)."""
+        msg = str(exc).lower()
+        return "occupied symbols" in msg or ("access to" in msg and "symbol" in msg)
+
+    @staticmethod
     def _tiger_error_is_fatal(exc: Exception) -> bool:
         msg = str(exc).lower()
+        if MarketDataEngine._tiger_history_quota(exc):
+            return False
         needles = (
             "token", "permission", "unauthorized", "private key",
             "not configured", "forbidden", "invalid key", "quote permission",
@@ -468,6 +486,9 @@ class MarketDataEngine:
                 bars = quote.get_bars(symbols=batch, period="day", limit=limit)
             except Exception as exc:
                 logger.info(f"Tiger batch bars failed ({len(batch)} names): {exc}")
+                if self._tiger_history_quota(exc):
+                    logger.info(f"Tiger history quota reached; keeping {filled} cached symbols")
+                    break
                 if self._tiger_error_is_fatal(exc):
                     self._tiger_quote_failed = True
                     self._tiger_quote = None
