@@ -55,78 +55,52 @@ async def dashboard() -> APIResponse[DashboardResponse]:
 
     try:
         async with engine.connect() as conn:
-            # ── Latest portfolio snapshot ────────────────────
-            pf_result = await conn.execute(
-                text(
-                    """
-                    SELECT nav, cash, daily_pnl, daily_return,
-                           sharpe_ratio, max_drawdown, num_positions
-                    FROM portfolios
-                    ORDER BY snapshot_date DESC
-                    LIMIT 1
-                    """
-                )
-            )
-            pf_row = pf_result.fetchone()
-
-            # ── Trade stats ──────────────────────────────────
+            # One pass over trades: totals plus win/loss for closing sides.
+            # Closing P&L is approximated as notional - (quantity * price + commission).
             trade_result = await conn.execute(
                 text(
                     """
                     SELECT
                         COUNT(*) AS total_trades,
                         COUNT(CASE WHEN side IN ('SELL', 'SELL_SHORT', 'COVER')
-                              THEN 1 END) AS completed_trades
+                              AND (notional - (quantity * price + commission)) > 0
+                              THEN 1 END) AS wins,
+                        COUNT(CASE WHEN side IN ('SELL', 'SELL_SHORT', 'COVER')
+                              AND (notional - (quantity * price + commission)) < 0
+                              THEN 1 END) AS losses,
+                        SUM(CASE WHEN side IN ('SELL', 'SELL_SHORT', 'COVER')
+                              AND (notional - (quantity * price + commission)) > 0
+                              THEN (notional - (quantity * price + commission))
+                              ELSE 0 END) AS gross_profit,
+                        SUM(CASE WHEN side IN ('SELL', 'SELL_SHORT', 'COVER')
+                              AND (notional - (quantity * price + commission)) < 0
+                              THEN ((quantity * price + commission) - notional)
+                              ELSE 0 END) AS gross_loss
                     FROM trades
                     """
                 )
             )
             t_row = trade_result.fetchone()
-
             total_trades = _safe_int(t_row[0]) if t_row else 0
-
-            # ── Win rate & profit factor from completed trades ─
-            # Approximate P&L for SELL/COVER side trades:
-            #   pnl = notional - (quantity * price + commission)
-            # Positive → win; negative → loss
-            if total_trades > 0:
-                wl_result = await conn.execute(
-                    text(
-                        """
-                        SELECT
-                            COUNT(CASE WHEN (notional - (quantity * price + commission)) > 0
-                                  THEN 1 END) AS wins,
-                            COUNT(CASE WHEN (notional - (quantity * price + commission)) < 0
-                                  THEN 1 END) AS losses,
-                            SUM(CASE WHEN (notional - (quantity * price + commission)) > 0
-                                THEN (notional - (quantity * price + commission)) ELSE 0 END) AS gross_profit,
-                            SUM(CASE WHEN (notional - (quantity * price + commission)) < 0
-                                THEN ((quantity * price + commission) - notional) ELSE 0 END) AS gross_loss
-                        FROM trades
-                        WHERE side IN ('SELL', 'SELL_SHORT', 'COVER')
-                        """
-                    )
-                )
-                wl_row = wl_result.fetchone()
-                wins = _safe_int(wl_row[0]) if wl_row else 0
-                losses = _safe_int(wl_row[1]) if wl_row else 0
-                completed = wins + losses
-                win_rate = round(wins / completed, 4) if completed > 0 else 0.0
-
-                gross_profit = _safe_float(wl_row[2]) if wl_row else 0.0
-                gross_loss = _safe_float(wl_row[3]) if wl_row else 0.0
-                profit_factor = (
-                    round(gross_profit / gross_loss, 4) if gross_loss > 0 else 999.0
-                )
-            else:
-                win_rate = 0.0
+            wins = _safe_int(t_row[1]) if t_row else 0
+            losses = _safe_int(t_row[2]) if t_row else 0
+            completed = wins + losses
+            win_rate = round(wins / completed, 4) if completed > 0 else 0.0
+            gross_profit = _safe_float(t_row[3]) if t_row else 0.0
+            gross_loss = _safe_float(t_row[4]) if t_row else 0.0
+            if completed == 0:
                 profit_factor = 0.0
+            elif gross_loss > 0:
+                profit_factor = round(gross_profit / gross_loss, 4)
+            else:
+                profit_factor = 999.0
 
-            # ── NAV / P&L snapshots (last 252 days) ─────────
+            # Latest snapshot is row 0 (DESC). The same rows feed the charts.
             nav_result = await conn.execute(
                 text(
                     """
-                    SELECT snapshot_date, nav, daily_pnl, daily_return
+                    SELECT snapshot_date, nav, cash, daily_pnl, daily_return,
+                           sharpe_ratio, max_drawdown, num_positions
                     FROM portfolios
                     ORDER BY snapshot_date DESC
                     LIMIT 252
@@ -134,6 +108,7 @@ async def dashboard() -> APIResponse[DashboardResponse]:
                 )
             )
             nav_rows = nav_result.fetchall()
+            pf_row = nav_rows[0] if nav_rows else None
 
             nav_snapshots: list[dict] = []
             pnl_snapshots: list[dict] = []
@@ -149,20 +124,20 @@ async def dashboard() -> APIResponse[DashboardResponse]:
                 pnl_snapshots.append(
                     {
                         "date": row[0].isoformat() if isinstance(row[0], date) else str(row[0]),
-                        "pnl": _safe_float(row[2]),
+                        "pnl": _safe_float(row[3]),
                     }
                 )
-                daily_returns.append(_safe_float(row[3]))
+                daily_returns.append(_safe_float(row[4]))
 
             # ── Metrics from latest portfolio row ────────────
             if pf_row:
-                total_asset = _safe_float(pf_row[0])
-                cash = _safe_float(pf_row[1])
-                pnl = _safe_float(pf_row[2])
-                pnl_pct = _safe_float(pf_row[3])
-                sharpe_ratio = _safe_float(pf_row[4])
-                max_drawdown = abs(_safe_float(pf_row[5]))
-                positions = _safe_int(pf_row[6])
+                total_asset = _safe_float(pf_row[1])
+                cash = _safe_float(pf_row[2])
+                pnl = _safe_float(pf_row[3])
+                pnl_pct = _safe_float(pf_row[4])
+                sharpe_ratio = _safe_float(pf_row[5])
+                max_drawdown = abs(_safe_float(pf_row[6]))
+                positions = _safe_int(pf_row[7])
             else:
                 total_asset = 0.0
                 cash = 0.0

@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/useExecutionStore'
 import { wsStatus } from '@/composables/useRealtimeSync'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 const route = useRoute()
 const execStore = useExecutionStore()
 
 const currentTime = ref<string>('')
 
-let timer: ReturnType<typeof setInterval> | undefined
+function tickClock() {
+  currentTime.value = new Date().toLocaleTimeString('en-GB', { hour12: false })
+}
+
+const clock = useVisibleInterval(tickClock, 1000)
 
 onMounted(() => {
-  currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  timer = setInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  }, 1000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  tickClock()
+  clock.start()
 })
 
 const pageTitle = computed(() => {
@@ -31,6 +30,10 @@ const pageTitle = computed(() => {
     PortfolioOptimizer: 'Portfolio Optimizer',
     BacktestAnalysis: 'Backtest Analysis',
     ExecutionMonitor: 'Execution Monitor',
+    OrderHistory: 'Order History',
+    DataExplorer: 'Data Explorer',
+    DataSyncDashboard: 'Data Sync',
+    LogViewer: 'Server Logs',
   }
   return map[String(route.name)] ?? 'Quant AI Trader'
 })

@@ -24,8 +24,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from loguru import logger
 from sqlalchemy import text
 
+from api_gateway.health_cache import read_health_cache, write_health_cache
 from api_gateway.middleware.auth import AuthMiddleware
 from api_gateway.middleware.logging_middleware import LoggingMiddleware
+from api_gateway.proxy_util import filtered_response_headers
 from configs.settings import settings
 from shared.core.exceptions import QATException
 from shared.core.logger import setup_logger
@@ -170,8 +172,13 @@ async def health_check(request: Request) -> HealthResponse:
     - All 6 downstream microservices (HTTP /health probe)
 
     Each check has a 2-second timeout so the endpoint always
-    responds in <3 seconds.
+    responds in <3 seconds. A fresh result is reused for a few seconds
+    so repeated polls do not probe every service again.
     """
+    cached = read_health_cache()
+    if isinstance(cached, HealthResponse):
+        return cached
+
     db_status = "unknown"
     redis_status = "unknown"
     services_status: dict[str, str] = {}
@@ -261,7 +268,7 @@ async def health_check(request: Request) -> HealthResponse:
         overall = "degraded"
 
     uptime = time.time() - _START_TIME
-    return HealthResponse(
+    payload = HealthResponse(
         status=overall,
         version=settings.APP_VERSION,
         uptime_seconds=round(uptime, 2),
@@ -269,6 +276,7 @@ async def health_check(request: Request) -> HealthResponse:
         redis=redis_status,
         services=services_status,
     )
+    return write_health_cache(payload)
 
 
 # ── Root ─────────────────────────────────────────────────────
@@ -507,7 +515,7 @@ async def proxy_to_service(service: str, path: str, request: Request) -> Respons
         return Response(
             content=resp.content,
             status_code=resp.status_code,
-            headers=dict(resp.headers),
+            headers=filtered_response_headers(resp.headers),
         )
     except httpx.ConnectError:
         raise HTTPException(

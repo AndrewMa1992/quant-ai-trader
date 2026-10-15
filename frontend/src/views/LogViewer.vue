@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, nextTick } from 'vue'
 import XmCard from '@/components/ui/XmCard.vue'
 import { apiErrorMessage } from '@/api'
 import { listLogs, tailLog, type LogFileInfo, type LogTail } from '@/api/logsApi'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 const files = ref<LogFileInfo[]>([])
 const logsDir = ref('')
@@ -14,7 +15,10 @@ const loading = ref(false)
 const error = ref('')
 const autoRefresh = ref(true)
 const refreshSeconds = ref(10)
-let timer: ReturnType<typeof setInterval> | null = null
+const logPoll = useVisibleInterval(() => {
+  refreshTail()
+  refreshList()
+}, refreshSeconds.value * 1000)
 const bodyEl = ref<HTMLElement | null>(null)
 
 const sortedFiles = computed(() => files.value)
@@ -71,10 +75,8 @@ async function select(name: string) {
 }
 
 function applyTimer() {
-  if (timer) { clearInterval(timer); timer = null }
-  if (autoRefresh.value) {
-    timer = setInterval(() => { refreshTail(); refreshList() }, refreshSeconds.value * 1000)
-  }
+  logPoll.stop()
+  if (autoRefresh.value) logPoll.start()
 }
 
 function toggleAuto() {
@@ -87,7 +89,7 @@ onMounted(async () => {
   applyTimer()
 })
 
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onBeforeUnmount(() => { logPoll.stop() })
 </script>
 
 <template>

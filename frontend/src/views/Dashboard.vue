@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -17,6 +17,7 @@ import { useModelStore } from '@/stores/useModelStore'
 import { tradeApi } from '@/api/tradeApi'
 import { modelApi } from '@/api/modelApi'
 import { wsStatus } from '@/composables/useRealtimeSync'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -29,7 +30,15 @@ const navHistory = ref<number[]>([])
 /** SignalTrendChart expects { cycle, strength, decision } */
 const signalHistory = ref<Array<{ cycle: number; strength: number; decision: string }>>([])
 
-let refreshTimer: ReturnType<typeof setInterval> | undefined
+const refreshPoll = useVisibleInterval(() => {
+  // Positions, account, and orders already arrive on the websocket.
+  if (wsStatus.value !== 'connected') {
+    portfolioStore.fetchPositions()
+    portfolioStore.fetchTigerAccount()
+    execStore.fetchOrders()
+  }
+  fetchSignals()
+}, 30000)
 
 const rollbackLoading = ref(false)
 const toastMessage = ref('')
@@ -109,19 +118,7 @@ onMounted(async () => {
     fetchNavHistory(),
     fetchSignals(),
   ])
-  refreshTimer = setInterval(() => {
-    // Positions, account, and orders already arrive on the websocket.
-    if (wsStatus.value !== 'connected') {
-      portfolioStore.fetchPositions()
-      portfolioStore.fetchTigerAccount()
-      execStore.fetchOrders()
-    }
-    fetchSignals()
-  }, 30000)
-})
-
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
+  refreshPoll.start()
 })
 
 async function fetchNavHistory(): Promise<void> {
