@@ -1,6 +1,6 @@
 """
-GAT 图注意力网络训练脚本 v2
-使用本地 parquet 数据训练跨股票关联模型
+GAT (Graph Attention Network) training script v2.
+Trains the cross-stock correlation model from local parquet data.
 """
 import sys
 import pandas as pd
@@ -22,11 +22,11 @@ DATA_DIR = PROJ_ROOT / "data" / "daily"
 
 def main():
     logger.info("=" * 50)
-    logger.info("  GAT 图注意力网络训练 (本地 Parquet)")
+    logger.info("  GAT graph-attention training (local parquet)")
     logger.info("=" * 50)
 
-    # 1. 加载本地 parquet 数据
-    logger.info("📂 加载本地数据...")
+    # 1. Load local parquet data
+    logger.info("📂 Loading local data...")
     pipeline = DataPipeline()
     features_dict = {}
     tickers = []
@@ -37,7 +37,7 @@ def main():
             df = pd.read_parquet(parquet_file)
             if len(df) < 60:
                 continue
-            # 标准化列名
+            # Normalize column names
             if 'Close' in df.columns:
                 df = df.rename(columns={'Close': 'close', 'High': 'high',
                                         'Low': 'low', 'Open': 'open', 'Volume': 'volume'})
@@ -50,24 +50,24 @@ def main():
             tickers.append(ticker)
             logger.debug(f"  {ticker:6s}: {features.shape}")
         except Exception as e:
-            logger.warning(f"  {ticker}: 加载失败 - {e}")
+            logger.warning(f"  {ticker}: load failed - {e}")
             continue
 
-    logger.info(f"📊 有效股票: {len(tickers)}")
+    logger.info(f"📊 Valid tickers: {len(tickers)}")
 
     if len(tickers) < 3:
-        logger.error("❌ 有效股票不足")
+        logger.error("❌ Not enough valid tickers")
         return
 
-    # 2. 训练 GAT
-    logger.info("🧠 训练 GAT (50 epochs)...")
+    # 2. Train GAT
+    logger.info("🧠 Training GAT (50 epochs)...")
     import torch
     device = "cuda" if torch.cuda.is_available() else ("mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu")
     gat = GATSignalGenerator(lookback=20, device=device)
     gat.train_gat(tickers=tickers, features_dict=features_dict, epochs=50, lr=1e-3)
 
-    # 3. 验证
-    logger.info("✅ 验证 GAT 推理...")
+    # 3. Validate
+    logger.info("✅ Validating GAT inference...")
     gat.load_model()
     for ticker in tickers[:8]:
         signal = gat.get_cross_stock_signal(ticker, tickers, features_dict)
@@ -75,16 +75,16 @@ def main():
                     f"sector={signal['sector']:12s} momentum={signal['sector_momentum']:.3f} "
                     f"signal={signal['signal']}")
 
-    # 4. 检查模型文件
+    # 4. Check model file
     from configs.settings import settings
     model_path = settings.MODELS_DIR / "gat_model.pt"
     if model_path.exists():
-        logger.info(f"✅ GAT 模型已保存: {model_path} ({model_path.stat().st_size / 1024:.1f} KB)")
+        logger.info(f"✅ GAT model saved: {model_path} ({model_path.stat().st_size / 1024:.1f} KB)")
     else:
-        logger.error("❌ 模型保存失败")
+        logger.error("❌ Model save failed")
 
     logger.info("")
-    logger.info("✅ GAT 训练完成！跨股票关联已从 Pearson → GAT 图注意力网络")
+    logger.info("✅ GAT training complete. Cross-stock correlation upgraded from Pearson to GAT.")
 
 
 if __name__ == "__main__":

@@ -197,7 +197,7 @@ class TigerExecutor:
                 )
                 return None
             if rounded != quantity:
-                logger.info(f"📐 {ticker} 整手对齐: {int(quantity)} → {int(rounded)} 股")
+                logger.info(f"📐 {ticker} lot-size aligned: {int(quantity)} → {int(rounded)} shares")
                 quantity = rounded
             # Lot may exceed cash — trim to affordable whole lots
             max_cash = float(getattr(self.risk, "cash", self.portfolio.cash)) * float(
@@ -217,7 +217,7 @@ class TigerExecutor:
         risk_report = self.risk.check_order(ticker, side_key, quantity, price)
         if not risk_report.passed:
             logger.warning(
-                f"🔴 风控拒绝: {ticker} {decision_upper} | {risk_report.reason}"
+                f"🔴 Risk rejected: {ticker} {decision_upper} | {risk_report.reason}"
             )
             return {
                 "ticker": ticker,
@@ -419,12 +419,16 @@ class TigerExecutor:
                 ticker=ticker,
                 action=side,
                 quantity=qty_int,
-                order_type="MKT",
-                price=price if side == "SELL" else None,
+                order_type="LMT" if price and float(price) > 0 else "MKT",
+                price=price if price and float(price) > 0 else None,
             )
 
-            if not order_result:
-                logger.warning(f"TigerExecutor: live place_order returned None for {ticker}")
+            from shared.tiger_orders import order_was_accepted
+
+            if not order_was_accepted(order_result):
+                logger.warning(
+                    f"TigerExecutor: live place_order not accepted for {ticker}: {order_result}"
+                )
                 return None
 
             # Build trade record.
@@ -451,8 +455,8 @@ class TigerExecutor:
             )
 
             logger.info(
-                f"✅ 实盘 {side} {ticker}: {qty_int}股 @ ${price:.2f} | "
-                f"订单ID: {record.get('order_id')}"
+                f"✅ Live {side} {ticker}: {qty_int} shares @ ${price:.2f} | "
+                f"order ID: {record.get('order_id')}"
             )
             return record
 
@@ -519,25 +523,38 @@ class TigerExecutor:
                     qty_int = max(1, int(quantity))
                     order_result = None
                     if hasattr(self.tiger, "place_order"):
+                        # Limit + outside_rth/FULL so the fill shows in the Tiger app
+                        # overnight and in pre/post. MKT is regular-hours only.
                         order_result = self.tiger.place_order(
                             ticker=ticker,
                             action=side,
                             quantity=qty_int,
-                            order_type="MKT",
-                            price=None,
+                            order_type="LMT",
+                            price=price if price and float(price) > 0 else None,
                         )
-                    if order_result:
+                    from shared.tiger_orders import order_was_accepted
+
+                    if order_was_accepted(order_result):
                         tiger_order_id = (
                             order_result.get("order_id")
                             or order_result.get("id")
                             or order_result.get("orderId")
                         )
                         logger.info(
-                            f"🐯 Tiger paper {side} {ticker}: {qty_int}股 | id={tiger_order_id}"
+                            f"Tiger paper {side} {ticker}: {qty_int} shares | id={tiger_order_id}"
                         )
                     else:
+                        err = ""
+                        if isinstance(order_result, dict):
+                            err = str(
+                                order_result.get("error")
+                                or order_result.get("status")
+                                or ""
+                            )
                         logger.warning(
-                            f"Tiger paper place_order returned empty for {ticker} — local sim only"
+                            f"Tiger paper place_order did not reach the app for {ticker}"
+                            + (f" ({err})" if err else "")
+                            + " — local sim only"
                         )
             except Exception as exc:
                 logger.warning(f"Tiger paper order failed ({ticker}): {exc} — local sim only")
@@ -571,7 +588,7 @@ class TigerExecutor:
             except Exception as exc:
                 logger.debug(f"persist_fill skipped: {exc}")
             logger.info(
-                f"📝 Paper {side} {ticker}: {quantity:.2f}股 @ ${price:.2f}"
+                f"📝 Paper {side} {ticker}: {quantity:.2f} shares @ ${price:.2f}"
             )
 
         return trade

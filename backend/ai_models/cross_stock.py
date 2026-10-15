@@ -12,10 +12,10 @@ from loguru import logger
 
 class CrossStockCorrelation:
     """
-    跨股票关联分析器
-    - 基于近期价格相关性构建股票关系图
-    - 识别领先/滞后关系
-    - 生成跨股票信号增强因子
+    Cross-stock correlation analyzer.
+    - Builds a stock graph from recent price correlation
+    - Identifies lead/lag relationships
+    - Produces a cross-stock signal boost factor
     """
 
     # Pre-defined sector clusters for US stocks
@@ -48,7 +48,7 @@ class CrossStockCorrelation:
         self._sector_momentum: Dict[str, float] = {}
 
     def get_sector(self, ticker: str) -> str:
-        """获取股票所属行业"""
+        """Return the sector for a ticker."""
         return self.SECTOR_MAP.get(ticker, "Other")
 
     def compute_sector_momentum(
@@ -57,8 +57,8 @@ class CrossStockCorrelation:
         features_dict: Dict[str, np.ndarray],
     ) -> Dict[str, float]:
         """
-        计算各行业动量
-        返回: {sector: momentum_score}
+        Compute momentum for each sector.
+        Returns: {sector: momentum_score}
         """
         sector_returns: Dict[str, List[float]] = defaultdict(list)
 
@@ -88,16 +88,16 @@ class CrossStockCorrelation:
         features_dict: Dict[str, np.ndarray],
     ) -> Dict:
         """
-        为单个股票生成跨股票增强信号
-        返回: {boost_factor, sector_momentum, peer_correlation, signal}
+        Generate a cross-stock enhancement signal for one ticker.
+        Returns: {boost_factor, sector_momentum, peer_correlation, signal}
         """
         sector = self.get_sector(ticker)
         sector_momentum = self._sector_momentum.get(sector, 0.0)
 
-        # 找同行业 peers
+        # Find same-sector peers
         peers = [t for t in all_tickers if self.get_sector(t) == sector and t != ticker]
 
-        # 计算与 peers 的相关性
+        # Correlation versus peers
         features = features_dict.get(ticker)
         if features is None or features.shape[0] < self.lookback:
             return {"boost_factor": 1.0, "sector_momentum": 0.0,
@@ -118,13 +118,13 @@ class CrossStockCorrelation:
 
         avg_peer_corr = float(np.mean(peer_corrs)) if peer_corrs else 0.0
 
-        # 信号增强逻辑
-        # 如果行业动量强 + 与 peers 正相关 → 增强信号
-        # 如果行业动量弱 + 与 peers 正相关 → 减弱信号
+        # Signal boost logic
+        # Strong sector momentum + positive peer correlation → boost
+        # Weak sector momentum + positive peer correlation → dampen
         boost = 1.0 + sector_momentum * 2.0 + avg_peer_corr * 0.5
         boost = np.clip(boost, 0.5, 2.0)
 
-        # 信号方向
+        # Signal direction
         if sector_momentum > 0.02 and avg_peer_corr > 0.3:
             gnn_signal = "buy"
             gnn_strength = min(abs(sector_momentum) * 10 + avg_peer_corr, 1.0)
@@ -146,7 +146,7 @@ class CrossStockCorrelation:
         }
 
     def get_top_sectors(self, n: int = 3) -> List[Tuple[str, float]]:
-        """获取动量最强的行业"""
+        """Return sectors with the strongest momentum."""
         sorted_sectors = sorted(
             self._sector_momentum.items(),
             key=lambda x: x[1],
@@ -156,8 +156,8 @@ class CrossStockCorrelation:
 
     def get_sector_allocation_hint(self, n_sectors: int = 3) -> Dict[str, float]:
         """
-        基于行业动量给出配置建议
-        返回: {sector: allocation_pct}
+        Suggest allocations from sector momentum.
+        Returns: {sector: allocation_pct}
         """
         top = self.get_top_sectors(n_sectors)
         total_momentum = sum(abs(m) for _, m in top)

@@ -61,7 +61,7 @@ realtime = RealtimeEngine(market_data, data_pipeline)
 
 active_connections: Set[WebSocket] = set()
 
-# 数据源状态缓存（启动时探测，/health 端点读取）
+# Data-source status cache (probed at startup; read by /health)
 _data_source_status: Dict = {"primary": "unknown", "eastmoney": False, "efinance": False, "tencent": False, "yfinance": False}
 _data_source_checked_at: str = ""
 
@@ -85,29 +85,29 @@ async def lifespan(app: FastAPI):
     routes_models.init(trainer)
     portfolio_history_init(store)
 
-    # Load models via trainer (优雅降级：缺少依赖不崩溃)
+    # Load models via trainer (graceful degrade: missing deps must not crash)
     trans_ready, rl_ready = False, False
     try:
         trans_ready, rl_ready = trainer.load_or_retrain()
         logger.info(f"Model load: Transformer={'ready' if trans_ready else 'not trained'}, RL={'ready' if rl_ready else 'not trained'}")
     except Exception as e:
-        logger.warning(f"⚠️ 模型加载失败 (非关键): {e}")
-        logger.info("Model load: skipped (依赖缺失，非关键)")
-    # ★ 禁用自动训练：训练应手动执行 python -c "ModelTrainer().train_all()"
-    # 避免阻塞 API 响应和消耗资源
+        logger.warning(f"⚠️ Model load failed (non-critical): {e}")
+        logger.info("Model load: skipped (missing dependency, non-critical)")
+    # Disable auto-train: run python -c "ModelTrainer().train_all()" manually
+    # Avoid blocking API responses and burning resources
 
-    # Connect Tiger API (优雅降级)
+    # Connect Tiger API (graceful degrade)
     tiger_connected = False
     try:
         logger.info("Connecting to Tiger API...")
         tiger_connected = tiger_client.connect()
         if tiger_connected:
             tiger_status = tiger_client.get_status()
-            logger.info(f"Tiger API 已连接! 实盘账号: {tiger_status['real_account']}")
+            logger.info(f"Tiger API connected. Live account: {tiger_status['real_account']}")
         else:
-            logger.warning("⚠️ Tiger API 未连接，将无法获取实盘数据")
+            logger.warning("⚠️ Tiger API not connected; live data will be unavailable")
     except Exception as e:
-        logger.warning(f"⚠️ Tiger API 连接异常 (非关键): {e}")
+        logger.warning(f"⚠️ Tiger API connect error (non-critical): {e}")
 
     # Restore portfolio state (local fallback)
     state_loaded = portfolio.load_state()
@@ -116,30 +116,30 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No history, using default initial capital")
 
-    # ★ 关键：Tiger 连接成功后，同步真实持仓覆盖本地
+    # After a successful Tiger connect, overwrite local positions with live holdings
     if tiger_connected:
-        logger.info("🔄 从老虎证券同步真实持仓...")
-        portfolio._tiger_initial_capital_synced = False  # ★ 强制重置，确保 initial_capital 从 Tiger 获取
+        logger.info("🔄 Syncing live positions from Tiger Brokers...")
+        portfolio._tiger_initial_capital_synced = False  # Force reset so initial_capital comes from Tiger
         sync_result = portfolio.sync_from_tiger(force=True)
         if sync_result["synced"]:
             logger.info(
-                f"✅ Tiger 同步成功: {sync_result['positions']} 只持仓, "
-                f"现金 ${sync_result['cash']:,.2f}, 总资产 ${sync_result['total_value']:,.2f}"
+                f"✅ Tiger sync succeeded: {sync_result['positions']} positions, "
+                f"cash ${sync_result['cash']:,.2f}, NAV ${sync_result['total_value']:,.2f}"
             )
         else:
-            logger.warning(f"⚠️ Tiger 同步未完成: {sync_result['source']}")
+            logger.warning(f"⚠️ Tiger sync incomplete: {sync_result['source']}")
 
-    # ★ 启动时探测各数据源可达性
+    # Probe data-source reachability at startup
     try:
         source_status = china_data_adapter.health_check()
         available_sources = [k for k, v in source_status.items() if v and k != "primary"]
-        logger.info(f"数据源健康检查: primary={source_status.get('primary', 'unknown')}, 可用源: {available_sources}")
-        # 缓存到全局变量供 /health 端点读取
+        logger.info(f"Data-source health: primary={source_status.get('primary', 'unknown')}, available: {available_sources}")
+        # Cache globally for the /health endpoint
         global _data_source_status, _data_source_checked_at
         _data_source_status = dict(source_status)
         _data_source_checked_at = datetime.now().isoformat()
     except Exception as e:
-        logger.debug(f"数据源健康检查跳过: {e}")
+        logger.debug(f"Data-source health check skipped: {e}")
 
     # Save state after each trade
     executor.on_order_filled(lambda trade: portfolio.save_state())
@@ -299,17 +299,17 @@ async def build_data_dict(tickers: List[str]) -> Dict:
 
 
 # ================================================================
-# 实时数据推送端点（auto_trader → WebSocket → 前端）
+# Live push endpoint (auto_trader → WebSocket → frontend)
 # ================================================================
 
 @app.post("/api/push/cycle-data")
 async def push_cycle_data(data: Dict):
     """
-    接收 auto_trader 推送的周期数据，广播到所有 WebSocket 客户端
-    同时自动持久化到数据库
+    Receive cycle data from auto_trader, broadcast to all WebSocket clients,
+    and persist to the database.
     """
     try:
-        # 广播实时市场数据
+        # Broadcast live market data
         if data.get("prices"):
             await broadcast(json.dumps({
                 "type": "market_update",
@@ -322,7 +322,7 @@ async def push_cycle_data(data: Dict):
                 }
             }))
 
-        # 自动持久化
+        # Auto-persist
         store.save_price_ticks_batch(data.get("prices", {}))
         if data.get("signals"):
             store.save_signals_batch(data["signals"])
@@ -346,7 +346,7 @@ async def push_cycle_data(data: Dict):
 
 @app.post("/api/push/tiger-snapshot")
 async def push_tiger_snapshot(data: Dict):
-    """接收 Tiger 实时快照，广播到所有 WebSocket 前端"""
+    """Receive a Tiger live snapshot and broadcast to all WebSocket clients."""
     try:
         await broadcast(json.dumps({
             "type": "tiger_snapshot",
@@ -371,18 +371,18 @@ async def push_tiger_snapshot(data: Dict):
 
 @app.get("/health")
 async def health():
-    # Tiger API 状态 — 包在 try/except 内防止报错影响整体健康检查
+    # Tiger API status — isolated so failures do not fail the whole health check
     tiger_status: Dict = {"connected": False, "account": ""}
     try:
         status = tiger_client.get_status()
         tiger_status["connected"] = status.get("connected", False)
         tiger_status["account"] = status.get("real_account", "") or status.get("simulation_account", "")
     except Exception as e:
-        logger.debug(f"Tiger get_status() 调用失败: {e}")
+        logger.debug(f"Tiger get_status() failed: {e}")
 
-    # 数据源状态 — 使用启动时缓存的结果
+    # Data-source status — use the startup cache
     ds_status = dict(_data_source_status)
-    # 如果缓存为空（启动时健康检查失败），补充降级状态
+    # If the cache is empty (startup health check failed), fill a degraded status
     if not ds_status or ds_status.get("primary", "unknown") == "unknown":
         ds_status.update({"primary": "pending", "yfinance": True, "note": "health_check_not_run"})
 

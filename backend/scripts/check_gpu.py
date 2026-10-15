@@ -1,4 +1,4 @@
-"""检查 PyTorch CUDA 状态"""
+"""Check PyTorch CUDA availability."""
 import torch
 print(f"PyTorch: {torch.__version__}")
 print(f"CUDA available: {torch.cuda.is_available()}")

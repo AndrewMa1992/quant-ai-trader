@@ -111,25 +111,24 @@ class TigerBroker:
         """
         self._ensure_client()
 
-        # Confirmation gate
-        if self.require_confirm:
+        # Human confirm is live-money only. Paper/demo must reach the Tiger app.
+        if self.require_confirm and not self._paper and settings.is_production:
             logger.warning(f"CONFIRMATION REQUIRED: {side} {quantity} {ticker} "
                            f"({order_type}) on account {self.account}")
-            # In production, this would trigger a Slack/WeChat confirmation flow
-            # For now, auto-confirm in paper/dev mode
-            if settings.is_production:
-                return {
-                    "status": "PENDING_CONFIRMATION",
-                    "ticker": ticker,
-                    "side": side,
-                    "quantity": quantity,
-                    "message": "Awaiting human confirmation",
-                }
+            return {
+                "status": "PENDING_CONFIRMATION",
+                "ticker": ticker,
+                "side": side,
+                "quantity": quantity,
+                "message": "Awaiting human confirmation",
+            }
 
-        if not self._initialized:
-            # Paper broker mode
+        if not self._initialized or self._client is None:
             import uuid
             import time
+            logger.warning(
+                "Tiger SDK unavailable — local PAPER_SUBMITTED only, not visible in the Tiger app"
+            )
             return {
                 "order_id": str(uuid.uuid4())[:12],
                 "ticker": ticker,
@@ -143,37 +142,34 @@ class TigerBroker:
                 "message": "Paper order (Tiger SDK not available)",
             }
 
-        # Live order via Tiger
         try:
-            from tigeropen.common.consts import Action, OrderType
+            from shared.tiger_orders import submit_stock_order
 
-            action = Action.BUY if side.upper() == "BUY" else Action.SELL
-            otype = OrderType.MARKET if order_type.upper() == "MKT" else OrderType.LIMIT
-
-            order = await asyncio.to_thread(
-                self._client.place_order,
-                contract=None,
-                action=action,
-                order_type=otype,
-                quantity=quantity,
+            result = await asyncio.to_thread(
+                submit_stock_order,
+                self._client,
+                account=self.account,
+                ticker=ticker,
+                side=side,
+                quantity=int(quantity),
+                order_type=order_type,
                 limit_price=limit_price,
+                quote_client=self._quote_client,
+                paper=self._paper,
             )
-
-            return {
-                "order_id": str(getattr(order, "order_id", ""))[:12],
-                "ticker": ticker,
-                "side": side.upper(),
-                "quantity": quantity,
-                "order_type": order_type.upper(),
-                "status": "LIVE_SUBMITTED",
-                "account": self.account,
-            }
-
+            result["algo"] = algo
+            if not result.get("order_id"):
+                result["status"] = "FAILED"
+                result.setdefault("error", "Tiger place_order returned no order id")
+            return result
         except Exception as e:
             logger.error(f"Tiger order failed: {e}")
             return {
                 "ticker": ticker,
+                "side": side.upper() if side else "",
+                "quantity": quantity,
                 "status": "FAILED",
+                "account": self.account,
                 "error": str(e),
             }
 

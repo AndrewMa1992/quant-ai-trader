@@ -1,16 +1,17 @@
 """
-Market Scanner — 全市场动态品种扫描器
+Market Scanner — dynamic cross-market instrument scanner.
 
-通过 Tiger API 验证股票池中所有品种的可交易性，动态过滤和排名。
-替代硬编码股票列表，实现跨市场利益最大化。
+Validates tradability of every name in the stock universe via the Tiger API,
+then filters and ranks dynamically. Replaces hardcoded ticker lists so
+cross-market opportunity can be maximized.
 
-功能:
-- 从 market_universe 加载全量候选池 (~800只)
-- 通过 Tiger API 验证可交易性 (价格>0, 状态正常, 非退市)
-- 按流动性/波动率/基本面过滤
-- 输出每个市场的优先品种和资金门槛
+Capabilities:
+- Load the full candidate pool from market_universe (~800 names)
+- Validate tradability via Tiger API (price>0, healthy status, not delisted)
+- Filter by liquidity / volatility / fundamentals
+- Emit per-market priority names and capital hurdles
 
-P2: 全品种扫描 + 自动换汇 + 整手预测 + 资金过滤
+P2: full-universe scan + auto FX + board-lot projection + capital filter
 """
 from __future__ import annotations
 
@@ -28,9 +29,9 @@ from backend.data_engine.stock_universe import stock_universe
 
 
 class MarketScanner:
-    """全市场动态扫描器 — 验证品种、计算门槛、排序"""
+    """Dynamic cross-market scanner — validate names, compute hurdles, rank."""
 
-    # 缓存有效期: 每 30 分钟刷新一次
+    # Cache TTL: refresh every 30 minutes
     CACHE_TTL = 1800
 
     def __init__(self):
@@ -41,7 +42,7 @@ class MarketScanner:
         self._affordable: List[Dict] = []
         self._total_available = 0
 
-    # ── 主入口 ──
+    # ── Main entry ──
     def scan(
         self,
         tiger_client=None,
@@ -50,21 +51,21 @@ class MarketScanner:
         force: bool = False,
     ) -> Dict:
         """
-        扫描全市场可交易品种。
+        Scan the full market for tradable instruments.
 
         Args:
-            tiger_client: TigerClient 实例 (连接后传入)
-            available_cash: 各币种可用现金 {currency: amount}
+            tiger_client: TigerClient instance (pass after connect)
+            available_cash: cash by currency {currency: amount}
                 e.g. {"USD": 2000, "HKD": 0, "SGD": 0}
-            positions: 已有持仓 {ticker: shares} (用于优先级)
-            force: 是否强制刷新缓存
+            positions: existing holdings {ticker: shares} (used for priority)
+            force: force a cache refresh
 
         Returns:
             {
-                "total_available": int,        # 总可交易品种数
-                "by_market": {"US": [...], ...}, # 按市场分组
-                "affordable": [...],            # 资金够买的品种(降序)
-                "scan_time": float,             # Unix 时间戳
+                "total_available": int,        # tradable instrument count
+                "by_market": {"US": [...], ...}, # grouped by market
+                "affordable": [...],            # names the account can buy (desc)
+                "scan_time": float,             # Unix timestamp
             }
         """
         now = time.time()
@@ -72,47 +73,47 @@ class MarketScanner:
             self._recalc_affordable(available_cash)
             return self._summary()
 
-        logger.info("🔍 全市场品种扫描中...")
+        logger.info("🔍 Scanning full-market instruments...")
 
-        # 1. 加载全量候选池
+        # 1. Load the full candidate pool
         stock_universe.build(force=False)
         all_stocks: List[StockEntry] = stock_universe._all_stocks
-        logger.info(f"  候选池: {len(all_stocks)} 只 (美股{len(stock_universe.us_tickers)} "
-                   f"+ 港股{len(stock_universe.hk_tickers)} + 新加坡{len(stock_universe.sg_tickers)})")
+        logger.info(f"  Candidate pool: {len(all_stocks)} names (US {len(stock_universe.us_tickers)} "
+                   f"+ HK {len(stock_universe.hk_tickers)} + SG {len(stock_universe.sg_tickers)})")
 
-        # 2. 如果 Tiger 在线，批量验证
+        # 2. If Tiger is online, batch-validate
         validated: List[Dict] = []
         if tiger_client and tiger_client.is_connected():
             validated = self._validate_with_tiger(tiger_client, all_stocks)
         else:
-            # 离线模式 — 全部视为可交易
+            # Offline mode — treat all as tradable
             validated = self._offline_validation(all_stocks)
 
-        # 3. 按市场分组
+        # 3. Group by market
         self._scanned = validated
         self._by_market = self._group_by_market(validated)
         self._total_available = len(validated)
         self._last_scan = time.time()
 
-        # 4. 计算资金门槛
+        # 4. Compute capital hurdles
         self._calc_entry_barriers()
         self._recalc_affordable(available_cash)
 
-        # 5. 缓存到 JSON
+        # 5. Persist cache to JSON
         self._save_cache()
 
-        # 日志
+        # Logs
         for mkt, stocks in self._by_market.items():
-            logger.info(f"  {mkt}: {len(stocks)} 只可交易")
+            logger.info(f"  {mkt}: {len(stocks)} tradable")
 
         return self._summary()
 
-    # ── Tiger API 在线验证 ──
+    # ── Tiger API online validation ──
     def _validate_with_tiger(self, tiger_client, all_stocks: list) -> List[Dict]:
-        """批量验证全量品种"""
+        """Batch-validate the full universe."""
         validated = []
         total = len(all_stocks)
-        batch_size = 50  # Tiger API 限制
+        batch_size = 50  # Tiger API limit
 
         for i in range(0, total, batch_size):
             batch = all_stocks[i:i + batch_size]
@@ -121,7 +122,7 @@ class MarketScanner:
                 continue
 
             try:
-                # 批量获取实时报价 — 自动排除退市/停牌/价格无效的品种
+                # Batch realtime quotes — auto-exclude delisted/halted/invalid prices
                 briefs = tiger_client._quote_client.get_stock_briefs(tickers)
                 if briefs:
                     for j, brief in enumerate(briefs):
@@ -131,13 +132,13 @@ class MarketScanner:
                         entry = batch[j]
                         price = getattr(brief, 'latest_price', 0) or 0
 
-                        # 过滤条件
+                        # Filter rules
                         if price <= 0:
-                            continue  # 价格无效 → 排除
+                            continue  # invalid price → drop
                         if price < 0.10:
-                            continue  # 仙股排除 (太便宜可能有退市风险)
+                            continue  # penny stock (delisting risk)
                         if getattr(brief, 'status', None) == 'S':
-                            continue  # 停牌排除
+                            continue  # halted → drop
 
                         validated.append({
                             "ticker": ticker,
@@ -150,26 +151,26 @@ class MarketScanner:
                             "volume": getattr(brief, 'volume', 0) or 0,
                             "change_pct": getattr(brief, 'change', 0) or 0,
                             "benchmark_weight": entry.get("benchmark_weight", 0),
-                            "affordable": False,  # 待资金计算
-                            "min_capital_usd": 0,  # 待计算
+                            "affordable": False,  # filled after capital calc
+                            "min_capital_usd": 0,  # filled later
                         })
             except Exception as e:
-                logger.debug(f"  品种验证 batch {i//batch_size + 1} 失败: {e}")
-                # 批次失败 → 该批次品种降级为离线验证
+                logger.debug(f"  Instrument validation batch {i//batch_size + 1} failed: {e}")
+                # Batch failure → fall back to offline entries for this batch
                 for entry in batch:
                     validated.append(self._offline_entry(entry))
 
-            time.sleep(0.1)  # API 限流保护
+            time.sleep(0.1)  # API rate-limit padding
 
         return validated
 
-    # ── 离线降级模式 ──
+    # ── Offline fallback ──
     def _offline_validation(self, all_stocks: list) -> List[Dict]:
-        """无 Tiger 连接时的离线验证"""
+        """Offline validation when Tiger is disconnected."""
         return [self._offline_entry(s) for s in all_stocks]
 
     def _offline_entry(self, entry: dict) -> Dict:
-        """构建单个品种的离线条目"""
+        """Build a single offline instrument entry."""
         ticker = entry.get("ticker", "")
         market = entry.get("market", "US")
         return {
@@ -178,31 +179,31 @@ class MarketScanner:
             "market": market,
             "currency": entry.get("currency", "USD"),
             "sector": entry.get("sector", "Unknown"),
-            "price": 0,  # 0 表示未获取到实时价
+            "price": 0,  # 0 means no live price
             "lot_size": self._get_lot_size(ticker, market),
             "volume": 0,
             "change_pct": 0,
             "benchmark_weight": entry.get("benchmark_weight", 0),
-            "affordable": True,  # 离线时全部视为可买
+            "affordable": True,  # treat all as buyable offline
             "min_capital_usd": 0,
         }
 
-    # ── 整手大小 ──
+    # ── Board lot size ──
     @staticmethod
     def _get_lot_size(ticker: str, market: str) -> int:
-        """获取最小交易单位"""
+        """Return the minimum trade unit."""
         if market == "US":
             return 1
         if market == "SG":
-            return 100  # 新加坡默认100股
+            return 100  # Singapore default 100 shares
 
-        # 港股 — 从已知列表 + 默认值
+        # HK — known list + default
         from backend.data_engine.tiger_client import TigerClient
         return TigerClient.get_hk_lot_size(ticker)
 
-    # ── 资金门槛计算 ──
+    # ── Capital hurdle ──
     def _calc_entry_barriers(self):
-        """计算每个品种的最低资金门槛(USD)"""
+        """Compute the minimum USD capital required for each instrument."""
         for entry in self._scanned:
             price = entry["price"]
             lot = entry["lot_size"]
@@ -210,18 +211,18 @@ class MarketScanner:
             fx_rate = settings.trading_currency_rates_dict.get(currency, 1.0)
 
             if price > 0:
-                # 买入1手所需本地货币
+                # Local-currency cost of 1 board lot
                 local_cost = price * lot
-                # 转换为 USD
+                # Convert to USD
                 usd_cost = local_cost * fx_rate
                 entry["min_capital_usd"] = round(usd_cost, 2)
             else:
-                # 无实时价 — 用保守估算
+                # No live price — conservative estimate
                 entry["min_capital_usd"] = 500 if currency == "USD" else 200
 
-    # ── 资金过滤 ──
+    # ── Capital filter ──
     def _recalc_affordable(self, available_cash: dict = None):
-        """基于当前资金重新计算可买品种"""
+        """Recompute buyable names from current cash."""
         if not available_cash:
             available_cash = {}
 
@@ -234,7 +235,7 @@ class MarketScanner:
         for entry in self._scanned:
             min_capital = entry.get("min_capital_usd", 0)
             if total_usd <= 0:
-                # 未提供现金数据 → 全部视为可买
+                # No cash data provided → treat all as buyable
                 entry["affordable"] = True
                 self._affordable.append(entry)
             elif min_capital > 0 and total_usd >= min_capital:
@@ -243,13 +244,13 @@ class MarketScanner:
             else:
                 entry["affordable"] = False
 
-        # 按 benchmark_weight 降序 → 优先蓝筹
+        # Sort by benchmark_weight desc → prefer blue chips
         self._affordable.sort(
             key=lambda x: (x.get("benchmark_weight", 0), x.get("volume", 0)),
             reverse=True
         )
 
-    # ── 分组 ──
+    # ── Grouping ──
     @staticmethod
     def _group_by_market(entries: List[Dict]) -> Dict[str, List[Dict]]:
         groups: Dict[str, List[Dict]] = {}
@@ -258,7 +259,7 @@ class MarketScanner:
             groups.setdefault(mkt, []).append(e)
         return groups
 
-    # ── 摘要 ──
+    # ── Summary ──
     def _summary(self) -> Dict:
         return {
             "total_available": self._total_available,
@@ -266,11 +267,11 @@ class MarketScanner:
                 mkt: len(stocks) for mkt, stocks in self._by_market.items()
             },
             "affordable_count": len(self._affordable),
-            "affordable": self._affordable[:200],  # 返回前200只
+            "affordable": self._affordable[:200],  # return top 200
             "scan_time": self._last_scan,
         }
 
-    # ── 缓存 ──
+    # ── Cache ──
     def _save_cache(self):
         try:
             with open(self._cache_path, "w", encoding="utf-8") as f:
@@ -279,10 +280,10 @@ class MarketScanner:
                     "last_scan": self._last_scan,
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.debug(f"缓存写入失败: {e}")
+            logger.debug(f"Cache write failed: {e}")
 
     def load_cache(self) -> bool:
-        """从磁盘加载缓存"""
+        """Load cache from disk."""
         if not self._cache_path.exists():
             return False
         try:
@@ -296,7 +297,7 @@ class MarketScanner:
         except Exception:
             return False
 
-    # ── 查询 API ──
+    # ── Query API ──
     def get_top_candidates(
         self,
         n: int = 50,
@@ -307,27 +308,27 @@ class MarketScanner:
         exclude_unaffordable: bool = True,
     ) -> List[str]:
         """
-        获取最优候选股票列表。
+        Return the best candidate ticker list.
 
         Args:
-            n: 返回数量上限
-            include_positions: 强制包含的持仓
-            market_filter: 限定市场 (US/HK/SG)
-            min_price/max_price: 价格区间
-            exclude_unaffordable: 排除买不起的品种
+            n: maximum number to return
+            include_positions: holdings that must be included
+            market_filter: restrict to a market (US/HK/SG)
+            min_price/max_price: price range
+            exclude_unaffordable: drop names the account cannot buy
 
         Returns:
-            ticker 列表，按优先级排序
+            ticker list, sorted by priority
         """
         candidates = []
         pos_set = include_positions or set()
 
-        # 优先持仓
+        # Prioritize holdings
         for entry in self._scanned:
             if entry["ticker"] in pos_set:
                 candidates.append(entry)
 
-        # 其他可交易品种
+        # Other tradable names
         for entry in self._affordable:
             if entry["ticker"] in pos_set:
                 continue
@@ -340,17 +341,17 @@ class MarketScanner:
                 continue
             candidates.append(entry)
 
-        # 取 top N
+        # Take top N
         return [c["ticker"] for c in candidates[:n]]
 
     def get_affordable_tickers(self) -> List[str]:
-        """获取当前资金可买的所有 ticker"""
+        """Return all tickers the current cash can buy."""
         return [e["ticker"] for e in self._affordable]
 
     def get_market_distribution(self) -> Dict[str, int]:
-        """各市场品种数量"""
+        """Instrument count by market."""
         return {mkt: len(stocks) for mkt, stocks in self._by_market.items()}
 
 
-# 全局单例
+# Global singleton
 market_scanner = MarketScanner()

@@ -225,6 +225,14 @@ class MarketTimeHelper:
             True if market is open right now.
         """
         now = dt or datetime.now(self.tz)
+        # Paper/demo: match pipeline market_session — US 24h is always open
+        # (overnight LMT orders still reach the Tiger app).
+        if self.market == "US":
+            import os
+
+            raw = os.getenv("QAT_US_24H_TRADING", "true").strip().lower()
+            if raw in ("1", "true", "yes", "on", ""):
+                return True
         if not is_trading_day(now.date(), self.market):
             return False
 

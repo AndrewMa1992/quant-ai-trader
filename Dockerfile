@@ -1,18 +1,19 @@
 # ============================================
 # Quant AI Trader - Backend Docker Image
-# 用于自托管 Runner CD 部署
+# Used by the self-hosted runner CD path (legacy v1 image).
+# Prefer Dockerfile.app for the current paper stack.
 # ============================================
 FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# 安装系统依赖
+# Install system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖
+# Install Python dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -23,10 +24,10 @@ FROM base AS production
 
 COPY . .
 
-# 模型占位目录
+# Model placeholder directories
 RUN mkdir -p backend/ai_models/models backend/data cache/torch cache/huggingface
 
-# 环境变量
+# Environment
 ENV TORCH_HOME=/app/cache/torch
 ENV HF_HOME=/app/cache/huggingface
 ENV PYTHONUNBUFFERED=1
@@ -36,11 +37,11 @@ EXPOSE 8000
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # ============================================
-# Training image (带 GPU 支持)
+# Training image (GPU)
 # ============================================
 FROM base AS trainer
 
-# 安装 PyTorch 带 CUDA
+# Install PyTorch with CUDA
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu126
 
 COPY . .

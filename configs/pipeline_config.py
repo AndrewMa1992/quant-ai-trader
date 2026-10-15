@@ -1,71 +1,72 @@
 """
-Pipeline Configuration — Trading Pipeline 专用配置
-==================================================
-替代 v1 auto_trader.py 的硬编码常量，集中管理交易管线参数。
+Pipeline Configuration — Trading Pipeline dedicated config
+==========================================================
+Replaces hardcoded constants from v1 auto_trader.py with centralized
+pipeline parameters.
 """
 from dataclasses import dataclass, field
 
 
 @dataclass
 class PipelineConfig:
-    """交易管线全局配置"""
+    """Global trading-pipeline configuration."""
 
-    # ── 调度参数 ──────────────────────────────────────────────
-    CYCLE_INTERVAL_SECONDS: int = 300          # 每轮间隔（秒），默认5分钟
+    # ── Scheduling ────────────────────────────────────────────────
+    CYCLE_INTERVAL_SECONDS: int = 300          # Seconds between cycles; default 5 min
     # False = 24h pipeline (US 24h + rotate HK/SG/AU/NZ when in session)
     TRADING_HOURS_ONLY: bool = False
-    MAX_TICKERS_PER_CYCLE: int = 9999            # 移除限制，交由市场轮询控制
+    MAX_TICKERS_PER_CYCLE: int = 9999            # Cap removed; market round-robin controls size
 
-    # ── 信号阈值（Top-N 替代固定阈值） ─────────────────────
-    SIGNAL_THRESHOLD: float = 0.05               # 基础 floor 阈值
-    SIGNAL_THRESHOLD_MIN: float = 0.05           # 最低信号强度
-    MIN_CONFIDENCE: float = 0.3                  # 置信度下限
-    TOP_N_SIGNALS: int = 5                       # 每轮最多选 N 个最强信号
+    # ── Signal thresholds (Top-N replaces a fixed cutoff) ─────────
+    SIGNAL_THRESHOLD: float = 0.05               # Base floor threshold
+    SIGNAL_THRESHOLD_MIN: float = 0.05           # Minimum signal strength
+    MIN_CONFIDENCE: float = 0.3                  # Confidence floor
+    TOP_N_SIGNALS: int = 5                       # Max N strongest signals per cycle
 
-    # ── 全市场轮询 ────────────────────────────────────────
-    MARKET_ROUND_ROBIN: bool = True              # 启用市场轮询
+    # ── Cross-market round-robin ──────────────────────────────────
+    MARKET_ROUND_ROBIN: bool = True              # Enable market rotation
     # US + HK/SG/AU/NZ. Override: QAT_MARKET_ROTATION=US,HK,...
     MARKET_ROTATION: list = field(
         default_factory=lambda: ["US", "HK", "SG", "AU", "NZ"]
     )
-    MAX_STOCKS_PER_MARKET: int = 200             # 单市场最大股票数
+    MAX_STOCKS_PER_MARKET: int = 200             # Max stocks per market
 
-    # ── 风控参数 ──────────────────────────────────────────────
-    VAR_CONFIDENCE: float = 0.95               # VaR 置信水平
-    VAR_LIMIT_PCT: float = 0.02                # 日 VaR 上限（组合价值百分比）
-    CVAR_LIMIT_PCT: float = 0.03               # CVaR 上限（组合价值百分比）
-    BARRA_EXPOSURE_MAX_Z: float = 3.0          # Barra 因子暴露 Z-score 上限
-    ENABLE_RISK_CHECKS: bool = True            # 是否启用四道风控
-    ENABLE_PORTFOLIO_OPT: bool = True          # 是否启用组合优化
+    # ── Risk parameters ───────────────────────────────────────────
+    VAR_CONFIDENCE: float = 0.95               # VaR confidence level
+    VAR_LIMIT_PCT: float = 0.02                # Daily VaR cap (fraction of portfolio value)
+    CVAR_LIMIT_PCT: float = 0.03               # CVaR cap (fraction of portfolio value)
+    BARRA_EXPOSURE_MAX_Z: float = 3.0          # Barra factor-exposure Z-score cap
+    ENABLE_RISK_CHECKS: bool = True            # Enable four-layer risk checks
+    ENABLE_PORTFOLIO_OPT: bool = True          # Enable portfolio optimization
 
-    # ── P0-P1 新增参数 ──────────────────────────────────────────
+    # ── P0-P1 additions ───────────────────────────────────────────
     # Default paper for safety; set QAT_EXECUTION_MODE=live explicitly for live trading
-    EXECUTION_MODE: str = "paper"              # "paper" | "live" — 通过 QAT_EXECUTION_MODE env 覆盖
-    MAX_DAILY_TRADES: int = 24                 # 五市场轮询 + 小资金日内可成交次数
-    DAILY_LOSS_LIMIT: float = 0.03             # 对齐 RISK_LIMITS 日亏损熔断
-    LEVERAGE_LIMIT: float = 1.001              # 杠杆上限，≥ 此值阻止买入
-    V1_FALLBACK_RETRIES: int = 3               # v2 服务 HTTP 调用重试次数
-    ENABLE_WS_PUSH: bool = True                # 是否启用前端 WebSocket 推送
-    GIT_AUTO_SYNC: bool = False                # 是否启用 Git 自动同步（默认关闭）
-    FORCE_SELL_TICKERS: list = field(default_factory=list)  # 启动时强制清仓列表
+    EXECUTION_MODE: str = "paper"              # "paper" | "live" — override via QAT_EXECUTION_MODE
+    MAX_DAILY_TRADES: int = 24                 # Five-market rotation + small-capital intra-day fill budget
+    DAILY_LOSS_LIMIT: float = 0.03             # Align with RISK_LIMITS daily-loss circuit breaker
+    LEVERAGE_LIMIT: float = 1.001              # Leverage cap; ≥ this value blocks buys
+    V1_FALLBACK_RETRIES: int = 3               # HTTP retry count for v2 service calls
+    ENABLE_WS_PUSH: bool = True                # Enable frontend WebSocket push
+    GIT_AUTO_SYNC: bool = False                # Enable Git auto-sync (off by default)
+    FORCE_SELL_TICKERS: list = field(default_factory=list)  # Tickers to force-liquidate on startup
 
-    ENABLE_ALERTS: bool = True                 # 是否启用告警
-    MODEL_MAX_AGE_DAYS: int = 14             # 模型过期则降仓/HOLD
-    PREFER_OPEN_MARKETS: bool = True        # 轮询时优先当前开市市场
+    ENABLE_ALERTS: bool = True                 # Enable alerts
+    MODEL_MAX_AGE_DAYS: int = 14             # Stale models → reduce size / HOLD
+    PREFER_OPEN_MARKETS: bool = True        # Prefer currently open markets during rotation
 
-    # ── 交易参数 ──────────────────────────────────────────────
+    # ── Trade parameters ──────────────────────────────────────────
     # Floor only — live min trade comes from shared.capital_policy
     MIN_TRADE_VALUE: float = 50.0
 
-    # ── v2 微服务地址 ─────────────────────────────────────────
+    # ── v2 microservice URLs ──────────────────────────────────────
     SERVICE_BASE_URLS: dict = field(default_factory=lambda: _build_service_urls())
 
-    # ── HTTP 客户端超时 ───────────────────────────────────────
-    HTTP_TIMEOUT: float = 30.0                 # httpx 请求超时（秒）
-    HTTP_RETRIES: int = 3                      # 重试次数
+    # ── HTTP client timeouts ──────────────────────────────────────
+    HTTP_TIMEOUT: float = 30.0                 # httpx request timeout (seconds)
+    HTTP_RETRIES: int = 3                      # Retry count
 
     def __post_init__(self) -> None:
-        """从环境变量覆盖关键配置；模拟锁强制 paper。"""
+        """Override key settings from env; simulation lock forces paper."""
         import os
 
         self.EXECUTION_MODE = os.getenv("QAT_EXECUTION_MODE", self.EXECUTION_MODE)
@@ -117,5 +118,5 @@ def _build_service_urls() -> dict:
         }
 
 
-# 全局单例（方便直接 import）
+# Global singleton (convenient to import directly)
 pipeline_config = PipelineConfig()

@@ -1,9 +1,9 @@
-"""验证所有模块导入"""
+"""Verify that all modules import successfully."""
 import sys
 sys.path.insert(0, '.')
 
 print("=" * 50)
-print("Quant AI Trader - 模块导入验证")
+print("Quant AI Trader - Module import verification")
 print("=" * 50)
 
 # Core

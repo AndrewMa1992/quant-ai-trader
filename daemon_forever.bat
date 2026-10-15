@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
-:: Quant AI Trader v2 - 永久守护进程 bat 脚本
-:: 功能: 启动全部 v2 服务 + 30s健康检查 + git自动同步 + 日志轮转 + 被杀自恢复
-:: 用法: 双击运行; 放入 shell:startup 即可开机自启
+:: Quant AI Trader v2 - forever daemon bat script
+:: Features: start all v2 services + 30s health check + git auto-sync + log rotation + self-heal after kill
+:: Usage: double-click to run; place in shell:startup for boot autostart
 
 setlocal enabledelayedexpansion
 
-:: %~dp0 = bat 脚本自身目录，消除硬编码路径
+:: %~dp0 = directory of this bat script; avoids hard-coded paths
 set "PROJ=%~dp0"
 :: strip trailing backslash for safety
 if "%PROJ:~-1%"=="\" set "PROJ=%PROJ:~0,-1%"
@@ -33,7 +33,7 @@ set GIT_PUSH_EVERY=10
 set MAX_RETRIES=5
 set COOLDOWN_SEC=300
 
-:: v2 端口
+:: v2 ports
 set API_PORT=8001
 set DATA_PORT=8011
 set FACTOR_PORT=8012
@@ -49,25 +49,25 @@ set FRONTEND_RETRIES=0
 title QuantAI-v2-Daemon
 
 echo =============================================
-echo   Quant AI Trader v2 - 永久守护进程
-echo   工作目录: %PROJ%
-echo   每%CHECK_INTERVAL%秒健康检查, %GIT_PULL_EVERY%轮同步代码
+echo   Quant AI Trader v2 - Forever Daemon
+echo   Working directory: %PROJ%
+echo   Health check every %CHECK_INTERVAL%s, sync code every %GIT_PULL_EVERY% cycles
 echo =============================================
 
 set /a GIT_COUNTER=0
 set /a PUSH_COUNTER=0
 
 :: ═══════════════════════════════════════════════
-:: 首次启动：先启动所有 v2 服务（不等 git，避免网络卡死）
+:: First start: launch all v2 services first (do not wait on git; avoid network stalls)
 :: ═══════════════════════════════════════════════
 echo [%time%] Starting all v2 services...
 call :start_all
 echo [%time%] Initial startup complete
 
 :: ═══════════════════════════════════════════════
-:: 启动后：尝试 git pull（带15秒超时，失败不阻塞）
+:: After start: try git pull (15s timeout; failure does not block)
 :: ═══════════════════════════════════════════════
-echo [%date% %time%] === 尝试: git pull 同步最新代码 (15s超时) ===
+echo [%date% %time%] === Attempt: git pull latest code (15s timeout) ===
 cd /d "%PROJ%"
 git -c http.timeout=15 -c https.timeout=15 stash >nul 2>&1
 git -c http.timeout=15 -c https.timeout=15 pull --rebase origin dev-20260522 >nul 2>&1
@@ -79,12 +79,12 @@ if errorlevel 1 (
 cd /d "%PROJ%"
 
 :: ═══════════════════════════════════════════════
-:: 主循环 - 永久运行
+:: Main loop - run forever
 :: ═══════════════════════════════════════════════
 :loop
 timeout /t %CHECK_INTERVAL% /nobreak >nul
 
-:: === git pull + auto-commit + auto-push 同步 ===
+:: === git pull + auto-commit + auto-push sync ===
 set /a GIT_COUNTER+=1
 set /a PUSH_COUNTER+=1
 if !GIT_COUNTER! geq %GIT_PULL_EVERY% (
@@ -92,7 +92,7 @@ if !GIT_COUNTER! geq %GIT_PULL_EVERY% (
     echo [%time%] Git: checking for updates...
     cd /d "%PROJ%"
 
-    :: auto-commit 本地修改
+    :: auto-commit local changes
     git -c http.timeout=15 -c https.timeout=15 add -A 2>nul
     git -c http.timeout=15 -c https.timeout=15 commit -m "auto: daemon sync %date% %time%" 2>nul
 
@@ -114,7 +114,7 @@ if !GIT_COUNTER! geq %GIT_PULL_EVERY% (
     cd /d "%PROJ%"
 )
 
-:: === auto-push (每 %GIT_PUSH_EVERY% 轮，约5分钟) ===
+:: === auto-push (every %GIT_PUSH_EVERY% cycles, ~5 minutes) ===
 if !PUSH_COUNTER! geq %GIT_PUSH_EVERY% (
     set /a PUSH_COUNTER=0
     echo [%time%] Git: auto-push to origin...
@@ -130,7 +130,7 @@ if !PUSH_COUNTER! geq %GIT_PUSH_EVERY% (
     cd /d "%PROJ%"
 )
 
-:: === API Gateway 健康检查 ===
+:: === API Gateway health check ===
 curl -s http://localhost:%API_PORT%/health >nul 2>&1
 if errorlevel 1 (
     echo [%time%] API GATEWAY DOWN - restarting...
@@ -150,7 +150,7 @@ if errorlevel 1 (
     set API_RETRIES=0
 )
 
-:: === 微服务健康检查（逐一查 /health） ===
+:: === Microservice health checks (probe /health one by one) ===
 call :check_svc data_service %DATA_PORT%
 call :check_svc factor_service %FACTOR_PORT%
 call :check_svc model_train %TRAIN_PORT%
@@ -158,7 +158,7 @@ call :check_svc model_infer %INFER_PORT%
 call :check_svc risk_service %RISK_PORT%
 call :check_svc execution_service %EXEC_PORT%
 
-:: === 前端健康检查 ===
+:: === Frontend health check ===
 curl -s http://localhost:%FRONTEND_PORT% >nul 2>&1
 if errorlevel 1 (
     echo [%time%] FRONTEND DOWN - restarting...
@@ -170,7 +170,7 @@ if errorlevel 1 (
     echo [%time%] FRONTEND started
 )
 
-:: === Trading Pipeline 进程检查 ===
+:: === Trading Pipeline process check ===
 tasklist /FI "IMAGENAME eq python.exe" 2>nul | findstr /C:"trading_pipeline" >nul 2>&1
 if errorlevel 1 (
     echo [%time%] TRADING PIPELINE DOWN - restarting...
@@ -179,7 +179,7 @@ if errorlevel 1 (
     echo [%time%] TRADING PIPELINE started
 )
 
-:: === 日志轮转 (每50轮~25分钟) ===
+:: === Log rotation (every 50 cycles ~25 minutes) ===
 set /a CYCLE=!RANDOM! %% 50
 if !CYCLE! equ 0 (
     for %%f in ("%PROJ%\logs\api_gateway.log" "%PROJ%\logs\pipeline.log" "%PROJ%\logs\frontend.log" "%PROJ%\logs\data_service.log" "%PROJ%\logs\factor_service.log" "%PROJ%\logs\model_train.log" "%PROJ%\logs\model_infer.log" "%PROJ%\logs\risk_service.log" "%PROJ%\logs\execution_service.log") do (
@@ -197,10 +197,10 @@ if !CYCLE! equ 0 (
 goto :loop
 
 :: ═══════════════════════════════════════════════
-:: 子程序: 启动全部 v2 服务
+:: Subroutine: start all v2 services
 :: ═══════════════════════════════════════════════
 :start_all
-:: === 先杀掉所有 v2 端口上的残留进程，防止端口占用导致启动失败 ===
+:: === Kill leftover processes on all v2 ports first to avoid bind failures ===
 echo [%time%] Killing stale processes on v2 ports...
 for %%p in (%API_PORT% %DATA_PORT% %FACTOR_PORT% %TRAIN_PORT% %INFER_PORT% %RISK_PORT% %EXEC_PORT% %FRONTEND_PORT%) do (
     for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%p.*LISTENING" 2^>nul') do (
@@ -237,7 +237,7 @@ start "QuantAI-Pipeline" /MIN "%PY%" "%PROJ%\trading_pipeline.py" --interval 300
 goto :eof
 
 :: ═══════════════════════════════════════════════
-:: 子程序: 停止全部 v2 服务
+:: Subroutine: stop all v2 services
 :: ═══════════════════════════════════════════════
 :stop_all
 for %%p in (%API_PORT% %DATA_PORT% %FACTOR_PORT% %TRAIN_PORT% %INFER_PORT% %RISK_PORT% %EXEC_PORT% %FRONTEND_PORT%) do (
@@ -249,7 +249,7 @@ timeout /t 2 /nobreak >nul
 goto :eof
 
 :: ═══════════════════════════════════════════════
-:: 子程序: 微服务健康检查
+:: Subroutine: microservice health check
 :: ═══════════════════════════════════════════════
 :check_svc
 curl -s http://localhost:%2/health >nul 2>&1
@@ -263,7 +263,7 @@ if errorlevel 1 (
 goto :eof
 
 :: ═══════════════════════════════════════════════
-:: 子程序: 熔断检查
+:: Subroutine: circuit-breaker / cooldown check
 :: ═══════════════════════════════════════════════
 :check_cooldown
 if !%2! geq %MAX_RETRIES% (

@@ -1,23 +1,23 @@
 """
-Trading Pipeline — v2 核心交易编排器
-=====================================
-替代 v1 auto_trader.py，串联六微服务执行 T+0 交易周期。
+Trading Pipeline — v2 core trading orchestrator
+===============================================
+Replaces v1 auto_trader.py, chaining six microservices through a T+0 trading cycle.
 
-v2.2 重构 (T04):
-  • Pre-cycle: 交易日切换 / 市场时段 / Tiger同步 / 熔断 / 杠杆 / 日交易上限
-  • 七步主线: Universe → Data → Factors → Inference → Risk → Optimize → Execute
-  • Post-cycle: 空头修复 / WS推送 / 状态保存
-  • TigerExecutor 统一 live/paper 执行
+v2.2 refactor (T04):
+  • Pre-cycle: trading-day rollover / market session / Tiger sync / circuit breaker / leverage / daily trade cap
+  • Seven-step main path: Universe → Data → Factors → Inference → Risk → Optimize → Execute
+  • Post-cycle: short-position repair / WS push / state persist
+  • TigerExecutor unifies live/paper execution
 
-七步流程:
-  0. Get Active Universe — 获取当日活跃股票池
+Seven-step flow:
+  0. Get Active Universe — fetch the day's active stock universe
   1. Fetch Market Data — HTTP → data-service:8011
-  2. Compute Factors — 本地 FactorEngine
-  3. Run Inference — 本地 InferenceEngine
-  4. Apply Risk Checks — RiskGate（四道风控）
+  2. Compute Factors — local FactorEngine
+  3. Run Inference — local InferenceEngine
+  4. Apply Risk Checks — RiskGate (four-layer risk)
   5. Optimize Portfolio — HTTP → execution-service:8016 BL optimizer
   6. Execute Rebalance — TigerExecutor (live/paper)
-  7. Record Performance — 写入 shared database
+  7. Record Performance — write to shared database
 """
 import asyncio
 import json
@@ -38,7 +38,7 @@ from shared.risk_gate import RiskGate, RiskResult
 from shared.signal_to_views import signals_to_bl_views, validate_views
 import shared.tiger_bridge as _tiger_bridge
 
-# ── v2 服务模块（已有，不改动） ──────────────────────────────
+# ── v2 service modules (existing, do not modify) ────────────
 try:
     from services.factor_service.engine.factor_engine import FactorEngine
 except ImportError as e:
@@ -57,7 +57,7 @@ except ImportError as e:
     logger.warning(f"CircuitBreaker import failed ({e}), using stub")
     CircuitBreaker = None  # type: ignore[assignment]
 
-# ── v2 共享模块 ───────────────────────────────────────────────
+# ── v2 shared modules ─────────────────────────────────────────
 from shared.portfolio_manager import PortfolioManager
 from shared.risk_manager import RiskManager
 from shared.tiger_executor import TigerExecutor
@@ -68,23 +68,23 @@ from shared.git_sync import git_sync
 
 
 class TradingPipeline:
-    """v2 核心交易编排器。
+    """v2 core trading orchestrator.
 
-    七步串联 v2 微服务管线，替代 v1 auto_trader.py。
-    每步独立 try/except，单步失败不中断整轮循环。
+    Chains seven steps through the v2 microservice pipeline, replacing v1 auto_trader.py.
+    Each step has its own try/except; a single-step failure does not abort the cycle.
 
-    Pre-cycle 检查 (P0/P1):
-      - 交易日切换 → 重置风控与日初数据
-      - 市场时段 → 休市时仅更新估值
-      - Tiger 同步 → 全覆盖拉取持仓/现金
-      - 组合熔断 → 日亏≥5% 或回撤≥25% 触发平仓
-      - 杠杆铁律 → 杠杆≥1.001 阻止所有买入
-      - 日交易上限 → 达上限后跳过交易仅更新估值
+    Pre-cycle checks (P0/P1):
+      - Trading-day rollover → reset risk controls and day-start data
+      - Market session → mark-to-market only when markets are closed
+      - Tiger sync → overwrite-fetch positions/cash
+      - Portfolio circuit breaker → liquidate if daily loss ≥5% or drawdown ≥25%
+      - Leverage hard rule → block all buys when leverage ≥ 1.001
+      - Daily trade cap → skip trading and mark-to-market only once the cap is hit
 
-    Post-cycle 检查:
-      - 空头修复 → 检测负持仓自动买回
-      - WS 推送 → 每步和周期总结推送到前端
-      - 状态保存 → portfolio/risk 状态持久化
+    Post-cycle checks:
+      - Short-position repair → detect negative holdings and buy back
+      - WS push → push each step and the cycle summary to the frontend
+      - State persist → persist portfolio/risk state
     """
 
     def __init__(self, config: PipelineConfig) -> None:
@@ -92,33 +92,33 @@ class TradingPipeline:
         self.service_urls: Dict[str, str] = config.SERVICE_BASE_URLS
         self.logger = logger  # alias for readability
 
-        # ── 本地引擎（v2 已有，导入失败时降级为 stub） ──────
-        logger.info("初始化本地引擎...")
+        # ── Local engines (v2 existing; degrade to stub on import failure) ──
+        logger.info("Initializing local engines...")
         if FactorEngine is not None:
             self.factor_engine: FactorEngine = FactorEngine()
             self.factor_engine.register_all()
-            logger.info(f"  ✅ FactorEngine 已就绪 ({len(self.factor_engine.factors)} factors)")
+            logger.info(f"  ✅ FactorEngine ready ({len(self.factor_engine.factors)} factors)")
         else:
             self.factor_engine = None  # type: ignore[assignment]
-            logger.warning("  ⚠️ FactorEngine 不可用 — stub 模式")
+            logger.warning("  ⚠️ FactorEngine unavailable — stub mode")
 
         if InferenceEngine is not None:
             self.inference_engine: InferenceEngine = InferenceEngine()
             load_status = self.inference_engine.load_models()
             loaded_count = sum(1 for v in load_status.values() if v)
-            logger.info(f"  ✅ InferenceEngine 已就绪 ({loaded_count}/{len(load_status)} models loaded)")
+            logger.info(f"  ✅ InferenceEngine ready ({loaded_count}/{len(load_status)} models loaded)")
         else:
             self.inference_engine = None  # type: ignore[assignment]
-            logger.warning("  ⚠️ InferenceEngine 不可用 — stub 模式")
+            logger.warning("  ⚠️ InferenceEngine unavailable — stub mode")
 
-        # ── 风控组件 ─────────────────────────────────────────
-        logger.info("初始化风控组件...")
+        # ── Risk components ──────────────────────────────────
+        logger.info("Initializing risk components...")
         if CircuitBreaker is not None:
             self.circuit_breaker: CircuitBreaker = CircuitBreaker()
-            logger.info("  ✅ CircuitBreaker 已就绪")
+            logger.info("  ✅ CircuitBreaker ready")
         else:
             self.circuit_breaker = None  # type: ignore[assignment]
-            logger.warning("  ⚠️ CircuitBreaker 不可用 — stub 模式")
+            logger.warning("  ⚠️ CircuitBreaker unavailable — stub mode")
         self.risk_gate: RiskGate = RiskGate(
             circuit_breaker=self.circuit_breaker,
             risk_service_url=self.service_urls["risk"],
@@ -128,10 +128,10 @@ class TradingPipeline:
                 "cvar_limit_pct": config.CVAR_LIMIT_PCT,
             },
         )
-        logger.info("  ✅ RiskGate (四道风控) 已就绪")
+        logger.info("  ✅ RiskGate (four-layer risk) ready")
 
-        # ── 组合管理 ─────────────────────────────────────────
-        logger.info("初始化组合管理器...")
+        # ── Portfolio management ─────────────────────────────
+        logger.info("Initializing portfolio manager...")
         try:
             from configs.settings import settings as _settings
 
@@ -141,7 +141,7 @@ class TradingPipeline:
         self.portfolio: PortfolioManager = PortfolioManager(
             initial_capital=_init_cap,
         )
-        # 尝试加载已有状态
+        # Try to load existing state
         self.portfolio.load_state("data/portfolio_state.json")
         # Recover if a prior Tiger zero-NAV sync wiped local buying power
         if self.portfolio.ensure_buying_power(_init_cap):
@@ -150,14 +150,14 @@ class TradingPipeline:
                 f"(Tiger paper account was empty / unfunded)"
             )
         logger.info(
-            f"  ✅ PortfolioManager 已就绪 "
-            f"(初始 ${_init_cap:,.2f}, "
-            f"现金 ${self.portfolio.cash:,.2f}, "
-            f"持仓 {len(self.portfolio.positions)} 只)"
+            f"  ✅ PortfolioManager ready "
+            f"(initial ${_init_cap:,.2f}, "
+            f"cash ${self.portfolio.cash:,.2f}, "
+            f"{len(self.portfolio.positions)} positions)"
         )
 
-        # ── 风控管理器 (v2) ──────────────────────────────────
-        logger.info("初始化风控管理器 (v2)...")
+        # ── Risk manager (v2) ────────────────────────────────
+        logger.info("Initializing risk manager (v2)...")
         self.risk_manager: RiskManager = RiskManager(
             initial_capital=self.portfolio.initial_capital,
             breaker_mode="hard",
@@ -168,50 +168,50 @@ class TradingPipeline:
             self.portfolio.total_value,
             self.portfolio.cash,
         )
-        logger.info("  ✅ RiskManager (v2) 已就绪")
+        logger.info("  ✅ RiskManager (v2) ready")
 
-        # ── 每日状态追踪 ─────────────────────────────────────
+        # ── Daily state tracking ──────────────────────────────
         self.daily_state: DailyState = DailyState(
             daily_start_value=self.portfolio.total_value,
         )
-        logger.info("  ✅ DailyState 已就绪")
+        logger.info("  ✅ DailyState ready")
 
-        # ── Tiger 连接 ───────────────────────────────────────
-        logger.info("初始化 Tiger 连接...")
+        # ── Tiger connection ─────────────────────────────────
+        logger.info("Initializing Tiger connection...")
         self.tiger = _tiger_bridge
         self.tiger_ready: bool = self.tiger.connect()
         if self.tiger_ready:
-            logger.info("  ✅ Tiger Broker 已连接")
+            logger.info("  ✅ Tiger Broker connected")
         else:
-            logger.warning("  ⚠️ Tiger Broker 未连接 — Paper Trading 模式")
+            logger.warning("  ⚠️ Tiger Broker not connected — Paper Trading mode")
 
-        # ── 执行器（模拟账号默认 paper；仅显式 live 且非 sim 才实盘）──
-        logger.info("初始化 TigerExecutor...")
+        # ── Executor (sim accounts default to paper; live only when explicit live and not sim) ──
+        logger.info("Initializing TigerExecutor...")
         from shared.execution_mode import get_execution_mode, is_simulation_mode
 
         exec_mode = get_execution_mode()
         if is_simulation_mode():
-            logger.info("  🔒 模拟账号模式已锁定 — EXECUTION_MODE=paper")
+            logger.info("  🔒 Simulation account locked — EXECUTION_MODE=paper")
         self.executor: TigerExecutor = TigerExecutor(
             mode=exec_mode if (self.tiger_ready and exec_mode == "live") else "paper",
             portfolio=self.portfolio,
             risk=self.risk_manager,
             tiger_bridge=self.tiger,
         )
-        logger.info(f"  ✅ TigerExecutor 已就绪 (mode={self.executor.mode})")
+        logger.info(f"  ✅ TigerExecutor ready (mode={self.executor.mode})")
 
-        # ── WebSocket 推送器 ─────────────────────────────────
+        # ── WebSocket pusher ─────────────────────────────────
         api_base: str = self.service_urls.get("api", "")
         self.ws_pusher: WsPusher = WsPusher(
             api_url=api_base,
             enabled=config.ENABLE_WS_PUSH,
         )
         if config.ENABLE_WS_PUSH:
-            logger.info("  ✅ WsPusher 已启用")
+            logger.info("  ✅ WsPusher enabled")
         else:
-            logger.info("  ⚠️ WsPusher 已禁用 (ENABLE_WS_PUSH=False)")
+            logger.info("  ⚠️ WsPusher disabled (ENABLE_WS_PUSH=False)")
 
-        # ── 数据目录 ─────────────────────────────────────────
+        # ── Data directory ───────────────────────────────────
         self.data_dir: Path = Path("data/daily")
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -234,17 +234,17 @@ class TradingPipeline:
         except Exception as e:
             logger.info(f"  ⚠️ Redis cache warm skipped: {e}")
 
-        # ── HTTP 客户端 ──────────────────────────────────────
+        # ── HTTP client ──────────────────────────────────────
         self._http: Optional[httpx.AsyncClient] = None
 
-        # ── 状态 ────────────────────────────────────────────
+        # ── State ────────────────────────────────────────────
         self.cycle_count: int = 0
         self.trades_today: int = 0
         self.trade_date: str = datetime.now().strftime("%Y-%m-%d")
         self._market_round_index: int = 0
 
         logger.info("=" * 60)
-        logger.info("TradingPipeline 初始化完成")
+        logger.info("TradingPipeline initialization complete")
         logger.info("=" * 60)
 
     async def _get_http(self) -> httpx.AsyncClient:
@@ -268,19 +268,19 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def run(self, interval_seconds: int = 300) -> None:
-        """主循环：每隔 interval_seconds 秒运行一个交易周期。
+        """Main loop: run one trading cycle every interval_seconds.
 
         Args:
-            interval_seconds: 循环间隔，默认 300s (5 min)
+            interval_seconds: Cycle interval; default 300s (5 min)
         """
-        logger.info(f"🚀 交易管线启动 — 间隔 {interval_seconds}s")
+        logger.info(f"🚀 Trading pipeline started — interval {interval_seconds}s")
 
-        # ── P2-3: 强制卖出指定持仓 ──────────────────────────
+        # ── P2-3: Force-sell specified holdings ──────────────
         if self.config.FORCE_SELL_TICKERS:
             try:
                 self._execute_force_sells()
             except Exception as exc:
-                logger.error(f"强制清仓异常 (非致命): {exc}")
+                logger.error(f"Force-sell error (non-fatal): {exc}")
 
         try:
             while True:
@@ -289,13 +289,13 @@ class TradingPipeline:
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:
-                    logger.exception(f"❌ Cycle #{self.cycle_count} 异常: {e}")
+                    logger.exception(f"❌ Cycle #{self.cycle_count} error: {e}")
                     retry_wait: int = 60
-                    logger.info(f"休眠 {retry_wait}s 后重试...")
+                    logger.info(f"Sleeping {retry_wait}s then retrying...")
                     await asyncio.sleep(retry_wait)
                     continue
 
-                # ── P2-1: Git 自动同步 (每6周期) ────────────
+                # ── P2-1: Git auto-sync (every 6 cycles) ─────────
                 if (
                     self.config.GIT_AUTO_SYNC
                     and self.cycle_count > 0
@@ -304,15 +304,15 @@ class TradingPipeline:
                     try:
                         self._git_sync()
                     except Exception as exc:
-                        logger.debug(f"Git 同步异常 (静默): {exc}")
+                        logger.debug(f"Git sync error (silent): {exc}")
 
-                logger.info(f"休眠 {interval_seconds // 60} 分钟...")
+                logger.info(f"Sleeping {interval_seconds // 60} minutes...")
                 await asyncio.sleep(interval_seconds)
         finally:
             await self.close()
 
     async def run_cycle(self) -> Optional[Dict]:
-        """执行一次完整的 T+0 交易周期。
+        """Run one complete T+0 trading cycle.
 
         Returns:
             dict with cycle summary or None on early abort.
@@ -327,21 +327,21 @@ class TradingPipeline:
         )
 
         # ═══════════════════════════════════════════════════════════
-        # Pre-cycle 检查
+        # Pre-cycle checks
         # ═══════════════════════════════════════════════════════════
 
-        # ── 1. 交易日切换检测 ────────────────────────────────
+        # ── 1. Trading-day rollover detection ────────────────
         if self.daily_state.check_date_roll():
             self.risk_manager.reset_daily_state()
             self.daily_state.reset_for_new_day(self.portfolio.total_value)
             self.trades_today = 0
             self.trade_date = self.daily_state.trade_date
 
-        # ── 2. P0-3: 市场时段检查 ────────────────────────────
+        # ── 2. P0-3: Market-session check ─────────────────────
         if self.config.TRADING_HOURS_ONLY:
             try:
                 if not is_any_market_open():
-                    logger.info("📴 所有市场休市，跳过交易 — 仅更新估值")
+                    logger.info("📴 All markets closed, skipping trades — mark-to-market only")
                     prices = await self._get_live_prices()
                     self.portfolio.update_value(prices)
                     await self._push_step_update(0, {
@@ -350,9 +350,9 @@ class TradingPipeline:
                     })
                     return None
             except Exception as e:
-                logger.warning(f"市场时段检查异常: {e}，继续执行")
+                logger.warning(f"Market-session check error: {e}, continuing")
 
-        # ── 3. P0-4, P0-5: Tiger 状态同步 ────────────────────
+        # ── 3. P0-4, P0-5: Tiger state sync ──────────────────
         if self.tiger_ready:
             try:
                 sync_result = self.portfolio.sync_from_tiger(self.tiger, force=False)
@@ -372,8 +372,8 @@ class TradingPipeline:
                     if self.circuit_breaker is not None:
                         self.circuit_breaker.set_nav(self.portfolio.total_value)
                     logger.info(
-                        f"🔄 Tiger 同步: {sync_result.get('positions')} 只持仓, "
-                        f"现金 ${sync_result.get('cash', 0):,.2f}"
+                        f"🔄 Tiger sync: {sync_result.get('positions')} positions, "
+                        f"cash ${sync_result.get('cash', 0):,.2f}"
                     )
                 elif src == "tiger_zero_nav_preserved":
                     # Keep risk/local book aligned with preserved capital
@@ -383,12 +383,12 @@ class TradingPipeline:
                         is_tiger_sync=False,
                     )
                     logger.warning(
-                        "🛡️ Tiger 纸账户 NAV≈0 — 已保留本地资金，继续本地 paper 下单"
+                        "🛡️ Tiger paper account NAV≈0 — local capital preserved, continuing local paper orders"
                     )
             except Exception as e:
-                logger.warning(f"Tiger 同步异常（继续使用本地数据）: {e}")
+                logger.warning(f"Tiger sync error (continuing with local data): {e}")
 
-        # ── 4. P0-2: 组合熔断检查 ────────────────────────────
+        # ── 4. P0-2: Portfolio circuit-breaker check ──────────
         try:
             prices = await self._get_live_prices()
             self.portfolio.update_value(prices)
@@ -410,7 +410,7 @@ class TradingPipeline:
 
         report = self.risk_manager.check_circuit_breaker()
         if report.circuit_breaker and self.risk_manager.breaker_mode == "hard":
-            logger.error(f"🚨 熔断触发: {report.reason}")
+            logger.error(f"🚨 Circuit breaker tripped: {report.reason}")
             try:
                 from shared.kill_switch import get_kill_switch
 
@@ -443,31 +443,31 @@ class TradingPipeline:
             })
             return None
 
-        # ── 5. P1-1: 杠杆检查 ────────────────────────────────
+        # ── 5. P1-1: Leverage check ───────────────────────────
         leverage_blocked: bool = False
         if self.tiger_ready:
             try:
                 acct = self.tiger.get_account_info()
                 if acct and self.risk_manager.check_leverage(acct):
-                    logger.warning("🚫 杠杆铁律: 阻止所有买入")
+                    logger.warning("🚫 Leverage hard rule: blocking all buys")
                     await self.ws_pusher.push_alert(
                         "leverage",
-                        f"Tiger 杠杆率 {acct.get('leverage', '?')} ≥ 1.001 — 阻止所有买入",
+                        f"Tiger leverage {acct.get('leverage', '?')} ≥ 1.001 — blocking all buys",
                     )
                     leverage_blocked = True
             except Exception as e:
-                logger.warning(f"杠杆检查异常: {e}")
+                logger.warning(f"Leverage check error: {e}")
 
-        # ── P0-3: 杠杆阻止买入 ────────────────────────────────
+        # ── P0-3: Leverage blocks buys ────────────────────────
         if leverage_blocked:
-            logger.error("🚫 Tiger 账户杠杆率过高 — 跳过所有买入")
+            logger.error("🚫 Tiger account leverage too high — skipping all buys")
             return None
 
-        # ── 6. P1-2: 每日交易上限 ────────────────────────────
+        # ── 6. P1-2: Daily trade cap ──────────────────────────
         if self.risk_manager.check_daily_limit():
             logger.info(
-                f"📊 日交易上限已达 ({self.risk_manager.trades_today}/"
-                f"{self.risk_manager.max_daily_trades})，仅更新估值"
+                f"📊 Daily trade cap reached ({self.risk_manager.trades_today}/"
+                f"{self.risk_manager.max_daily_trades}), mark-to-market only"
             )
             self.portfolio.update_value(prices)
             await self._push_step_update(0, {
@@ -484,15 +484,15 @@ class TradingPipeline:
         # Step 0: Get Active Universe
         tickers: List[str] = await self._get_active_universe()
         if not tickers:
-            logger.warning("活跃股票池为空，跳过本轮")
+            logger.warning("Active universe is empty, skipping this cycle")
             return None
-        logger.info(f"Step 0: 股票池 {len(tickers)} 只")
+        logger.info(f"Step 0: universe {len(tickers)} names")
         await self._push_step_update(0, {"tickers": len(tickers)})
 
         # Step 1: Fetch Market Data
         data: Dict = await self._fetch_market_data(tickers)
         if not data or len(data) < 2:
-            logger.warning("市场数据不足，跳过本轮")
+            logger.warning("Insufficient market data, skipping this cycle")
             return None
         await self._push_step_update(1, {"symbols_fetched": len(data)})
 
@@ -507,11 +507,11 @@ class TradingPipeline:
         # Step 3: Run Inference
         signals: List[Dict] = await self._run_inference(factor_df, tickers)
         if not signals:
-            logger.warning("无有效信号，跳过本轮")
+            logger.warning("No valid signals, skipping this cycle")
             return None
         await self._push_step_update(3, {"raw_signals": len(signals)})
 
-        # ── DB Write: 保存信号到 signals 表 ──────────────────────
+        # ── DB Write: persist signals to the signals table ────────
         self._write_signals_to_db(signals)
 
         # Step 4: Apply Risk Checks
@@ -530,7 +530,7 @@ class TradingPipeline:
         # Step 6: Execute Rebalance — TigerExecutor
         orders: List[Dict] = await self._execute_rebalance(target_weights)
 
-        # ── DB Write: 保存交易到 trades 表 ──────────────────────
+        # ── DB Write: persist trades to the trades table ──────────
         self._write_trades_to_db(orders)
         await self._push_step_update(6, {
             "orders": len(orders),
@@ -541,10 +541,10 @@ class TradingPipeline:
         await self._record_performance(orders)
 
         # ═══════════════════════════════════════════════════════════
-        # Post-cycle 检查
+        # Post-cycle checks
         # ═══════════════════════════════════════════════════════════
 
-        # ── 7. P1-3: 空头修复 ────────────────────────────────
+        # ── 7. P1-3: Short-position repair ────────────────────
         try:
             if not prices:
                 prices = await self._get_live_prices()
@@ -552,18 +552,18 @@ class TradingPipeline:
                 self.portfolio, self.tiger, prices,
             )
             if fixed:
-                logger.info(f"🔧 空头修复: {fixed} 只")
+                logger.info(f"🔧 Short-position repair: {fixed} names")
         except Exception as e:
-            logger.warning(f"空头修复异常: {e}")
+            logger.warning(f"Short-position repair error: {e}")
 
-        # ── 8. 状态保存 ──────────────────────────────────────
+        # ── 8. Persist state ──────────────────────────────────
         try:
             self.portfolio.save_state()
             self.risk_manager.save_state("data/risk_state.json")
         except Exception as e:
-            logger.warning(f"状态保存异常: {e}")
+            logger.warning(f"State persist error: {e}")
 
-        # ── P2-2: Tiger 全量同步到本地 DB (每轮 + Redis/WS) ──────────
+        # ── P2-2: Full Tiger sync to local DB (every cycle + Redis/WS) ──
         tiger_snap: Dict = {}
         if self.tiger_ready:
             try:
@@ -633,12 +633,12 @@ class TradingPipeline:
         except Exception as e:
             logger.debug(f"tiger snapshot push skipped: {e}")
 
-        # ── 周期汇总 ─────────────────────────────────────────
+        # ── Cycle summary ────────────────────────────────────
         elapsed: float = time.time() - t_start
         logger.info(
-            f"⏱  Cycle #{self.cycle_count} 完成 "
-            f"| 耗时 {elapsed:.1f}s "
-            f"| 信号 {len(signals)} → 通过 {len(approved)} → 订单 {len(orders)}"
+            f"⏱  Cycle #{self.cycle_count} complete "
+            f"| elapsed {elapsed:.1f}s "
+            f"| signals {len(signals)} → passed {len(approved)} → orders {len(orders)}"
         )
 
         cycle_summary = {
@@ -651,7 +651,7 @@ class TradingPipeline:
             "elapsed_seconds": round(elapsed, 2),
         }
 
-        # ── P1-5: WS 推送周期总结 ────────────────────────────
+        # ── P1-5: WS push cycle summary ───────────────────────
         await self.ws_pusher.push_summary(self.cycle_count, cycle_summary)
 
         return cycle_summary
@@ -661,7 +661,7 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _get_active_universe(self) -> List[str]:
-        """获取当日活跃股票池。
+        """Fetch the day's active stock universe.
 
         Returns:
             List of ticker strings, capped at MAX_TICKERS_PER_CYCLE.
@@ -669,7 +669,7 @@ class TradingPipeline:
         t0: float = time.time()
         tickers: List[str] = []
         try:
-            # v2: 从 data-service 获取股票池 (带重试)
+            # v2: fetch universe from data-service (with retry)
             data = await self._retry_http_call(
                 "GET",
                 f"{self.service_urls['data']}/api/v2/data/universe",
@@ -689,13 +689,13 @@ class TradingPipeline:
             else:
                 tickers = []
         except Exception as e:
-            logger.warning(f"获取股票池失败: {e}，使用 v1 fallback")
+            logger.warning(f"Failed to fetch universe: {e}, using v1 fallback")
             tickers = self._get_active_universe_v1_fallback()
 
-        # 过滤并限制数量
+        # Filter and cap count
         tickers = [t for t in tickers if isinstance(t, str) and t]
 
-        # ── 市场轮询：优先当前开市市场，再 round-robin ──
+        # ── Market rotation: prefer currently open markets, then round-robin ──
         if self.config.MARKET_ROUND_ROBIN and self.config.MARKET_ROTATION:
             from shared.market_session import is_market_open, next_open_markets
 
@@ -719,7 +719,7 @@ class TradingPipeline:
                 target_market = rotation[self._market_round_index % len(rotation)]
                 self._market_round_index += 1
                 # When nothing open (rare with US 24h), still cycle for data refresh
-                logger.info(f"  📴 无开市市场命中，仍分析 {target_market}")
+                logger.info(f"  📴 No open market hit, still analyzing {target_market}")
 
             if target_market == "HK":
                 tickers = [t for t in tickers if ".HK" in t]
@@ -736,17 +736,17 @@ class TradingPipeline:
             tickers = tickers[: self.config.MAX_STOCKS_PER_MARKET]
             open_flag = is_market_open(target_market)
             logger.info(
-                f"  🎯 市场轮询: {target_market} open={open_flag}, {len(tickers)} 只"
+                f"  🎯 Market rotation: {target_market} open={open_flag}, {len(tickers)} names"
             )
 
         tickers = tickers[: self.config.MAX_TICKERS_PER_CYCLE]
 
         elapsed: float = time.time() - t0
-        logger.info(f"  Step 0 完成 ({elapsed:.1f}s): {len(tickers)} 只")
+        logger.info(f"  Step 0 complete ({elapsed:.1f}s): {len(tickers)} names")
         return tickers
 
     def _get_active_universe_v1_fallback(self) -> List[str]:
-        """v1 fallback: 从 backend 股票池获取。"""
+        """v1 fallback: fetch from backend stock universe."""
         try:
             from backend.data_engine.stock_universe import stock_universe
             return stock_universe.all_tickers
@@ -782,14 +782,14 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _fetch_market_data(self, tickers: List[str]) -> Dict:
-        """获取市场数据 (v1 fallback + ParquetStore 同步)。
+        """Fetch market data (v1 fallback + ParquetStore sync).
 
-        使用 v1 MarketDataEngine 获取数据，同时写入 ParquetStore 供
-        v2 InferenceEngine 读取。
+        Use v1 MarketDataEngine to fetch data and also write ParquetStore
+        for v2 InferenceEngine to read.
         """
         result = self._fetch_market_data_v1_fallback(tickers)
 
-        # 同步写入 ParquetStore 供 v2 inference engine 使用
+        # Sync-write ParquetStore for the v2 inference engine
         if result:
             try:
                 from services.data_service.storage.parquet_store import ParquetStore
@@ -810,7 +810,7 @@ class TradingPipeline:
         return result
 
     def _fetch_market_data_v1_fallback(self, tickers: List[str]) -> Dict:
-        """v1 fallback: 使用 backend MarketDataEngine。"""
+        """v1 fallback: use backend MarketDataEngine."""
         try:
             from backend.data_engine import MarketDataEngine
             from backend.data_engine.data_pipeline import DataPipeline
@@ -844,10 +844,10 @@ class TradingPipeline:
                 except Exception:
                     errors += 1
 
-            logger.info(f"  Step 1 fallback: {len(data_dict)}/{len(tickers)} 成功, {errors} 失败")
+            logger.info(f"  Step 1 fallback: {len(data_dict)}/{len(tickers)} succeeded, {errors} failed")
             return data_dict
         except Exception as e:
-            logger.error(f"Step 1 fallback 也失败: {e}")
+            logger.error(f"Step 1 fallback also failed: {e}")
             return {}
 
     # ═══════════════════════════════════════════════════════════════
@@ -855,7 +855,7 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _compute_factors(self, data: Dict):
-        """本地 FactorEngine 计算因子。
+        """Local FactorEngine factor computation.
 
         Args:
             data: {ticker: {features: ndarray, close: float}, ...}
@@ -908,7 +908,7 @@ class TradingPipeline:
             logger.info(f"  Step 2 ({elapsed:.1f}s): {n_tickers} tickers × {n_factors} factors")
             return factor_df
         except Exception as e:
-            logger.error(f"Step 2 因子计算失败: {e}", exc_info=True)
+            logger.error(f"Step 2 factor computation failed: {e}", exc_info=True)
             return pd.DataFrame({"ticker": list(data.keys())})
 
     # ═══════════════════════════════════════════════════════════════
@@ -916,7 +916,7 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _run_inference(self, factor_df, tickers: List[str]) -> List[Dict]:
-        """本地 InferenceEngine 模型推理 — Top-N 信号选择。
+        """Local InferenceEngine model inference — Top-N signal selection.
 
         Args:
             factor_df: Factor DataFrame from Step 2 (must have 'ticker' column).
@@ -962,7 +962,7 @@ class TradingPipeline:
                 pass  # If store unavailable, try all tickers
 
             if not tickers:
-                logger.warning("  Step 3: 无有数据的 ticker，跳过推理")
+                logger.warning("  Step 3: no tickers with data, skipping inference")
                 return []
 
             # Regime adapt once per cycle (SPY / fallback)
@@ -1018,7 +1018,7 @@ class TradingPipeline:
                 signals = self._factor_score_fallback(factor_df, tickers)
             return signals
         except Exception as e:
-            logger.error(f"Step 3 推理失败: {e}", exc_info=True)
+            logger.error(f"Step 3 inference failed: {e}", exc_info=True)
             return self._factor_score_fallback(factor_df, tickers)
 
     def _factor_score_fallback(self, factor_df, tickers: List[str]) -> List[Dict]:
@@ -1085,9 +1085,9 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _apply_risk_checks(self, signals: List[Dict]) -> List[Dict]:
-        """RiskGate 四道风控检查。
+        """RiskGate four-layer risk checks.
 
-        逐个信号通过风险关卡，不通过的记录原因并跳过。
+        Pass each signal through the risk gates; record the reason and skip failures.
 
         Args:
             signals: List of signal dicts.
@@ -1097,7 +1097,7 @@ class TradingPipeline:
         """
         t0: float = time.time()
         if not self.config.ENABLE_RISK_CHECKS:
-            logger.info("  Step 4: 风控已禁用 (ENABLE_RISK_CHECKS=False)")
+            logger.info("  Step 4: risk checks disabled (ENABLE_RISK_CHECKS=False)")
             return signals
 
         approved: List[Dict] = []
@@ -1115,7 +1115,7 @@ class TradingPipeline:
             confidence: float = sig.get("confidence", 0.5)
             price: float = sig.get("price", sig.get("close", 0.0))
 
-            # 估算 quantity（基于信号强度和组合现金）
+            # Estimate quantity (based on signal strength and portfolio cash)
             if price <= 0:
                 rejected.append(f"{ticker}: invalid price")
                 continue
@@ -1152,11 +1152,11 @@ class TradingPipeline:
 
         elapsed: float = time.time() - t0
         logger.info(
-            f"  Step 4 ({elapsed:.1f}s): {len(approved)} 通过 / "
-            f"{len(rejected)} 拒绝 / {len(signals)} 总计"
+            f"  Step 4 ({elapsed:.1f}s): {len(approved)} passed / "
+            f"{len(rejected)} rejected / {len(signals)} total"
         )
         if rejected:
-            logger.info(f"    拒绝详情: {rejected[:5]}{'...' if len(rejected) > 5 else ''}")
+            logger.info(f"    Rejection details: {rejected[:5]}{'...' if len(rejected) > 5 else ''}")
 
         return approved
 
@@ -1165,7 +1165,7 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _optimize_portfolio(self, signals: List[Dict]) -> Dict[str, float]:
-        """HTTP → execution-service:8016 Black-Litterman 组合优化。
+        """HTTP → execution-service:8016 Black-Litterman portfolio optimization.
 
         POST /api/v2/execution/optimizer/bl
         Body: {"views": [...], "constraints": {...}}
@@ -1178,16 +1178,16 @@ class TradingPipeline:
         """
         t0: float = time.time()
         if not self.config.ENABLE_PORTFOLIO_OPT:
-            logger.info("  Step 5: 组合优化已禁用 — 使用等权分配")
+            logger.info("  Step 5: portfolio optimization disabled — using equal-weight allocation")
             return self._equal_weight_fallback(signals)
 
         try:
-            # 信号 → BL views
+            # Signals → BL views
             views: List[Dict] = signals_to_bl_views(signals)
             views = validate_views(views)
 
             if not views:
-                logger.warning("Step 5: 无有效 BL views")
+                logger.warning("Step 5: no valid BL views")
                 return {}
 
             http = await self._get_http()
@@ -1209,7 +1209,7 @@ class TradingPipeline:
 
             if resp.status_code != 200:
                 logger.warning(
-                    f"BL optimizer 返回 {resp.status_code}: {resp.text[:200]}"
+                    f"BL optimizer returned {resp.status_code}: {resp.text[:200]}"
                 )
                 return self._equal_weight_fallback(signals)
 
@@ -1237,14 +1237,14 @@ class TradingPipeline:
             return weights
 
         except httpx.TimeoutException:
-            logger.warning("Step 5 BL optimizer 超时 — 使用等权 fallback")
+            logger.warning("Step 5 BL optimizer timed out — using equal-weight fallback")
             return self._equal_weight_fallback(signals)
         except Exception as e:
-            logger.error(f"Step 5 失败: {e}")
+            logger.error(f"Step 5 failed: {e}")
             return self._equal_weight_fallback(signals)
 
     def _equal_weight_fallback(self, signals: List[Dict]) -> Dict[str, float]:
-        """等权分配 fallback — NAV-aware deploy fraction (not 20% cash park)."""
+        """Equal-weight fallback — NAV-aware deploy fraction (not 20% cash park)."""
         if not signals:
             return {}
         try:
@@ -1269,10 +1269,10 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _execute_rebalance(self, target_weights: Dict[str, float]) -> List[Dict]:
-        """TigerExecutor 统一再平衡执行。
+        """TigerExecutor unified rebalance execution.
 
-        使用 v2 TigerExecutor (live/paper 策略模式) 执行权重调整。
-        替代 v1 的 PaperExecutor 手动循环。
+        Use v2 TigerExecutor (live/paper strategy mode) to apply weight adjustments.
+        Replaces the v1 PaperExecutor manual loop.
 
         Args:
             target_weights: {ticker: target_weight, ...} from Step 5.
@@ -1282,11 +1282,11 @@ class TradingPipeline:
         """
         t0: float = time.time()
         if not target_weights:
-            logger.info("  Step 6: 无目标权重，跳过执行")
+            logger.info("  Step 6: no target weights, skipping execution")
             return []
 
         try:
-            # 获取实时价格（优先HTTP，失败则用信号自带price）
+            # Fetch live prices (HTTP first; fall back to signal-carried price)
             prices: Dict[str, float] = {}
             for ticker in target_weights:
                 # Redis quote cache first
@@ -1334,7 +1334,7 @@ class TradingPipeline:
                     pass
 
             if not prices:
-                logger.warning("Step 6: 无有效价格，跳过执行")
+                logger.warning("Step 6: no valid prices, skipping execution")
                 return []
 
             # Delegate to TigerExecutor.execute_rebalance
@@ -1352,18 +1352,18 @@ class TradingPipeline:
             elapsed: float = time.time() - t0
             rejected: int = len(orders) - filled
             logger.info(
-                f"  Step 6 ({elapsed:.1f}s): {filled} 笔成交"
-                + (f", {rejected} 笔拒绝" if rejected else "")
+                f"  Step 6 ({elapsed:.1f}s): {filled} fills"
+                + (f", {rejected} rejected" if rejected else "")
             )
 
-            # 状态保存
+            # Persist state
             if orders:
                 self.portfolio.save_state()
 
             return orders
 
         except Exception as e:
-            logger.error(f"Step 6 执行失败: {e}")
+            logger.error(f"Step 6 execution failed: {e}")
             return []
 
     # ═══════════════════════════════════════════════════════════════
@@ -1371,7 +1371,7 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     async def _record_performance(self, orders: List[Dict]) -> None:
-        """绩效记录 — 写入 cache/cycle_history.jsonl + 可选 PostgreSQL。
+        """Performance recording — write cache/cycle_history.jsonl + optional PostgreSQL.
 
         Args:
             orders: Executed orders from Step 6.
@@ -1382,9 +1382,9 @@ class TradingPipeline:
 
             logger.info(
                 f"  Step 7 ({time.time() - t0:.1f}s): "
-                f"总资产 ${metrics.get('total_value', 0):,.0f} | "
-                f"盈亏 {metrics.get('total_return_pct', 0):+.1f}% | "
-                f"持仓 {metrics.get('num_positions', 0)} 只"
+                f"total assets ${metrics.get('total_value', 0):,.0f} | "
+                f"P&L {metrics.get('total_return_pct', 0):+.1f}% | "
+                f"{metrics.get('num_positions', 0)} positions"
             )
 
             # Institutional audit trail
@@ -1407,7 +1407,7 @@ class TradingPipeline:
             except Exception as audit_exc:
                 logger.debug(f"AuditTrail skipped: {audit_exc}")
 
-            # ── CycleSummary 持久化到 cache/cycle_history.jsonl（追加模式）──
+            # ── CycleSummary persist to cache/cycle_history.jsonl (append) ──
             cycle_summary = {
                 "cycle": self.cycle_count,
                 "timestamp": datetime.now().isoformat(),
@@ -1433,10 +1433,10 @@ class TradingPipeline:
             # (Previously imported non-existent shared.database.models.CyclePerformance.)
 
         except Exception as e:
-            logger.error(f"Step 7 绩效记录异常: {e}")
+            logger.error(f"Step 7 performance recording error: {e}")
 
     # ═══════════════════════════════════════════════════════════════
-    # DB Write Helpers — 将信号/交易写入 SQLite 数据库
+    # DB Write Helpers — write signals/trades to the SQLite database
     # ═══════════════════════════════════════════════════════════════
 
     def _get_db_path(self) -> Path:
@@ -1514,7 +1514,7 @@ class TradingPipeline:
                 written += 1
 
             conn.commit()
-            logger.debug(f"  📊 signals → DB: {written} 条写入 signals 表")
+            logger.debug(f"  📊 signals → DB: {written} rows written to signals table")
         except Exception as e:
             logger.warning(f"signals DB write failed (non-critical): {e}")
         finally:
@@ -1615,7 +1615,7 @@ class TradingPipeline:
                 written += 1
 
             conn.commit()
-            logger.debug(f"  📈 trades → DB: {written} 笔写入 trades 表")
+            logger.debug(f"  📈 trades → DB: {written} fills written to trades table")
         except Exception as e:
             logger.warning(f"trades DB write failed (non-critical): {e}")
         finally:
@@ -1692,10 +1692,10 @@ class TradingPipeline:
         max_retries: int = 3,
         **kwargs,
     ) -> Optional[Dict]:
-        """指数退避重试 HTTP 调用。
+        """Exponential-backoff retry for HTTP calls.
 
-        v2 服务不可用时自动重试，全部失败返回 None 由调用方走
-        v1 fallback。
+        Automatically retry when a v2 service is unavailable; return None
+        after all attempts fail so the caller can use the v1 fallback.
 
         Args:
             method: HTTP method (``"GET"`` / ``"POST"``).
@@ -1745,17 +1745,17 @@ class TradingPipeline:
     # ═══════════════════════════════════════════════════════════════
 
     def _execute_force_sells(self) -> None:
-        """启动时强制清仓 FORCE_SELL_TICKERS 中的持仓。
+        """Force-liquidate holdings in FORCE_SELL_TICKERS on startup.
 
-        遍历 config.FORCE_SELL_TICKERS 列表，对每只在手持仓
-        签发市价卖出单。paper 模式仅更新本地状态；live 模式
-        同时通过 Tiger 下单。
+        Iterate config.FORCE_SELL_TICKERS and issue a market sell for each
+        open position. Paper mode updates local state only; live mode
+        also places the order through Tiger.
         """
         positions: Dict[str, float] = dict(self.portfolio.positions)
         for ticker in self.config.FORCE_SELL_TICKERS:
             if ticker in positions and positions[ticker] != 0.0:
                 shares: float = abs(positions[ticker])
-                logger.warning(f"🔴 强制清仓: {ticker} × {shares} 股")
+                logger.warning(f"🔴 Force-sell: {ticker} × {shares} shares")
 
                 try:
                     if self.tiger_ready:
@@ -1766,9 +1766,9 @@ class TradingPipeline:
                             order_type="MKT",
                         )
                 except Exception as exc:
-                    logger.warning(f"强制清仓 Tiger 下单异常 {ticker}: {exc}")
+                    logger.warning(f"Force-sell Tiger order error {ticker}: {exc}")
 
-                # 更新本地状态。
+                # Update local state.
                 self.portfolio.execute_trade(
                     ticker=ticker,
                     side="sell",
@@ -1776,17 +1776,17 @@ class TradingPipeline:
                     quantity=shares,
                     strategy="force_sell",
                 )
-                logger.info(f"  ✅ 强制清仓完成: {ticker} × {shares}")
+                logger.info(f"  ✅ Force-sell complete: {ticker} × {shares}")
 
     # ═══════════════════════════════════════════════════════════════
     # P2-1: Git Auto-Sync
     # ═══════════════════════════════════════════════════════════════
 
     def _git_sync(self) -> None:
-        """触发一次 git add/commit/pull/push。
+        """Trigger one git add/commit/pull/push.
 
-        通过 ``shared.git_sync.git_sync`` 执行，全部异常静默
-        降级不阻塞交易循环。
+        Runs via ``shared.git_sync.git_sync``; all exceptions are silently
+        degraded so they never block the trading loop.
         """
         logger.info("🔄 Git auto-sync...")
         ok: bool = git_sync(str(Path(__file__).resolve().parent))
@@ -1797,7 +1797,7 @@ class TradingPipeline:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 命令行入口
+# CLI entry point
 # ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
@@ -1812,12 +1812,12 @@ if __name__ == "__main__":
         "--interval",
         type=int,
         default=300,
-        help="循环间隔（秒），默认 300 (5分钟)",
+        help="Cycle interval in seconds; default 300 (5 minutes)",
     )
     parser.add_argument(
         "--once",
         action="store_true",
-        help="运行一次交易循环后退出（开发/测试用）",
+        help="Run one trading cycle then exit (for development/testing)",
     )
     args = parser.parse_args()
 
@@ -1826,12 +1826,12 @@ if __name__ == "__main__":
     async def _main() -> None:
         try:
             if args.once:
-                logger.info("🚀 单次运行模式（--once）")
+                logger.info("🚀 Single-run mode (--once)")
                 result = await pipeline.run_cycle()
                 if result:
-                    logger.info(f"✅ 单次完成: {result}")
+                    logger.info(f"✅ Single run complete: {result}")
                 else:
-                    logger.warning("⚠️ 单次运行无结果（可能数据不足）")
+                    logger.warning("⚠️ Single run returned no result (possibly insufficient data)")
             else:
                 await pipeline.run(interval_seconds=args.interval)
         finally:
@@ -1840,5 +1840,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(_main())
     except KeyboardInterrupt:
-        logger.info("⏹ Trading Pipeline 收到退出信号")
+        logger.info("⏹ Trading Pipeline received shutdown signal")
         sys.exit(0)

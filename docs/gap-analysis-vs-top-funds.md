@@ -1,219 +1,219 @@
-# 📊 量化交易系统差距分析报告：quant-ai-trader vs 顶级量化基金
+# Quantitative Trading System Gap Analysis: quant-ai-trader vs. Top Quant Funds
 
-**作者**: Alice（产品经理 许清楚）  
-**日期**: 2025-06-20  
-**对比对象**: Renaissance Technologies / Two Sigma / Citadel / D.E. Shaw / AQR
-**项目路径**: `quant-ai-trader`
-
----
-
-## 执行摘要
-
-当前 `quant-ai-trader` 项目在低端零售量化交易系统中属于架构较完整的项目（微服务、MLflow、Transformer+RL+FinBERT三模型），但与顶级量化基金的差距是全方位的。**最关键的三个差距**在：数据基础设施（无另类数据/实时管道）、因子工程（~113因子 vs 1000+）、模型架构（~8模型 vs 50+）。建议按照"爬→走→跑"策略分四个阶段推进。
+**Author**: Alice (Product Manager)  
+**Date**: 2025-06-20  
+**Benchmarks**: Renaissance Technologies / Two Sigma / Citadel / D.E. Shaw / AQR  
+**Project path**: `quant-ai-trader`
 
 ---
 
-## 1. 数据基础设施
+## Executive Summary
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+The current `quant-ai-trader` project is relatively complete among low-end retail quantitative trading systems (microservices, MLflow, and a three-model stack of Transformer + RL + FinBERT). The gap versus top quantitative funds, however, is comprehensive. **The three most critical gaps** are data infrastructure (no alternative data or real-time pipelines), factor engineering (~113 factors vs. 1,000+), and model architecture (~8 models vs. 50+). The recommended path is a four-phase crawl-walk-run strategy.
+
+---
+
+## 1. Data Infrastructure
+
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **另类数据** | yfinance OHLCV + FinBERT新闻情绪，无卫星/信用卡/航运/社交媒体数据 | RenTec整合>100种另类数据源；Two Sigma购买信用卡交易数据(>40M消费者)；Citadel使用卫星图监控零售停车场/油罐储备 | 🔴 严重 | P1 | 难 |
-| **数据质量自动化** | 无自动异常检测；缺失值依赖pandas基础fillna；无数据血缘追踪 | 自动异常检测(3-sigma/MAD/IQR+ML)、缺失值多策略补全(KNN/MICE/Prophet)、完整数据血缘DAG | 🔴 严重 | P0 | 中 |
-| **实时数据管道** | yfinance REST API日级拉取，降级模式；无tick级数据；无order book depth | Tick级实时流(Kafka/Redpanda)、L2订单簿深度、微秒级行情、FIX协议接入交易所 | 🔴 严重 | P1 | 极难 |
-| **数据版本化/回放** | Parquet存储无版本控制；无数据回放能力 | DVC/Quilt数据版本化；支持指定日期回放市场状态进行回测验证 | 🟡 中等 | P2 | 中 |
+| **Alternative data** | yfinance OHLCV + FinBERT news sentiment; no satellite, credit-card, shipping, or social-media data | RenTec integrates 100+ alternative data sources; Two Sigma purchases credit-card transaction data (>40M consumers); Citadel uses satellite imagery to monitor retail parking lots and oil tank inventories | Severe | P1 | Hard |
+| **Automated data quality** | No automated anomaly detection; missing values rely on basic pandas `fillna`; no data-lineage tracking | Automated anomaly detection (3-sigma / MAD / IQR + ML); multi-strategy missing-value imputation (KNN / MICE / Prophet); full data-lineage DAG | Severe | P0 | Medium |
+| **Real-time data pipeline** | yfinance REST API daily pulls with a degraded fallback; no tick-level data; no order-book depth | Tick-level real-time streams (Kafka / Redpanda); L2 order-book depth; microsecond-level quotes; FIX protocol exchange connectivity | Severe | P1 | Extreme |
+| **Data versioning / replay** | Parquet storage with no version control; no data-replay capability | DVC / Quilt data versioning; ability to replay market state as of a specified date for backtest validation | Medium | P2 | Medium |
 
-**分析**：数据是量化基金的"石油"。顶级基金每年在另类数据上花费$100M-500M。当前项目数据层仅覆盖传统金融数据的冰山一角。
+**Analysis**: Data is the "oil" of quantitative funds. Top funds spend $100M–$500M per year on alternative data. The current project's data layer covers only a thin slice of traditional financial data.
 
 ---
 
-## 2. 因子工程
+## 2. Factor Engineering
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **因子库规模** | 技术因子51 + 基本面30 + 另类20 + 微观结构12 = **~113因子** | 顶级基金通常 1000-5000+ 因子。AQR公开>100因子；WorldQuant >1000 alpha信号 | 🔴 严重 | P0 | 中 |
-| **因子挖掘自动化** | 手工定义因子类（FactorBase子类）。无自动挖掘 | 遗传编程/遗传算法因子发现（WorldQuant风格）、深度学习自动因子提取（Autoencoder/VAE嵌入）、NLP从财报/研报挖掘因子 | 🔴 严重 | P1 | 难 |
-| **因子衰减监控** | 有decay.py（基础IC衰减），但无自动淘汰机制 | 实时IC/IR/Rank IC监控；自动衰减检测(滚动窗口t检验)；衰减超阈值自动降权/淘汰；因子半衰期估计 | 🟡 中等 | P1 | 中 |
-| **非线性因子交互** | 无。因子仅线性输入模型 | Tree-based/神经网络建模非线性交互；因子交叉(Interaction特征)；Kernel PCA/t-SNE非线性组合 | 🔴 严重 | P2 | 难 |
-| **因子评估体系** | 有IC分析、Fama-MacBeth、分层回测、相关性分析 | 完整评估：IC decay、Factor Sharpe、Turnover、Capacity、Margin、Correlation matrix + VIF多重共线性检测 | 🟢 较小 | P2 | 易 |
+| **Factor library size** | Technical 51 + fundamental 30 + alternative 20 + microstructure 12 = **~113 factors** | Top funds typically run 1,000–5,000+ factors. AQR publishes 100+ factors; WorldQuant has 1,000+ alpha signals | Severe | P0 | Medium |
+| **Automated factor discovery** | Hand-defined factor classes (`FactorBase` subclasses). No automated mining | Genetic programming / genetic-algorithm factor discovery (WorldQuant style); deep-learning automatic factor extraction (autoencoder / VAE embeddings); NLP mining of factors from filings and research reports | Severe | P1 | Hard |
+| **Factor decay monitoring** | `decay.py` exists (basic IC decay) but there is no automatic retirement mechanism | Real-time IC / IR / Rank IC monitoring; automatic decay detection (rolling-window t-tests); automatic down-weighting / retirement when decay exceeds a threshold; factor half-life estimation | Medium | P1 | Medium |
+| **Nonlinear factor interactions** | None. Factors are fed linearly into models | Tree-based / neural modeling of nonlinear interactions; factor-crossing (interaction features); Kernel PCA / t-SNE nonlinear combinations | Severe | P2 | Hard |
+| **Factor evaluation framework** | IC analysis, Fama-MacBeth, stratified backtests, correlation analysis | Full evaluation: IC decay, Factor Sharpe, turnover, capacity, margin, correlation matrix + VIF multicollinearity detection | Small | P2 | Easy |
 
-**分析**：因子数量差距约10倍。更致命的是，当前所有因子都是手工规则（Alpha 1.0），而顶级基金已进入Alpha 3.0（自动因子挖掘+深度学习因子+另类数据因子）。
+**Analysis**: The factor-count gap is roughly 10x. More critically, every current factor is a hand-coded rule (Alpha 1.0), while top funds have moved to Alpha 3.0 (automated factor mining + deep-learning factors + alternative-data factors).
 
 ---
 
-## 3. 模型架构
+## 3. Model Architecture
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **模型多样性** | 约8个模型类型：PatchTST Transformer / PPO RL / FinBERT / GBDT / TCN / TFT / GAT / CrossStock | 50-200+模型并行。RenTec使用隐马尔可夫+随机微分方程；Two Sigma使用深度学习基础模型(类似GPT结构)预测多资产未来收益；Citadel混合统计套利+ML+宏观 | 🔴 严重 | P1 | 极难 |
-| **训练频率/增量学习** | 手动触发训练，无增量学习 | 每日自动重训练；在线增量学习(OGD/FTRL)；模型热更新无需重启服务 | 🔴 严重 | P1 | 难 |
-| **超参数优化** | 无HPO。参数硬编码或手工调整 | Bayesian Optimization (Optuna/Hyperopt)；Multi-fidelity HPO (Hyperband/BOHB)；Neural Architecture Search | 🟡 中等 | P1 | 中 |
-| **模型集成策略** | 简单自适应加权投票（Ensemble._adjust_weights），存在双重归一化bug | Stacking(meta-learner)/Blending；动态模型选择(按市场regime切换)；Bayesian Model Averaging | 🟡 中等 | P0 | 中 |
-| **在线学习/适应性** | 无。模型训练后固定 | 在线随机梯度下降；概念漂移检测；模型衰退监控+自动回滚 | 🔴 严重 | P2 | 难 |
-| **多模态融合** | 价格+新闻文本，简单融合 | 价格+文本+订单流+宏观+另类数据的深度cross-modal attention融合 | 🟡 中等 | P2 | 极难 |
+| **Model diversity** | ~8 model types: PatchTST Transformer / PPO RL / FinBERT / GBDT / TCN / TFT / GAT / CrossStock | 50–200+ models in parallel. RenTec uses hidden Markov models + stochastic differential equations; Two Sigma uses deep-learning foundation models (GPT-like) to predict multi-asset future returns; Citadel mixes statistical arbitrage + ML + macro | Severe | P1 | Extreme |
+| **Training frequency / incremental learning** | Manually triggered training; no incremental learning | Daily automatic retraining; online incremental learning (OGD / FTRL); hot model updates without service restarts | Severe | P1 | Hard |
+| **Hyperparameter optimization** | No HPO. Parameters are hard-coded or tuned by hand | Bayesian Optimization (Optuna / Hyperopt); multi-fidelity HPO (Hyperband / BOHB); Neural Architecture Search | Medium | P1 | Medium |
+| **Model ensemble strategy** | Simple adaptive weighted voting (`Ensemble._adjust_weights`); dual-normalization bug present | Stacking (meta-learner) / blending; dynamic model selection (switch by market regime); Bayesian Model Averaging | Medium | P0 | Medium |
+| **Online learning / adaptability** | None. Models are frozen after training | Online stochastic gradient descent; concept-drift detection; model-decay monitoring + automatic rollback | Severe | P2 | Hard |
+| **Multimodal fusion** | Price + news text, simple fusion | Deep cross-modal attention fusion of price + text + order flow + macro + alternative data | Medium | P2 | Extreme |
 
-**分析**：模型层的核心差距在于"手工操作 vs 自动化"。当前每个模型的训练、部署、更新都需要人工介入，顶级基金已实现全自动化ML pipeline。
+**Analysis**: The core model-layer gap is "manual vs. automated." Training, deployment, and updates of every current model require human intervention. Top funds run a fully automated ML pipeline.
 
 ---
 
-## 4. 执行系统
+## 4. Execution System
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **订单执行算法** | TWAP/VWAP/POV三个基础算法（algo_base.py），Black-Litterman/Markowitz/RiskParity组合优化 | VWAP/TWAP/Implementation Shortfall/Volume Inline/Adaptive Algo等10+种算法；冰山订单/隐藏订单；暗池专用算法 | 🟡 中等 | P1 | 中 |
-| **智能路由(SOR)** | 无。仅通过Tiger API单一路由 | 多交易所/ATS/暗池智能路由；流动性聚合；实时NBBO比较；延迟套利保护 | 🔴 严重 | P2 | 极难 |
-| **暗池接入** | 无 | 接入10-40+暗池/ATS；IOC/FOK订单类型；暗池流动性发现 | 🔴 严重 | P2 | 极难 |
-| **交易成本分析(TCA)** | slippage.py仅有基础滑点建模（固定bps） | 完整TCA：Arrival Cost、Implementation Shortfall、VWAP slippage、Market Impact模型(Almgren-Chriss/Kyle's Lambda)；交易后归因 | 🟡 中等 | P1 | 中 |
-| **低延迟基础设施** | Python/FastAPI/HTTP REST，延迟级别：100-500ms | C++/Java核心；FPGA硬件加速；内核旁路(Solarflare/DPDK)；微波通信；交易所co-location；延迟 <1μs | 🔴 严重 | P2 | 极难 |
+| **Order execution algorithms** | Three basic algorithms (TWAP / VWAP / POV in `algo_base.py`); Black-Litterman / Markowitz / Risk Parity portfolio optimization | 10+ algorithms including VWAP / TWAP / Implementation Shortfall / Volume Inline / Adaptive Algo; iceberg / hidden orders; dark-pool-specific algorithms | Medium | P1 | Medium |
+| **Smart order routing (SOR)** | None. Single route via Tiger API | Multi-exchange / ATS / dark-pool smart routing; liquidity aggregation; real-time NBBO comparison; latency-arbitrage protection | Severe | P2 | Extreme |
+| **Dark-pool access** | None | Access to 10–40+ dark pools / ATS; IOC / FOK order types; dark-pool liquidity discovery | Severe | P2 | Extreme |
+| **Transaction cost analysis (TCA)** | `slippage.py` has only basic slippage modeling (fixed bps) | Full TCA: Arrival Cost, Implementation Shortfall, VWAP slippage, market-impact models (Almgren-Chriss / Kyle's Lambda); post-trade attribution | Medium | P1 | Medium |
+| **Low-latency infrastructure** | Python / FastAPI / HTTP REST; latency class: 100–500 ms | C++ / Java core; FPGA hardware acceleration; kernel bypass (Solarflare / DPDK); microwave links; exchange co-location; latency < 1 us | Severe | P2 | Extreme |
 
-**分析**：执行系统差距取决于交易策略的时间尺度。如果当前策略是日频/小时频，现有TWAP/VWAP已经够用。但如果未来要向分钟级/秒级演进，低延迟基础设施是硬性约束。
+**Analysis**: The execution gap depends on the strategy's time scale. For daily / hourly strategies, existing TWAP / VWAP is adequate. If the system later moves to minute- or second-level trading, low-latency infrastructure becomes a hard constraint.
 
 ---
 
-## 5. 风控体系
+## 5. Risk Management
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **压力测试** | 无系统性压力测试 | 2008金融海啸/2020 COVID/2022加息/GFC等10+种极端历史情景；自定义adversarial scenarios（利率+500bps/VIX 60+等） | 🔴 严重 | P0 | 中 |
-| **对手方风险** | 无。依赖Tiger单一经纪商 | 多主经纪商(Prime Broker)管理；中央清算(CCP)敞口监控；场外衍生品CSA/保证金管理 | 🟡 中等 | P2 | 中 |
-| **流动性风险** | 仅头寸规模限制（20%单一持仓） | 市场冲击模型；Liquidity VaR(LVaR)；流动性评分(Amihud/Bid-Ask Spread/Market Depth)；集中度风险(行业/因子/流动性)；赎回压力情景模拟 | 🔴 严重 | P1 | 中 |
-| **情景/敏感性分析** | 无 | Delta/Gamma/Vega/Theta Greeks（期权敏感度）；因子暴露压力分析（因子±2σ冲击）；相关性矩阵崩坏情景 | 🔴 严重 | P1 | 难 |
-| **实时风控仪表盘** | WebSocket推送熔断/步骤更新；alert_manager.py基础告警 | Grafana实时仪表盘；Prometheus指标；多级告警(企业微信/邮件/短信)；风控团队7×24轮值 | 🟡 中等 | P1 | 中 |
-| **组合再平衡** | 5分钟循环+Black-Litterman优化 | 实时最优执行(TWAP 30min slice)；Tax-aware rebalancing；Multi-period optimization | 🟡 中等 | P2 | 中 |
+| **Stress testing** | No systematic stress testing | 10+ extreme historical scenarios (2008 GFC / 2020 COVID / 2022 rate-hike cycle); custom adversarial scenarios (rates +500 bps / VIX 60+) | Severe | P0 | Medium |
+| **Counterparty risk** | None. Single-broker dependency on Tiger | Multi-prime-broker management; CCP exposure monitoring; OTC derivatives CSA / margin management | Medium | P2 | Medium |
+| **Liquidity risk** | Position-size limits only (20% single-name cap) | Market-impact models; Liquidity VaR (LVaR); liquidity scores (Amihud / bid-ask spread / market depth); concentration risk (sector / factor / liquidity); redemption-stress scenarios | Severe | P1 | Medium |
+| **Scenario / sensitivity analysis** | None | Delta / Gamma / Vega / Theta Greeks (option sensitivities); factor-exposure stress (factor +/- 2-sigma shocks); correlation-matrix breakdown scenarios | Severe | P1 | Hard |
+| **Real-time risk dashboard** | WebSocket push of circuit-breaker / step updates; basic alerts in `alert_manager.py` | Grafana real-time dashboards; Prometheus metrics; multi-channel alerts (WeChat Work / email / SMS); 24x7 risk-desk rotation | Medium | P1 | Medium |
+| **Portfolio rebalancing** | 5-minute loop + Black-Litterman optimization | Real-time optimal execution (TWAP 30-min slices); tax-aware rebalancing; multi-period optimization | Medium | P2 | Medium |
 
-**分析**：当前风控系统的熔断机制（5%日亏熔断）是硬性保障，但缺乏系统性风险管理框架。**最紧迫的是压力测试和流动性风险管理**——历史数据清晰表明$1M→$2.5K的灾难性亏损正是缺乏这些机制的直接后果。
+**Analysis**: The current circuit breaker (5% daily-loss halt) is a hard safety net, but a systematic risk-management framework is missing. **The most urgent needs are stress testing and liquidity-risk management** — historical data clearly shows that the $1M to $2.5K catastrophic drawdown was a direct consequence of lacking these mechanisms.
 
 ---
 
-## 6. 回测框架
+## 6. Backtesting Framework
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **Walk-forward验证** | 基础版本存在（event_engine.py回测循环） | 经典锚定/滚动WFA；Purged K-Fold交叉验证(防信息泄露)；Combinatorial Purged CV | 🟡 中等 | P0 | 中 |
-| **Monte Carlo模拟** | 无 | 参数化bootstrap(收益率重采样)；Block bootstrap(保留自相关)；几何布朗运动模拟；Regime-switching MC | 🔴 严重 | P1 | 中 |
-| **交易成本建模** | slippage.py 固定滑点+基础佣金 | 动态滑点(volatility/volume dependent)；Market Impact(Almgren-Chriss模型，根据订单规模非线性增长)；交易所费用明细表 | 🟡 中等 | P1 | 中 |
-| **幸存者偏差处理** | 无 | Point-in-Time数据(避免前视偏差)；退市证券保留在回测池中；企业行为(corporate actions)调整 | 🔴 严重 | P0 | 中 |
-| **过拟合检测** | 无 | Deflated Sharpe Ratio(DSR)；Haircut Sharpe；Probability of False Discovery；White's Reality Check；样本外/样本内表现比 | 🔴 严重 | P0 | 中 |
-| **回测性能** | 单线程Python，大股票池可能缓慢 | 向量化回测(>1000 tickers秒级)；分布式回测集群；GPU加速回测引擎 | 🟡 中等 | P2 | 难 |
+| **Walk-forward validation** | A basic version exists (`event_engine.py` backtest loop) | Classic anchored / rolling WFA; Purged K-Fold cross-validation (leakage prevention); Combinatorial Purged CV | Medium | P0 | Medium |
+| **Monte Carlo simulation** | None | Parametric bootstrap (return resampling); block bootstrap (preserving autocorrelation); geometric Brownian motion simulation; regime-switching MC | Severe | P1 | Medium |
+| **Transaction-cost modeling** | `slippage.py`: fixed slippage + basic commissions | Dynamic slippage (volatility / volume dependent); market impact (Almgren-Chriss; nonlinear in order size); exchange fee schedules | Medium | P1 | Medium |
+| **Survivorship-bias handling** | None | Point-in-time data (avoid look-ahead bias); delisted securities retained in the backtest universe; corporate-action adjustments | Severe | P0 | Medium |
+| **Overfitting detection** | None | Deflated Sharpe Ratio (DSR); Haircut Sharpe; Probability of False Discovery; White's Reality Check; out-of-sample / in-sample performance ratio | Severe | P0 | Medium |
+| **Backtest performance** | Single-threaded Python; large universes can be slow | Vectorized backtests (>1,000 tickers in seconds); distributed backtest clusters; GPU-accelerated backtest engines | Medium | P2 | Hard |
 
-**分析**：回测框架是量化策略开发的"质检体系"。当前项目有基础功能但缺少关键的防过拟合和偏差控制机制，**这是导致策略在实盘中表现远差于回测的核心原因之一**。
+**Analysis**: The backtest framework is the quality-control system for strategy development. The current project has basic functionality but lacks critical anti-overfitting and bias-control mechanisms. **This is a core reason strategies underperform live relative to backtests.**
 
 ---
 
-## 7. 基础设施
+## 7. Infrastructure
 
-| 子维度 | 当前状态 | 顶级标准 | 差距评估 | 优先级 | 难度 |
+| Sub-dimension | Current state | Top-tier standard | Gap assessment | Priority | Difficulty |
 |---------|---------|---------|---------|-------|------|
-| **容器化/编排** | Docker Compose单机部署，无K8s | Kubernetes集群(100-1000+节点)；自动扩缩容(HPA)；服务网格(Istio/Linkerd)；GPU池化管理 | 🟡 中等 | P2 | 难 |
-| **CI/CD/测试** | 无CI/CD；测试目录存在但覆盖极少（tests/基本空）；no pre-commit hooks | 完整CI/CD(Jenkins/GitHub Actions/GitLab CI)；单元测试≥80%；集成测试；端到端测试；自动回测验证PR | 🔴 严重 | P1 | 中 |
-| **模型版本管理/A/B测试** | MLflow基础实验跟踪；无A/B测试框架 | MLflow/Kubeflow全链路管理；A/B测试框架(模型A vs 模型B同时运行，对比实盘Sharpe)；Canary deployment(小资金测试) | 🟡 中等 | P1 | 中 |
-| **监控/可观测性** | loguru日志+基础WebSocket推送 | Prometheus+Grafana全栈监控；ELK日志聚合；分布式追踪(Jaeger)；SLO/SLI/SLA体系；PagerDuty on-call轮值 | 🔴 严重 | P1 | 中 |
-| **灾备/容错** | 无灾备；单节点MySQL/Redis无HA | 多AZ部署；数据库主从+自动故障切换；Redis Sentinel/Cluster；每日异地备份；RPO < 1min, RTO < 5min | 🟡 中等 | P2 | 难 |
-| **安全合规** | 无认证授权(JWT/OAuth)；无审计日志；API Gateway无rate limiting | SSO/LDAP集成；完整审计追踪；SOC2合规；API rate limiting + WAF；密钥管理(Vault/KMS) | 🟡 中等 | P2 | 中 |
+| **Containerization / orchestration** | Docker Compose single-host deploy; no Kubernetes | Kubernetes clusters (100–1,000+ nodes); autoscaling (HPA); service mesh (Istio / Linkerd); GPU pool management | Medium | P2 | Hard |
+| **CI/CD / testing** | No CI/CD; a `tests/` directory exists but coverage is minimal (`tests/` is essentially empty); no pre-commit hooks | Full CI/CD (Jenkins / GitHub Actions / GitLab CI); unit-test coverage >= 80%; integration tests; end-to-end tests; automatic backtest validation of PRs | Severe | P1 | Medium |
+| **Model versioning / A/B testing** | Basic MLflow experiment tracking; no A/B testing framework | Full-lifecycle MLflow / Kubeflow management; A/B testing (model A vs. model B running concurrently, comparing live Sharpe); canary deployment (small-capital tests) | Medium | P1 | Medium |
+| **Monitoring / observability** | loguru logging + basic WebSocket push | Full-stack Prometheus + Grafana; ELK log aggregation; distributed tracing (Jaeger); SLO / SLI / SLA framework; PagerDuty on-call rotation | Severe | P1 | Medium |
+| **Disaster recovery / fault tolerance** | No DR; single-node MySQL / Redis with no HA | Multi-AZ deployment; database primary-replica + automatic failover; Redis Sentinel / Cluster; daily off-site backups; RPO < 1 min, RTO < 5 min | Medium | P2 | Hard |
+| **Security and compliance** | No authz (JWT / OAuth); no audit logs; API Gateway has no rate limiting | SSO / LDAP integration; full audit trail; SOC 2 compliance; API rate limiting + WAF; secrets management (Vault / KMS) | Medium | P2 | Medium |
 
-**分析**：基础设施差距对当前单用户/个人使用场景影响有限。但如果要扩展为小型基金产品或多用户平台，基础设施差距会迅速放大。
+**Analysis**: Infrastructure gaps have limited impact for a single-user / personal setup. If the system expands into a small-fund product or multi-user platform, those gaps will amplify quickly.
 
 ---
 
-## 综合评估：优先级矩阵
+## Composite Assessment: Priority Matrix
 
-### P0 — 上线前必须解决（对策略有效性有直接影响）
+### P0 — Must resolve before go-live (direct impact on strategy validity)
 
-| # | 改进项 | 所属维度 | 难度 | 预期收益 |
+| # | Improvement | Dimension | Difficulty | Expected benefit |
 |---|--------|---------|------|---------|
-| 1 | **过拟合检测**（DSR/Haircut Sharpe/White's RC） | 回测 | 中 | 防止假策略上线 |
-| 2 | **幸存者偏差处理**（Point-in-Time数据） | 回测 | 中 | 消除回测幻觉 |
-| 3 | **Purged Walk-Forward验证** | 回测 | 中 | 真实样本外评估 |
-| 4 | **系统性压力测试**（2008/2020/2022极端情景） | 风控 | 中 | 防范尾部风险 |
-| 5 | **数据质量自动化**（异常检测/缺失智能补全） | 数据 | 中 | 防GIGO |
-| 6 | **因子库扩展至300+**（加入行业/宏观/波动率面因子） | 因子 | 中 | 提升信号多样性 |
-| 7 | **高级集成策略**（Stacking/Blending替代简单加权） | 模型 | 中 | 提升预测准确度 |
+| 1 | **Overfitting detection** (DSR / Haircut Sharpe / White's RC) | Backtest | Medium | Prevent false strategies from going live |
+| 2 | **Survivorship-bias handling** (point-in-time data) | Backtest | Medium | Eliminate backtest illusion |
+| 3 | **Purged walk-forward validation** | Backtest | Medium | True out-of-sample evaluation |
+| 4 | **Systematic stress testing** (2008 / 2020 / 2022 extreme scenarios) | Risk | Medium | Guard against tail risk |
+| 5 | **Automated data quality** (anomaly detection / intelligent missing-value fill) | Data | Medium | Prevent GIGO |
+| 6 | **Expand factor library to 300+** (add sector / macro / volatility-surface factors) | Factors | Medium | Increase signal diversity |
+| 7 | **Advanced ensemble strategy** (stacking / blending replacing simple weighting) | Models | Medium | Improve prediction accuracy |
 
-### P1 — 3个月内（显著提升系统竞争力）
+### P1 — Within 3 months (materially raise system competitiveness)
 
-| # | 改进项 | 所属维度 | 难度 |
+| # | Improvement | Dimension | Difficulty |
 |---|--------|---------|------|
-| 8 | 引入2-3种另类数据（SEC Filing NLP/Reddit/期权异动） | 数据 | 难 |
-| 9 | 因子衰减自动监控与淘汰机制 | 因子 | 中 |
-| 10 | GA遗传算法因子挖掘 | 因子 | 难 |
-| 11 | Bayesian超参数优化(Optuna) | 模型 | 中 |
-| 12 | 模型每日自动重训练流水线 | 模型 | 难 |
-| 13 | MLflow模型A/B测试框架 | 模型 | 中 |
-| 14 | 流动性风险管理（Amihud/LVaR/集中度） | 风控 | 中 |
-| 15 | 完整TCA（Arrival Cost + Almgren-Chriss冲击模型） | 执行 | 中 |
-| 16 | Monte Carlo模拟回测 | 回测 | 中 |
-| 17 | Prometheus+Grafana监控栈 | 基础设施 | 中 |
-| 18 | GitHub Actions CI/CD | 基础设施 | 中 |
+| 8 | Introduce 2–3 alternative data sources (SEC filing NLP / Reddit / options unusual activity) | Data | Hard |
+| 9 | Automated factor-decay monitoring and retirement | Factors | Medium |
+| 10 | Genetic-algorithm factor mining | Factors | Hard |
+| 11 | Bayesian hyperparameter optimization (Optuna) | Models | Medium |
+| 12 | Daily automatic retraining pipeline | Models | Hard |
+| 13 | MLflow model A/B testing framework | Models | Medium |
+| 14 | Liquidity-risk management (Amihud / LVaR / concentration) | Risk | Medium |
+| 15 | Full TCA (Arrival Cost + Almgren-Chriss impact model) | Execution | Medium |
+| 16 | Monte Carlo simulation backtests | Backtest | Medium |
+| 17 | Prometheus + Grafana monitoring stack | Infrastructure | Medium |
+| 18 | GitHub Actions CI/CD | Infrastructure | Medium |
 
-### P2 — 6-12个月（基金级基础设施）
+### P2 — 6–12 months (fund-grade infrastructure)
 
-| # | 改进项 | 所属维度 | 难度 |
+| # | Improvement | Dimension | Difficulty |
 |---|--------|---------|------|
-| 19 | 实时数据管道(Kafka/Redpanda tick级数据) | 数据 | 极难 |
-| 20 | 数据版本化(DVC)与回放 | 数据 | 中 |
-| 21 | 非线性因子交互建模(Kernel PCA/Deep Crossing) | 因子 | 难 |
-| 22 | 模型多样性扩展至20+(加入LSTM/GRU/N-BEATS/DeepAR等) | 模型 | 极难 |
-| 23 | 在线增量学习(OGD/concept drift detection) | 模型 | 难 |
-| 24 | 智能订单路由(SOR)研究 | 执行 | 极难 |
-| 25 | 情景分析(因子冲击/相关性崩坏/Greeks) | 风控 | 难 |
-| 26 | K8s集群+GPU池化+灾备 | 基础设施 | 难 |
+| 19 | Real-time data pipeline (Kafka / Redpanda tick-level data) | Data | Extreme |
+| 20 | Data versioning (DVC) and replay | Data | Medium |
+| 21 | Nonlinear factor-interaction modeling (Kernel PCA / Deep Crossing) | Factors | Hard |
+| 22 | Expand model diversity to 20+ (add LSTM / GRU / N-BEATS / DeepAR, etc.) | Models | Extreme |
+| 23 | Online incremental learning (OGD / concept-drift detection) | Models | Hard |
+| 24 | Smart order routing (SOR) research | Execution | Extreme |
+| 25 | Scenario analysis (factor shocks / correlation breakdown / Greeks) | Risk | Hard |
+| 26 | Kubernetes cluster + GPU pooling + disaster recovery | Infrastructure | Hard |
 
 ---
 
-## 改进路线图
+## Improvement Roadmap
 
-### 🗓️ 第1个月：夯实基础（P0核心项）
-
-```
-Week 1-2: 过拟合检测套件(DSR/Haircut Sharpe/White's Reality Check)
-Week 2-3: Point-in-Time数据pipeline + 幸存者偏差修正
-Week 3-4: Purged Walk-Forward回测验证 + 2008/2020压力测试脚本
-全程:    数据质量监控面板(异常检测/缺失率)
-```
-
-### 🗓️ 第3个月：因子+模型升级（P1关键项）
+### Month 1: Solidify the foundation (P0 core items)
 
 ```
-Month 2:   因子库200→300+ (行业因子/宏观因子/波动率面因子)
-Month 2-3: Stacking集成框架 + Optuna超参数优化
-Month 3:   GA因子挖掘(genetic programming alpha discovery)
-Month 3:   每日自动重训练流水线 + 模型A/B测试上线
+Week 1-2: Overfitting-detection suite (DSR / Haircut Sharpe / White's Reality Check)
+Week 2-3: Point-in-time data pipeline + survivorship-bias correction
+Week 3-4: Purged walk-forward backtest validation + 2008/2020 stress-test scripts
+Ongoing:  Data-quality monitoring panel (anomaly detection / missing-rate)
 ```
 
-### 🗓️ 第6个月：数据+风控深化（P1+P2）
+### Month 3: Factor + model upgrades (P1 critical items)
 
 ```
-Month 4:   2-3种另类数据源接入 + 特征存储(Feature Store)
-Month 4-5: 因子衰减自动化 + 因子淘汰策略
-Month 5:   流动性风险管理 + 完整TCA框架
-Month 6:   Prometheus/Grafana监控 + CI/CD pipeline
+Month 2:   Factor library 200 -> 300+ (sector / macro / volatility-surface factors)
+Month 2-3: Stacking ensemble framework + Optuna hyperparameter optimization
+Month 3:   GA factor mining (genetic programming alpha discovery)
+Month 3:   Daily automatic retraining pipeline + model A/B testing go-live
 ```
 
-### 🗓️ 第12个月：基金级系统（P2）
+### Month 6: Data + risk deepening (P1 + P2)
 
 ```
-Month 7-8:   实时数据管道(Kafka) + 数据版本化
-Month 8-10:  模型扩展至20+ + 在线学习
-Month 10-11: K8s集群 + 灾备
-Month 11-12: 情景分析系统 + 智能路由研究
+Month 4:   Onboard 2-3 alternative data sources + Feature Store
+Month 4-5: Automated factor decay + factor retirement policy
+Month 5:   Liquidity-risk management + full TCA framework
+Month 6:   Prometheus / Grafana monitoring + CI/CD pipeline
+```
+
+### Month 12: Fund-grade system (P2)
+
+```
+Month 7-8:   Real-time data pipeline (Kafka) + data versioning
+Month 8-10:  Expand models to 20+ + online learning
+Month 10-11: Kubernetes cluster + disaster recovery
+Month 11-12: Scenario-analysis system + smart-routing research
 ```
 
 ---
 
-## 关键风险评估
+## Key Risk Assessment
 
-1. **GPU约束瓶颈**：RTX 3060 12GB在多模型并行训练时显存不足（单个PatchTST约需2-4GB），扩展到20+模型时需考虑模型蒸馏/量化或升级GPU
-2. **Python延迟天花板**：Python/FastAPI无论如何优化，延迟下限在10-50ms，如果策略转向高频，必须引入C++/Rust核心路径
-3. **另类数据成本**：高质量另类数据年费$10K-500K不等，ROI需谨慎评估
-4. **单兵作战vs机构团队**：顶级基金有数百名PhD+工程师，建议聚焦2-3个差异化方向深挖而非全面铺开
+1. **GPU constraint bottleneck**: An RTX 3060 12 GB is short on VRAM for multi-model parallel training (a single PatchTST needs ~2–4 GB). Expanding to 20+ models will require distillation / quantization or a GPU upgrade.
+2. **Python latency ceiling**: Regardless of optimization, Python / FastAPI has a latency floor of 10–50 ms. If the strategy moves to high frequency, a C++ / Rust hot path is required.
+3. **Alternative-data cost**: High-quality alternative data costs $10K–$500K per year; ROI must be evaluated carefully.
+4. **Solo operator vs. institutional teams**: Top funds employ hundreds of PhDs and engineers. Focus on 2–3 differentiated directions rather than spreading effort across everything.
 
 ---
 
-## 总结
+## Conclusion
 
-当前项目的架构设计方向正确（微服务+MLflow+Vue前端），但每个维度都存在1-2个世代的差距。建议优先补齐"反欺诈"能力（过拟合检测+幸存者偏差+压力测试），再逐步构建因子和模型的飞轮效应。
+The project's architectural direction is sound (microservices + MLflow + Vue frontend), but every dimension is one to two generations behind. Prioritize anti-fraud capabilities first (overfitting detection + survivorship bias + stress testing), then gradually build the factor and model flywheel.
 
-**核心建议**：
+**Core recommendations**:
 
-- **不要试图全面追赶**——顶级基金有$10B+ AUM和数百人团队
-- **聚焦3个差异化方向**：(1) 多市场跨资产统计套利 (2) 深度学习多模态预测 (3) 日内微观结构alpha
-- **先解决"不要亏钱"的问题**（P0过拟合/偏差/压力测试），再解决"如何赚钱"的问题（因子/模型扩展）
+- **Do not try to catch up across the board** — top funds have $10B+ AUM and hundreds of people.
+- **Focus on three differentiated directions**: (1) multi-market cross-asset statistical arbitrage, (2) deep-learning multimodal prediction, (3) intraday microstructure alpha.
+- **Solve "don't lose money" first** (P0 overfitting / bias / stress testing), then "how to make money" (factor / model expansion).

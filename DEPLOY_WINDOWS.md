@@ -1,34 +1,34 @@
-# Windows Server / Lightsail 部署指南（原生 Paper 模式）
+# Windows Server / Lightsail Deployment Guide (Native Paper Mode)
 
-适用：Amazon Lightsail **Windows Server 2022**（例如 `Windows_Server_2022-1`，公网 IP `3.106.139.233`）。
+Applies to: Amazon Lightsail **Windows Server 2022** (for example `Windows_Server_2022-1`, public IP `3.106.139.233`).
 
-> Lightsail Windows 通常**没有嵌套虚拟化**，Docker Linux 容器很难跑。  
-> 本指南用 **Python + Node 原生进程**，不依赖 Docker。
+> Lightsail Windows typically **does not support nested virtualization**, so Docker Linux containers are difficult to run.  
+> This guide uses **native Python + Node processes** and does not depend on Docker.
 
 ---
 
-## 0. 用 RDP 登录（不是 SSH）
+## 0. Sign in with RDP (not SSH)
 
-1. 打开 Lightsail 控制台 → Instances → `Windows_Server_2022-1`
-2. 点击 **Connect using RDP**（浏览器），或本机 `mstsc` 连 `3.106.139.233:3389`
-3. 用户名：`Administrator`  
-   密码：Connect 页 **Default password** 获取
+1. Open the Lightsail console → Instances → `Windows_Server_2022-1`
+2. Click **Connect using RDP** (browser), or connect from your local machine with `mstsc` to `3.106.139.233:3389`
+3. Username: `Administrator`  
+   Password: obtain the **Default password** on the Connect page
 
-### Lightsail Networking 放行端口
+### Lightsail Networking — open ports
 
-Networking → IPv4 Firewall 添加入站：
+Networking → IPv4 Firewall — add inbound rules:
 
-| 端口 | 用途 |
+| Port | Purpose |
 |------|------|
 | 3389 | RDP |
 | 8001 | API Gateway |
-| 5180 | 前端 |
+| 5180 | Frontend |
 
 ---
 
-## 1. 安装依赖（首次）
+## 1. Install dependencies (first time)
 
-在 RDP 桌面打开 **PowerShell（管理员）**：
+On the RDP desktop, open **PowerShell (Administrator)**:
 
 ```powershell
 # Git
@@ -37,11 +37,11 @@ winget install --id Git.Git -e --accept-source-agreements --accept-package-agree
 # Python 3.12
 winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements
 
-# Node.js 20 LTS（前端）
+# Node.js 20 LTS (frontend)
 winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
 ```
 
-关闭并重新打开 PowerShell，确认：
+Close and reopen PowerShell, then confirm:
 
 ```powershell
 python --version
@@ -52,16 +52,16 @@ npm --version
 
 ---
 
-## 2. 同步代码（唯一旁支）
+## 2. Sync the code (the only side branch)
 
-新开的 PowerShell 经常找不到刚装的 `git`（PATH 未刷新）。先执行：
+Newly opened PowerShell sessions often cannot find the newly installed `git` (PATH has not been refreshed). Run this first:
 
 ```powershell
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 cd C:\quant-ai-trader
 ```
 
-若仍提示 `git` 找不到，用完整路径：
+If `git` is still not found, use the full path:
 
 ```powershell
 & "C:\Program Files\Git\cmd\git.exe" fetch origin
@@ -69,32 +69,32 @@ cd C:\quant-ai-trader
 & "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
 ```
 
-或（拉到 Version 4 之后）用仓库自带脚本：
+Or (after pulling Version 4) use the repository script:
 
 ```powershell
 .\scripts\windows_sync.ps1
 ```
 
-确认脚本已是新版（应有 `DeployScriptVersion: 4`）：
+Confirm the script is the new version (it should show `DeployScriptVersion: 4`):
 
 ```powershell
 Get-Content .\scripts\windows_deploy.ps1 -TotalCount 3
 ```
 
-若仍是 Version 3 / 出现 `string is missing the terminator`，说明还没同步成功，不要直接部署。
+If it is still Version 3 / you see `string is missing the terminator`, the sync has not succeeded — do not deploy yet.
 
-### 页面 502 Bad Gateway
+### 502 Bad Gateway on the page
 
-前端 `:5180` 会把 `/api` 反代到 `127.0.0.1:8001`。出现 502 几乎总是 **网关没起来**。在服务器上检查：
+The frontend on `:5180` reverse-proxies `/api` to `127.0.0.1:8001`. A 502 almost always means **the gateway is not running**. Check on the server:
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8001/health -UseBasicParsing
 Get-Content C:\quant-ai-trader\logs\api-gateway.err.log -Tail 50
 ```
 
-私有仓库用 PAT 或配置 GitHub SSH key。
+For private repositories, use a PAT or configure a GitHub SSH key.
 
-以后更新：
+Later updates:
 
 ```powershell
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -106,7 +106,7 @@ cd C:\quant-ai-trader
 
 ---
 
-## 3. 一键启动
+## 3. One-click start
 
 ```powershell
 cd C:\quant-ai-trader
@@ -114,51 +114,51 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\windows_deploy.ps1 -OpenFirewall
 ```
 
-参数说明：
+Parameter descriptions:
 
-| 参数 | 作用 |
+| Parameter | Effect |
 |------|------|
-| `-OpenFirewall` | 放行 Windows 防火墙 8001/5180 等（需管理员） |
-| `-SkipInstall` | 跳过 pip/npm 安装（二次启动） |
-| `-SkipFrontend` | 只起后端 |
+| `-OpenFirewall` | Open Windows Firewall for 8001/5180 and related ports (requires Administrator) |
+| `-SkipInstall` | Skip pip/npm install (subsequent starts) |
+| `-SkipFrontend` | Start backend only |
 
 ---
 
-## 4. 访问
+## 4. Access
 
-本机 RDP 内：
+Inside the local RDP session:
 
-- API：http://127.0.0.1:8001/health  
-- 前端：http://127.0.0.1:5180  
+- API: http://127.0.0.1:8001/health  
+- Frontend: http://127.0.0.1:5180  
 
-外网浏览器：
+From an external browser:
 
 - http://3.106.139.233:5180  
 - http://3.106.139.233:8001/health  
 
-默认 **paper / 模拟盘**，不会实盘下单。
+Default is **paper / simulated trading**; live orders are not placed.
 
 ---
 
-## 5. 停止 / 看日志
+## 5. Stop / view logs
 
 ```powershell
 .\scripts\windows_stop.ps1
 Get-Content C:\quant-ai-trader\logs\api-gateway.err.log -Tail 80
 ```
 
-PID 文件：`cache\windows_pids\`
+PID files: `cache\windows_pids\`
 
 ---
 
-## 6. 自动运行 + 自动部署（推荐）
+## 6. Autostart + auto-deploy (recommended)
 
-推荐用 **Windows 计划任务**（不依赖 GitHub Runner 服务，更稳）：
+Use **Windows Task Scheduler** (does not depend on the GitHub Runner service; more stable):
 
-1. **开机自动启动** paper 服务
-2. **每 10 分钟**检查 GitHub：有新提交或服务挂了 → 自动 pull + 重启
+1. **Start paper services automatically on boot**
+2. **Every 10 minutes**, check GitHub: if there is a new commit or a service is down → automatically pull + restart
 
-### 6.1 一次性安装（管理员 PowerShell）
+### 6.1 One-time install (Administrator PowerShell)
 
 ```powershell
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -167,49 +167,49 @@ cd C:\quant-ai-trader
 & "C:\Program Files\Git\cmd\git.exe" reset --hard origin/cursor/quant-upgrade-a75f
 
 Set-ExecutionPolicy -Scope Process Bypass -Force
-# 立刻部署一次，并注册开机 + 定时自动部署
+# Deploy once immediately, and register boot + scheduled auto-deploy
 .\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f -RunNow
 ```
 
-合并进 `main` 后，把跟踪分支改成 main：
+After merging into `main`, change the tracked branch to main:
 
 ```powershell
 .\scripts\windows_install_autostart.ps1 -Branch main -RunNow
 ```
 
-查看任务：`taskschd.msc` → `QAT-Paper-Boot` / `QAT-Paper-AutoCD`  
-日志：`C:\quant-ai-trader\logs\cd-deploy.log`
+View tasks: `taskschd.msc` → `QAT-Paper-Boot` / `QAT-Paper-AutoCD`  
+Logs: `C:\quant-ai-trader\logs\cd-deploy.log`
 
-### 6.2 日常开发
+### 6.2 Day-to-day development
 
-1. 改代码 → PR → CI
-2. 合并到跟踪分支（现在是 `cursor/quant-upgrade-a75f`，稳定后用 `main`）
-3. 最多约 10 分钟内服务器自动拉取并重启
-4. 验证：http://3.106.139.233:8001/health 与 http://3.106.139.233:5180
+1. Change code → PR → CI
+2. Merge into the tracked branch (currently `cursor/quant-upgrade-a75f`; use `main` once stable)
+3. The server automatically pulls and restarts within about 10 minutes
+4. Verify: http://3.106.139.233:8001/health and http://3.106.139.233:5180
 
-### 6.3 可选：GitHub Actions Runner
+### 6.3 Optional: GitHub Actions Runner
 
-计划任务已足够实现自动部署自动运行。若仍要用 Actions：
+Task Scheduler is sufficient for auto-deploy and auto-run. If you still want Actions:
 
-1. https://github.com/AndrewMa1992/quant-ai-trader/settings/actions/runners/new 复制 token
-2. `.\scripts\windows_install_runner.ps1 -Token "..."`（需 `--runasservice` 才有 svc.cmd）
-3. 或 `cd C:\actions-runner` 后 `cmd /c "run.cmd"` 保持在线
+1. Copy the token from https://github.com/AndrewMa1992/quant-ai-trader/settings/actions/runners/new
+2. `.\scripts\windows_install_runner.ps1 -Token "..."` (requires `--runasservice` to get svc.cmd)
+3. Or `cd C:\actions-runner` then `cmd /c "run.cmd"` to stay online
 
 ---
 
-## 故障排查
+## Troubleshooting
 
-| 现象 | 处理 |
+| Symptom | Action |
 |------|------|
-| `python` 找不到 | 重开终端；或用 `py -3.12` |
-| 外网打不开 5180 | Lightsail Firewall + `-OpenFirewall` |
-| 前端空白 | `cd frontend; npm install; npm run build` |
-| Gateway 503 | 等 30s；看 `logs\*.err.log` |
-| Redis 报错 | 可忽略（Windows 默认可不装 Redis） |
-| pip 很慢 | 换清华源：`pip install -i https://pypi.tuna.tsinghua.edu.cn/simple ...` |
+| `python` not found | Reopen the terminal; or use `py -3.12` |
+| 5180 not reachable from the internet | Lightsail Firewall + `-OpenFirewall` |
+| Blank frontend | `cd frontend; npm install; npm run build` |
+| Gateway 503 | Wait 30s; check `logs\*.err.log` |
+| Redis errors | Can be ignored (Redis is optional on Windows by default) |
+| pip is slow | Switch to the Tsinghua PyPI mirror: `pip install -i https://pypi.tuna.tsinghua.edu.cn/simple ...` |
 
 ---
 
-## 规格建议
+## Sizing recommendation
 
-Lightsail Windows 建议 **≥ 4 GB 内存**；首次 `pip`/`npm` 会占较多磁盘。
+Lightsail Windows: recommend **≥ 4 GB RAM**; the first `pip`/`npm` install uses significant disk space.

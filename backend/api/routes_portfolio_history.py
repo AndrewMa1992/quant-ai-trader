@@ -1,6 +1,6 @@
 """
-组合历史数据接口路由 - NAV历史、年度收益、回撤时间线
-从 portfolio_snapshots 表读取真实数据
+Portfolio history API routes — NAV history, yearly returns, drawdown timeline.
+Reads live data from the portfolio_snapshots table.
 """
 from pathlib import Path
 
@@ -16,21 +16,21 @@ _OP_DB = Path(__file__).parent.parent / "data" / "quant_trader.db"
 
 
 def init(store_ref=None):
-    """注入HistoricalStore依赖"""
+    """Inject HistoricalStore dependency."""
     global store
     store = store_ref
 
 
 def _get_conn() -> sqlite3.Connection:
     """
-    获取数据库连接。
-    优先使用 store 的 db_path，fallback 到 _OP_DB。
+    Open a database connection.
+    Prefer store.db_path, then fall back to _OP_DB.
     """
     db_path = _OP_DB
     if store is not None and hasattr(store, "db_path"):
         db_path = store.db_path
     if not db_path.exists():
-        # 最终 fallback：尝试项目根级的 data/ 目录
+        # Last fallback: project-root data/ directory
         db_path = Path(__file__).parent.parent.parent / "data" / "quant_trader.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -38,17 +38,17 @@ def _get_conn() -> sqlite3.Connection:
 
 
 # ================================================================
-# GET /analysis/portfolio-history — NAV 历史（最近90天）
+# GET /analysis/portfolio-history — NAV history (last 90 days)
 # ================================================================
 
 @router.get("/analysis/portfolio-history")
 async def get_portfolio_history(days: int = Query(90, ge=1, le=365)):
-    """获取组合NAV历史，含累计收益和回撤"""
+    """Return portfolio NAV history with cumulative return and drawdown."""
     try:
         conn = _get_conn()
         cursor = conn.cursor()
 
-        # 按日采样：每天取一条记录（最早的那条，或 AVG）
+        # Daily sample: one record per day (earliest, or AVG)
         cursor.execute("""
             SELECT 
                 SUBSTR(timestamp, 1, 10) as snapshot_date,
@@ -65,7 +65,7 @@ async def get_portfolio_history(days: int = Query(90, ge=1, le=365)):
         if not raw_rows:
             return {"history": []}
 
-        # 按日期升序排列以便计算累计收益和回撤
+        # Sort by date ascending to compute cumulative return and drawdown
         rows = list(reversed(raw_rows))
 
         if not rows:
@@ -103,12 +103,12 @@ async def get_portfolio_history(days: int = Query(90, ge=1, le=365)):
 
 
 # ================================================================
-# GET /analysis/yearly-returns — 年度收益聚合
+# GET /analysis/yearly-returns — yearly return aggregation
 # ================================================================
 
 @router.get("/analysis/yearly-returns")
 async def get_yearly_returns():
-    """从 portfolio_snapshots 聚合计算年度收益"""
+    """Aggregate yearly returns from portfolio_snapshots."""
     try:
         conn = _get_conn()
         cursor = conn.cursor()
@@ -128,7 +128,7 @@ async def get_yearly_returns():
             conn.close()
             return {"yearly_returns": []}
 
-        # 按年计算收益：取每年的首尾快照
+        # Compute yearly return from first and last snapshots of each year
         yearly_returns = []
         for row in yearly_snapshots:
             year = row["year"]
@@ -171,12 +171,12 @@ async def get_yearly_returns():
 
 
 # ================================================================
-# GET /risk/drawdown-history — 回撤时间线
+# GET /risk/drawdown-history — drawdown timeline
 # ================================================================
 
 @router.get("/risk/drawdown-history")
 async def get_drawdown_history():
-    """获取完整的回撤时间线"""
+    """Return the full drawdown timeline."""
     try:
         conn = _get_conn()
         cursor = conn.cursor()
@@ -196,7 +196,7 @@ async def get_drawdown_history():
         if not rows:
             return {"drawdown_history": []}
 
-        # 计算回撤时间线
+        # Compute drawdown timeline
         peak = 0.0
         drawdown_history = []
         for row in rows:

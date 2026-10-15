@@ -1,12 +1,12 @@
 """
-Graph Attention Network (GAT) — 完整版跨股票关联模型
-替代 CrossStockCorrelation (GNN-lite)
+Graph Attention Network (GAT) — full cross-stock correlation model.
+Replaces CrossStockCorrelation (GNN-lite).
 
-架构:
-- 动态股票关系图 (Pearson + 行业 + 尾部依赖)
-- 3层 Graph Attention Network
-- 生成每只股票的关系增强嵌入
-- 行业级和全市场级嵌入
+Architecture:
+- Dynamic stock graph (Pearson + sector + tail dependence)
+- 3-layer Graph Attention Network
+- Relation-enhanced embedding per stock
+- Sector-level and market-level embeddings
 """
 import torch
 import torch.nn as nn
@@ -26,14 +26,14 @@ torch_cache.mkdir(parents=True, exist_ok=True)
 # GAT Layer
 # ============================================================
 class GATLayer(nn.Module):
-    """单层 Graph Attention Layer"""
+    """Single Graph Attention layer."""
 
     def __init__(self, in_dim: int, out_dim: int, n_heads: int = 4, dropout: float = 0.1):
         super().__init__()
         self.n_heads = n_heads
         self.out_dim = out_dim
 
-        # 多头注意力
+        # Multi-head attention
         self.W = nn.Linear(in_dim, out_dim * n_heads, bias=False)
         self.a = nn.Parameter(torch.zeros(2 * out_dim, 1))
         nn.init.xavier_uniform_(self.a)
@@ -43,14 +43,14 @@ class GATLayer(nn.Module):
 
     def forward(self, x: torch.Tensor, adj: torch.Tensor) -> torch.Tensor:
         """
-        x: (N, in_dim) 节点特征
-        adj: (N, N) 邻接矩阵
-        返回: (N, out_dim * n_heads)
+        x: (N, in_dim) node features
+        adj: (N, N) adjacency matrix
+        Returns: (N, out_dim * n_heads)
         """
         N = x.size(0)
         Wh = self.W(x).view(N, self.n_heads, self.out_dim)  # (N, H, D)
 
-        # 计算注意力分数
+        # Attention scores
         Wh_i = Wh.unsqueeze(2).expand(-1, -1, N, -1)  # (N, H, N, D)
         Wh_j = Wh.unsqueeze(1).expand(-1, N, -1, -1)  # (N, N, H, D)
         Wh_j = Wh_j.permute(0, 2, 1, 3)  # (N, H, N, D)
@@ -66,8 +66,8 @@ class GATLayer(nn.Module):
         alpha = F.softmax(e, dim=-1)  # (N, H, N)
         alpha = self.dropout(alpha)
 
-        # 聚合: alpha (N, H, N) @ Wh (N, H, D)
-        # 使用 permute + bmm: (H, N, N) @ (H, N, D) = (H, N, D) → (N, H, D)
+        # Aggregate: alpha (N, H, N) @ Wh (N, H, D)
+        # permute + bmm: (H, N, N) @ (H, N, D) = (H, N, D) → (N, H, D)
         alpha_t = alpha.permute(1, 0, 2)  # (H, N, N)
         Wh_t = Wh.permute(1, 0, 2)  # (H, N, D)
         out = torch.bmm(alpha_t, Wh_t).permute(1, 0, 2)  # (N, H, D)
@@ -76,10 +76,10 @@ class GATLayer(nn.Module):
 
 
 # ============================================================
-# GAT 股票关系网络
+# GAT stock-relation network
 # ============================================================
 class StockGAT(nn.Module):
-    """3层 GAT + readout"""
+    """3-layer GAT + readout."""
 
     def __init__(self, in_dim: int = 20, hidden_dim: int = 64, out_dim: int = 32, n_heads: int = 4):
         super().__init__()
@@ -95,8 +95,8 @@ class StockGAT(nn.Module):
 
     def forward(self, x: torch.Tensor, adj: torch.Tensor):
         """
-        x: (N, in_dim) 每只股票的输入特征
-        adj: (N, N) 邻接矩阵
+        x: (N, in_dim) per-stock input features
+        adj: (N, N) adjacency matrix
         """
         h1 = F.elu(self.gat1(x, adj))
         h1 = self.layer_norm1(h1)
@@ -104,7 +104,7 @@ class StockGAT(nn.Module):
         h2 = self.layer_norm2(h2)
         h3 = self.gat3(h2, adj)  # (N, D)
 
-        # 全局 + 行业级 readout
+        # Global + sector-level readout
         market_emb = torch.cat([h3.mean(0), h3.max(0).values])  # (2D,)
         market_emb = self.market_proj(market_emb)  # (16,)
 
@@ -112,14 +112,14 @@ class StockGAT(nn.Module):
 
 
 # ============================================================
-# GAT 信号生成器（集成层）
+# GAT signal generator (integration layer)
 # ============================================================
 class GATSignalGenerator:
     """
-    基于 GAT 嵌入生成跨股票增强信号
-    - 构建动态股票图
-    - GAT 前向推理
-    - 生成信号增强因子
+    Cross-stock enhancement from GAT embeddings.
+    - Build a dynamic stock graph
+    - GAT forward pass
+    - Produce a signal boost factor
     """
 
     SECTOR_CLUSTERS = {
@@ -148,23 +148,23 @@ class GATSignalGenerator:
         self.model: Optional[StockGAT] = None
         self._sector_momentum: Dict[str, float] = {}
         self._last_embeddings: Dict[str, np.ndarray] = {}
-        # 自动加载已训练的模型
+        # Auto-load a trained model
         if auto_load:
             self.load_model()
 
     def load_model(self, path: str = None):
-        """加载预训练 GAT 模型"""
+        """Load a pretrained GAT model."""
         from configs.settings import settings
         model_path = path or str(MODELS_DIR / "gat_model.pt")
         try:
             self.model = StockGAT().to(self.device)
             if Path(model_path).exists():
                 self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-                logger.info(f"✅ GAT 模型已加载: {model_path}")
+                logger.info(f"✅ GAT model loaded: {model_path}")
             else:
-                logger.info("GAT 模型文件不存在，使用随机初始化")
+                logger.info("GAT model file missing; using random initialization")
         except Exception as e:
-            logger.warning(f"GAT 模型加载失败: {e}")
+            logger.warning(f"GAT model load failed: {e}")
             self.model = StockGAT().to(self.device)
 
     def get_sector(self, ticker: str) -> str:
@@ -176,7 +176,7 @@ class GATSignalGenerator:
         features_dict: Dict[str, np.ndarray],
         threshold: float = 0.3,
     ) -> torch.Tensor:
-        """构建动态邻接矩阵（Pearson 相关性 + 行业同属）"""
+        """Build a dynamic adjacency matrix (Pearson correlation + same-sector)."""
         N = len(tickers)
         adj = np.zeros((N, N), dtype=np.float32)
 
@@ -184,10 +184,10 @@ class GATSignalGenerator:
             for j in range(i + 1, N):
                 ti, tj = tickers[i], tickers[j]
 
-                # 同行业加权
+                # Same-sector bonus
                 sector_bonus = 0.2 if self.get_sector(ti) == self.get_sector(tj) else 0.0
 
-                # Pearson 相关性
+                # Pearson correlation
                 fi = features_dict.get(ti)
                 fj = features_dict.get(tj)
                 if fi is not None and fj is not None and len(fi) >= self.lookback and len(fj) >= self.lookback:
@@ -209,7 +209,7 @@ class GATSignalGenerator:
         tickers: List[str],
         features_dict: Dict[str, np.ndarray],
     ) -> torch.Tensor:
-        """构建节点特征矩阵"""
+        """Build the node-feature matrix."""
         N = len(tickers)
         in_dim = 20
         X = np.zeros((N, in_dim), dtype=np.float32)
@@ -220,18 +220,18 @@ class GATSignalGenerator:
                 continue
             recent = features[-self.lookback:]
 
-            # 基础统计特征
+            # Base statistical features
             ret = np.diff(recent[:, 0]) / (recent[:-1, 0] + 1e-8)
-            X[i, 0] = ret.mean() if len(ret) > 0 else 0  # 平均收益
-            X[i, 1] = ret.std() if len(ret) > 1 else 0  # 波动率
-            X[i, 2] = (recent[-1, 0] - recent[0, 0]) / (recent[0, 0] + 1e-8)  # 动量
+            X[i, 0] = ret.mean() if len(ret) > 0 else 0  # Mean return
+            X[i, 1] = ret.std() if len(ret) > 1 else 0  # Volatility
+            X[i, 2] = (recent[-1, 0] - recent[0, 0]) / (recent[0, 0] + 1e-8)  # Momentum
 
-            # 从特征中提取更多维度
+            # Extra dimensions from the feature matrix
             for k in range(3, min(in_dim, recent.shape[1] + 3)):
                 col_data = recent[:, min(k - 3, recent.shape[1] - 1)]
                 X[i, k] = col_data.mean() if len(col_data) > 0 else 0
 
-            # 归一化
+            # Normalize
             row_std = X[i].std()
             if row_std > 0:
                 X[i] = (X[i] - X[i].mean()) / row_std
@@ -243,7 +243,7 @@ class GATSignalGenerator:
         tickers: List[str],
         features_dict: Dict[str, np.ndarray],
     ) -> Dict[str, float]:
-        """计算行业动量"""
+        """Compute sector momentum."""
         sector_returns: Dict[str, List[float]] = defaultdict(list)
         for ticker in tickers:
             features = features_dict.get(ticker)
@@ -263,12 +263,12 @@ class GATSignalGenerator:
         features_dict: Dict[str, np.ndarray],
     ) -> Dict:
         """
-        GAT 增强版跨股票信号生成
+        GAT-enhanced cross-stock signal generation.
         """
         sector = self.get_sector(ticker)
         sector_momentum = self._sector_momentum.get(sector, 0.0)
 
-        # 使用 GAT 嵌入
+        # Use GAT embeddings
         gat_boost = 1.0
         gat_signal = "neutral"
         gat_strength = 0.0
@@ -287,7 +287,7 @@ class GATSignalGenerator:
                         stock_emb = embeddings[idx].cpu().numpy()
                         market_vec = market_emb.cpu().numpy()
 
-                        # 嵌入相似度增强
+                        # Embedding-similarity boost
                         emb_norm = np.linalg.norm(stock_emb)
                         market_norm = np.linalg.norm(market_vec)
                         if emb_norm > 0 and market_norm > 0:
@@ -295,7 +295,7 @@ class GATSignalGenerator:
                             gat_boost = 1.0 + float(alignment) * 0.5
                             gat_boost = np.clip(gat_boost, 0.5, 2.0)
 
-                        # 信号方向
+                        # Signal direction
                         if sector_momentum > 0.02 and gat_boost > 1.2:
                             gat_signal = "buy"
                             gat_strength = min(abs(sector_momentum) * 8 + (gat_boost - 1) * 2, 1.0)
@@ -304,9 +304,9 @@ class GATSignalGenerator:
                             gat_strength = min(abs(sector_momentum) * 8 + (gat_boost - 1) * 2, 1.0)
 
             except Exception as e:
-                logger.debug(f"GAT 推理失败 {ticker}: {e}")
+                logger.debug(f"GAT inference failed {ticker}: {e}")
 
-        # 如果 GAT 不可用，回退到简单方法
+        # If GAT is unavailable, fall back to the simple method
         if gat_boost == 1.0:
             peers = [t for t in all_tickers if self.get_sector(t) == sector and t != ticker]
             peer_corrs = []
@@ -344,7 +344,7 @@ class GATSignalGenerator:
         epochs: int = 50,
         lr: float = 1e-3,
     ):
-        """轻量级 GAT 训练"""
+        """Lightweight GAT training."""
         if self.model is None:
             self.load_model()
 
@@ -352,7 +352,7 @@ class GATSignalGenerator:
         X = self.build_features(tickers, features_dict)
 
         if adj.sum() == 0 or len(tickers) < 3:
-            logger.warning("GAT: 邻接矩阵为空或股票数不足，跳过训练")
+            logger.warning("GAT: empty adjacency or too few tickers; skipping training")
             return
 
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
@@ -363,9 +363,9 @@ class GATSignalGenerator:
 
             embeddings, market_emb = self.model(X, adj)
 
-            # 重构损失 + 对比损失
+            # Reconstruction loss + contrastive loss
             recon_loss = F.mse_loss(embeddings, X[:, :embeddings.size(-1)]) if embeddings.size(-1) == X.size(-1) else 0
-            # 行业一致性损失
+            # Sector-consistency loss
             sector_loss = 0.0
             for i in range(len(tickers)):
                 for j in range(i + 1, len(tickers)):
@@ -379,12 +379,12 @@ class GATSignalGenerator:
             loss.backward()
             optimizer.step()
 
-        # 保存
+        # Save
         from configs.settings import settings
         save_path = MODELS_DIR / "gat_model.pt"
         torch.save(self.model.state_dict(), save_path)
-        logger.info(f"✅ GAT 训练完成, 已保存: {save_path}")
+        logger.info(f"✅ GAT training complete, saved: {save_path}")
 
 
-# 全局单例
+# Global singleton
 gat_network = GATSignalGenerator()

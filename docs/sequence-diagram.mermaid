@@ -22,7 +22,7 @@ sequenceDiagram
     rect rgb(255, 248, 240)
         Note over TP,IE: Step 3 — Top-N Signal Selection
         TP->>IE: generate_signals_batch(factor_df)
-        Note over IE: 全量推理 (移除 [:50])
+        Note over IE: Full-universe inference (no [:50] slice)
         IE-->>TP: 200 raw signals
         TP->>PC: TOP_N_SIGNALS=5, SIGNAL_THRESHOLD_MIN=0.05
         TP->>TP: filter: confidence>=MIN_CONFIDENCE AND abs(signal)>=0.05

@@ -1,8 +1,8 @@
 """
-FinBERT → FinGPT 升级版市场情绪分析
-模型: yiyanghkust/finbert-tone (金融文本情感分析 SOTA)
-      + 多源情感集成 (VADER + 金融关键词)
-数据源: 东方财富/新浪新闻 + FinBERT-tone
+FinBERT → FinGPT upgraded market-sentiment analysis.
+Model: yiyanghkust/finbert-tone (SOTA financial-text sentiment)
+      + multi-source ensemble (VADER + finance keywords)
+Sources: East Money / Sina News + FinBERT-tone
 """
 import time
 import hashlib
@@ -14,38 +14,38 @@ from loguru import logger
 from configs.settings import settings
 
 NEWS_CACHE_FILE = Path(settings.CACHE_DIR) / "news_cache.json"
-NEWS_CACHE_TTL = 1800  # 30分钟缓存
+NEWS_CACHE_TTL = 1800  # 30-minute cache
 
-# 升级模型: ProsusAI/finbert → yiyanghkust/finbert-tone
-# finbert-tone 专为金融情感调优 (10-K报告 + 财报电话会议)
-PRIMARY_MODEL = settings.MODEL_SENTIMENT_MODEL  # 默认 yiyanghkust/finbert-tone
-FALLBACK_MODEL = "ProsusAI/finbert"  # 回退到原版
+# Upgraded model: ProsusAI/finbert → yiyanghkust/finbert-tone
+# finbert-tone is tuned for financial sentiment (10-Ks + earnings calls)
+PRIMARY_MODEL = settings.MODEL_SENTIMENT_MODEL  # Default: yiyanghkust/finbert-tone
+FALLBACK_MODEL = "ProsusAI/finbert"  # Fall back to the original
 
 
 class SentimentAnalyzer:
-    """升级版情绪分析器 — FinBERT-tone + 多源集成"""
+    """Upgraded sentiment analyzer — FinBERT-tone + multi-source ensemble."""
 
     def __init__(self):
         self.model = None
         self.tokenizer = None
-        self.vader = None  # VADER 情感分析 (轻量级)
+        self.vader = None  # VADER sentiment (lightweight)
         self._finbert_loaded = False
         self._vader_loaded = False
         self._news_cache: Dict[str, Dict] = {}
         self._load_news_cache()
         self._init_models()
-        logger.info(f"情绪分析器初始化完成 (FinBERT-tone={'✅' if self._finbert_loaded else '❌ keyword'}, "
+        logger.info(f"Sentiment analyzer ready (FinBERT-tone={'✅' if self._finbert_loaded else '❌ keyword'}, "
                     f"VADER={'✅' if self._vader_loaded else '❌'})")
 
     # ============================================================
-    # 模型加载 — 多层级回退
+    # Model load — multi-level fallback
     # ============================================================
     def _init_models(self):
-        """初始化情感分析模型（多层级回退，网络不可用时快速跳过）"""
+        """Initialize sentiment models (multi-level fallback; skip quickly if offline)."""
         import os
         import socket
 
-        # 检查网络连通性
+        # Check network connectivity
         has_network = False
         try:
             socket.setdefaulttimeout(3)
@@ -57,32 +57,32 @@ class SentimentAnalyzer:
         skip_flag = os.environ.get("SKIP_FINBERT_DOWNLOAD", "").lower() in ("1", "true", "yes")
 
         if not has_network or skip_flag:
-            reason = "SKIP_FINBERT_DOWNLOAD" if skip_flag else "无网络连接"
-            logger.info(f"🌐 {reason} — 跳过 Transformer 模型下载")
+            reason = "SKIP_FINBERT_DOWNLOAD" if skip_flag else "no network"
+            logger.info(f"🌐 {reason} — skipping Transformer model download")
             self._init_vader()
             return
 
-        # 1. 尝试加载 FinBERT-tone (升级版)
+        # 1. Try FinBERT-tone (upgraded)
         loaded = self._try_load_model(PRIMARY_MODEL, "FinBERT-tone")
         if loaded:
             self._init_vader()
             return
 
-        # 2. 回退到原版 FinBERT
+        # 2. Fall back to original FinBERT
         loaded = self._try_load_model(FALLBACK_MODEL, "FinBERT")
         if loaded:
             self._init_vader()
             return
 
-        # 3. 仅 VADER + 关键词
-        logger.warning("所有 Transformer 模型加载失败，使用 VADER + 关键词")
+        # 3. VADER + keywords only
+        logger.warning("All Transformer models failed to load; using VADER + keywords")
         self._init_vader()
 
     def _try_load_model(self, model_name: str, label: str) -> bool:
-        """尝试加载 Transformer 模型"""
+        """Attempt to load a Transformer model."""
         try:
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
-            logger.info(f"📥 加载 {label} ({model_name})...")
+            logger.info(f"📥 Loading {label} ({model_name})...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, cache_dir=str(settings.HF_CACHE)
             )
@@ -90,19 +90,19 @@ class SentimentAnalyzer:
                 model_name, cache_dir=str(settings.HF_CACHE)
             )
             self._finbert_loaded = True
-            logger.info(f"✅ {label} 加载完成")
+            logger.info(f"✅ {label} loaded")
             return True
         except Exception as e:
-            logger.warning(f"⚠️ {label} 加载失败: {e}")
+            logger.warning(f"⚠️ {label} failed to load: {e}")
             return False
 
     def _init_vader(self):
-        """初始化 VADER 情感分析（轻量级回退 + 集成增强）"""
+        """Initialize VADER sentiment (lightweight fallback + ensemble boost)."""
         try:
             from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
             self.vader = SentimentIntensityAnalyzer()
 
-            # 添加金融领域词汇到 VADER
+            # Add finance-domain lexicon to VADER
             finance_lexicon = {
                 "beat": 2.0, "beats": 2.0, "upgrade": 2.5, "upgraded": 2.5,
                 "downgrade": -2.5, "downgraded": -2.5, "miss": -2.0, "misses": -2.0,
@@ -120,13 +120,13 @@ class SentimentAnalyzer:
             }
             self.vader.lexicon.update(finance_lexicon)
             self._vader_loaded = True
-            logger.info("✅ VADER 加载完成 (含金融词库增强)")
+            logger.info("✅ VADER loaded (finance lexicon enhanced)")
         except ImportError:
-            logger.debug("VADER 未安装，仅使用关键词回退")
+            logger.debug("VADER not installed; using keyword fallback only")
             self._vader_loaded = False
 
     # ============================================================
-    # 新闻获取 (yfinance)
+    # News fetch (yfinance)
     # ============================================================
     def _load_news_cache(self):
         if NEWS_CACHE_FILE.exists():
@@ -140,7 +140,7 @@ class SentimentAnalyzer:
         NEWS_CACHE_FILE.write_text(json.dumps(self._news_cache, ensure_ascii=False), encoding='utf-8')
 
     def fetch_news(self, ticker: str, max_items: int = 5) -> List[str]:
-        """获取股票相关新闻标题（中国境内数据源优先）"""
+        """Fetch ticker-related headlines (China onshore sources first)."""
         cache_key = f"{ticker}_{int(time.time() // NEWS_CACHE_TTL)}"
 
         if cache_key in self._news_cache:
@@ -148,15 +148,15 @@ class SentimentAnalyzer:
 
         headlines = []
 
-        # 1. 尝试东方财富新闻 API
+        # 1. Try East Money news API
         try:
             import requests
             if ticker.endswith(".HK"):
-                # 港股新闻
+                # HK news
                 code = ticker.replace(".HK", "")
                 url = f"https://search-api-web.eastmoney.com/search/jsonp?cb=cb&param=%7B%22uid%22%3A%22%22%2C%22keyword%22%3A%22{code}%22%2C%22type%22%3A%5B%22cmsArticleWebOld%22%5D%7D"
             else:
-                # 美股新闻
+                # US news
                 url = f"https://search-api-web.eastmoney.com/search/jsonp?cb=cb&param=%7B%22uid%22%3A%22%22%2C%22keyword%22%3A%22{ticker}%22%2C%22type%22%3A%5B%22cmsArticleWebOld%22%5D%7D"
             r = requests.get(url, timeout=10, headers={"Referer": "https://so.eastmoney.com/"})
             if r.status_code == 200:
@@ -169,9 +169,9 @@ class SentimentAnalyzer:
                     if title:
                         headlines.append(title)
         except Exception as e:
-            logger.debug(f"东方财富新闻获取失败 {ticker}: {e}")
+            logger.debug(f"East Money news fetch failed {ticker}: {e}")
 
-        # 2. 尝试 yfinance (海外网络时可能可用)
+        # 2. Try yfinance (may work on overseas networks)
         if not headlines:
             try:
                 import yfinance as yf
@@ -182,9 +182,9 @@ class SentimentAnalyzer:
                     if title:
                         headlines.append(title)
             except Exception as e:
-                logger.debug(f"yfinance 新闻获取失败 {ticker}: {e}")
+                logger.debug(f"yfinance news fetch failed {ticker}: {e}")
 
-        # 3. 兜底
+        # 3. Fallback
         if not headlines:
             headlines.append(f"{ticker} market activity")
 
@@ -193,32 +193,32 @@ class SentimentAnalyzer:
         return headlines
 
     # ============================================================
-    # 情绪分析核心方法
+    # Core sentiment methods
     # ============================================================
     def analyze_text(self, text: str) -> Dict:
         """
-        多源情感集成分析：
-        1. FinBERT-tone (主力) — 金融领域 SOTA
-        2. VADER (辅助) — 轻量级规则引擎
-        3. 关键词 (兜底) — 无模型时的最后防线
+        Multi-source sentiment ensemble:
+        1. FinBERT-tone (primary) — financial-domain SOTA
+        2. VADER (auxiliary) — lightweight rule engine
+        3. Keywords (fallback) — last resort when no model is available
 
-        最终 score = 0.6 * finbert + 0.3 * vader + 0.1 * keyword
+        Final score = 0.6 * finbert + 0.3 * vader + 0.1 * keyword
         """
         finbert_result = None
         vader_result = None
         keyword_result = self._keyword_sentiment(text)
 
-        # 主力: Transformer 模型
+        # Primary: Transformer
         if self._finbert_loaded:
             finbert_result = self._finbert_predict(text)
 
-        # 辅助: VADER
+        # Auxiliary: VADER
         if self._vader_loaded:
             vader_result = self._vader_predict(text)
 
-        # === 集成融合 ===
+        # === Ensemble fusion ===
         if finbert_result and vader_result:
-            # 三源融合
+            # Three-source blend
             score = 0.6 * finbert_result["score"] + 0.3 * vader_result["score"] + 0.1 * keyword_result["score"]
             return {
                 "label": "positive" if score > 0.1 else ("negative" if score < -0.1 else "neutral"),
@@ -254,7 +254,7 @@ class SentimentAnalyzer:
             return keyword_result
 
     def _finbert_predict(self, text: str) -> Optional[Dict]:
-        """FinBERT-tone 推理"""
+        """FinBERT-tone inference."""
         try:
             inputs = self.tokenizer(
                 text, return_tensors="pt", max_length=512,
@@ -270,11 +270,11 @@ class SentimentAnalyzer:
                 "probs": {l: float(p) for l, p in zip(labels, probs)},
             }
         except Exception as e:
-            logger.debug(f"Transformer 推理失败: {e}")
+            logger.debug(f"Transformer inference failed: {e}")
             return None
 
     def _vader_predict(self, text: str) -> Optional[Dict]:
-        """VADER 推理"""
+        """VADER inference."""
         try:
             scores = self.vader.polarity_scores(text)
             return {
@@ -287,7 +287,7 @@ class SentimentAnalyzer:
             return None
 
     def analyze_headlines(self, headlines: List[str]) -> Dict:
-        """批量分析新闻标题，返回聚合情绪"""
+        """Batch-analyze headlines and return aggregated sentiment."""
         if not headlines:
             return {"label": "neutral", "positive": 0.33, "negative": 0.33,
                     "neutral": 0.34, "score": 0.0, "headlines_analyzed": 0}
@@ -310,10 +310,10 @@ class SentimentAnalyzer:
 
     def get_signal(self, ticker: str) -> Dict:
         """
-        获取单只股票的情绪交易信号
-        1. 获取最新新闻标题
-        2. FinBERT 分析
-        3. 返回信号
+        Sentiment trading signal for a single ticker.
+        1. Fetch latest headlines
+        2. FinBERT analysis
+        3. Return a signal
         """
         headlines = self.fetch_news(ticker)
         sentiment = self.analyze_headlines(headlines)
@@ -344,7 +344,7 @@ class SentimentAnalyzer:
         }
 
     # ============================================================
-    # Fallback: 关键词情绪（FinBERT 不可用时）
+    # Fallback: keyword sentiment (when FinBERT is unavailable)
     # ============================================================
     def _keyword_sentiment(self, text: str) -> Dict:
         positive_words = ["profit", "growth", "beat", "upgrade", "bullish",
@@ -373,7 +373,7 @@ class SentimentAnalyzer:
         }
 
     # ============================================================
-    # 工具方法
+    # Helpers
     # ============================================================
     def is_ready(self) -> bool:
         return self._finbert_loaded
@@ -382,4 +382,4 @@ class SentimentAnalyzer:
         self._news_cache = {}
         if NEWS_CACHE_FILE.exists():
             NEWS_CACHE_FILE.unlink()
-        logger.info("新闻缓存已清除")
+        logger.info("News cache cleared")

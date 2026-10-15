@@ -1,9 +1,9 @@
 """
-回测引擎 - 专业级历史数据模拟交易
-- 多周期回测
-- 完整费用模型
-- 性能分析报告
-- Walk-Forward 验证
+Backtesting engine — professional historical simulation.
+- Multi-horizon backtests
+- Full cost model
+- Performance report
+- Walk-forward validation
 """
 from typing import Dict, List, Callable
 import numpy as np
@@ -17,8 +17,8 @@ from backend.trading_engine.risk_manager import RiskManager
 
 class Backtester:
     """
-    回测引擎
-    在历史数据上模拟交易，评估策略表现
+    Backtesting engine.
+    Simulates trades on historical data to evaluate strategy performance.
     """
 
     def __init__(self):
@@ -35,43 +35,43 @@ class Backtester:
         name: str = "backtest",
     ) -> Dict:
         """
-        运行回测
+        Run a backtest.
 
         Args:
             data_dict: {ticker: DataFrame with OHLCV}
-            signal_generator: 信号生成函数 fn(ticker, data, step, positions, cash) -> {decision, strength}
-            initial_capital: 初始资金
-            commission: 交易佣金率
-            start_date/end_date: 回测日期范围
-            name: 回测名称
+            signal_generator: Signal fn(ticker, data, step, positions, cash) -> {decision, strength}
+            initial_capital: Starting capital
+            commission: Commission rate
+            start_date/end_date: Backtest date range
+            name: Backtest name
 
         Returns:
-            回测结果报告
+            Backtest result report
         """
         capital = initial_capital or settings.TRADING_INITIAL_CAPITAL
 
         portfolio = PortfolioManager(capital)
         risk_mgr = RiskManager()
 
-        # 数据对齐
+        # Align data
         aligned = self._align_data(data_dict)
         if aligned.empty:
-            return {"error": "无数据"}
+            return {"error": "No data"}
 
-        # 日期过滤
+        # Date filter
         if start_date:
             aligned = aligned[aligned.index >= start_date]
         if end_date:
             aligned = aligned[aligned.index <= end_date]
 
         total_days = len(aligned)
-        logger.info(f"🔄 开始回测: {name} | {total_days} 个交易日")
+        logger.info(f"🔄 Starting backtest: {name} | {total_days} trading days")
 
-        # 逐日回测
+        # Day-by-day backtest
         for step in range(total_days):
             aligned.index[step]
 
-            # 获取当日价格
+            # Same-day prices
             prices = {}
             for ticker in data_dict.keys():
                 col = f"{ticker}_close"
@@ -83,7 +83,7 @@ class Backtester:
             if not prices:
                 continue
 
-            # 生成信号
+            # Generate signals
             signals = signal_generator(
                 tickers=list(prices.keys()),
                 data=aligned,
@@ -92,7 +92,7 @@ class Backtester:
                 cash=portfolio.cash,
             )
 
-            # 执行交易
+            # Execute trades
             for ticker, signal in signals.items():
                 if ticker not in prices:
                     continue
@@ -100,16 +100,16 @@ class Backtester:
                     portfolio, risk_mgr, ticker, signal, prices[ticker]
                 )
 
-            # 更新组合价值
+            # Update portfolio value
             portfolio.update_value(prices)
 
-            # 更新风控状态
+            # Update risk state
             risk_mgr.update_portfolio_state(
                 portfolio.total_value, portfolio.cash,
                 portfolio.positions, prices
             )
 
-        # 计算性能指标
+        # Performance metrics
         result = self._calculate_metrics(portfolio, name)
         self.results[name] = result
         return result
@@ -122,7 +122,7 @@ class Backtester:
         signal: Dict,
         price: float,
     ):
-        """执行回测中的单笔交易"""
+        """Execute a single backtest trade."""
         decision = signal.get("decision", "hold")
         strength = signal.get("strength", 0.0)
 
@@ -131,7 +131,7 @@ class Backtester:
 
         side = decision
         if side == "buy":
-            # 预估数量
+            # Estimated quantity
             estimated_value = portfolio.cash * min(strength, 0.25)
             quantity = estimated_value / price if price > 0 else 0
         else:
@@ -145,13 +145,13 @@ class Backtester:
         portfolio.execute_trade(ticker, side, price, strength)
 
     def _align_data(self, data_dict: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """对齐多股票数据到同一时间轴"""
+        """Align multi-ticker data onto a shared timeline."""
         aligned = pd.DataFrame()
 
         for ticker, df in data_dict.items():
             if df.empty:
                 continue
-            # 提取收盘价和成交量
+            # Extract close and volume
             close = df["close"].rename(f"{ticker}_close")
             volume = df["volume"].rename(f"{ticker}_volume")
 
@@ -166,33 +166,33 @@ class Backtester:
         return aligned.sort_index().ffill().bfill().dropna()
 
     def _calculate_metrics(self, portfolio: PortfolioManager, name: str) -> Dict:
-        """计算回测性能指标"""
+        """Compute backtest performance metrics."""
         metrics = portfolio.get_metrics()
         history = portfolio.get_value_history()
 
         returns = np.array(portfolio.daily_returns) if portfolio.daily_returns else np.array([0])
 
-        # 年化收益率
+        # Annualized return
         total_return = metrics["total_return_pct"] / 100
         n_years = len(returns) / 252 if len(returns) > 0 else 1
         annualized_return = ((1 + total_return) ** (1 / max(n_years, 0.01)) - 1) * 100
 
-        # 年化波动率
+        # Annualized volatility
         annualized_vol = returns.std() * np.sqrt(252) * 100 if len(returns) > 5 else 0
 
-        # 夏普比率
+        # Sharpe ratio
         sharpe = metrics["sharpe_ratio"]
 
-        # 最大回撤
+        # Max drawdown
         max_dd = metrics["max_drawdown"]
 
-        # 胜率
+        # Win rate
         trades = portfolio.trade_history
         win_trades = sum(1 for t in trades if t["side"] == "sell" and t.get("value", 0) > 0)
         total_sells = sum(1 for t in trades if t["side"] == "sell")
         win_rate = (win_trades / max(total_sells, 1)) * 100
 
-        # 盈亏比 (简化)
+        # Profit factor (simplified)
         profit_factor = 0
         total_profit = sum(
             t["value"] - t["value"] * settings.TRADING_COMMISSION_RATE
@@ -224,7 +224,7 @@ class Backtester:
         }
 
     def compare(self, names: List[str] = None) -> pd.DataFrame:
-        """比较多个回测结果"""
+        """Compare multiple backtest results."""
         if names:
             results = {n: self.results[n] for n in names if n in self.results}
         else:
@@ -238,13 +238,13 @@ class Backtester:
             if "error" in r:
                 continue
             rows.append({
-                "名称": name,
-                "年化收益%": r.get("annualized_return", 0),
-                "夏普比率": r.get("sharpe_ratio", 0),
-                "最大回撤%": r.get("max_drawdown_pct", 0),
-                "胜率%": r.get("win_rate", 0),
-                "交易次数": r.get("total_trades", 0),
-                "最终资金": r.get("final_value", 0),
+                "name": name,
+                "ann_return_pct": r.get("annualized_return", 0),
+                "sharpe": r.get("sharpe_ratio", 0),
+                "max_dd_pct": r.get("max_drawdown_pct", 0),
+                "win_rate_pct": r.get("win_rate", 0),
+                "trades": r.get("total_trades", 0),
+                "final_value": r.get("final_value", 0),
             })
 
         return pd.DataFrame(rows)

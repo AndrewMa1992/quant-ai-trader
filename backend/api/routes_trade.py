@@ -1,5 +1,5 @@
 """
-交易接口路由
+Trading API routes.
 """
 from typing import Optional
 from datetime import datetime
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/trade", tags=["trading"])
 # P0-3: v2 risk router for circuit breaker management
 risk_v2_router = APIRouter(prefix="/api/v2/risk", tags=["risk-v2"])
 
-# 这些会在 main.py 中注入
+# Injected from main.py
 executor = None
 portfolio = None
 risk_manager = None
@@ -22,7 +22,7 @@ store = None
 def init(
     exec_ref, port_ref, risk_ref, store_ref
 ):
-    """注入依赖"""
+    """Inject dependencies."""
     global executor, portfolio, risk_manager, store
     executor = exec_ref
     portfolio = port_ref
@@ -32,13 +32,13 @@ def init(
 
 @router.get("/portfolio")
 async def get_portfolio():
-    """获取组合状态（优先展示老虎真实数据）"""
+    """Return portfolio state (Tiger live data preferred)."""
     if portfolio is None:
-        return {"error": "组合管理器未初始化"}
+        return {"error": "Portfolio manager is not initialized"}
     
     from backend.data_engine.tiger_client import tiger_client
     
-    # ★ 每次查询 dashboard 时，自动从 Tiger 对齐 initial_capital
+    # On each dashboard query, align initial_capital with Tiger
     from backend.data_engine.tiger_client import tiger_client
     tiger_synced = tiger_client.is_connected()
     tiger_data = tiger_client.get_status() if tiger_synced else None
@@ -49,13 +49,13 @@ async def get_portfolio():
             if tiger_acct and tiger_acct.get("total_value", 0) > 0:
                 tiger_total = tiger_acct["total_value"]
                 gap = abs(tiger_total - portfolio.initial_capital) / max(portfolio.initial_capital, 1)
-                # ★ 差距超过 1% → 自动修正 initial_capital
+                # Gap > 1% → auto-correct initial_capital
                 if gap > 0.01:
                     portfolio.initial_capital = tiger_total
         except Exception:
             pass
 
-    # 从 realtime 获取价格
+    # Prices from the realtime engine
     from backend.data_engine.realtime import RealtimeEngine
     prices = {}
     try:
@@ -93,10 +93,10 @@ async def get_portfolio():
 
 @router.get("/positions")
 async def get_positions():
-    """获取持仓详情"""
+    """Return position details."""
     if portfolio is None:
-        return {"error": "组合管理器未初始化"}
-    # 简化返回，前端会自行计算
+        return {"error": "Portfolio manager is not initialized"}
+    # Simplified payload; the frontend computes derived fields
     return {
         "positions": [
             {"ticker": t, "shares": round(s, 4)}
@@ -112,9 +112,9 @@ async def get_trade_history(
     limit: int = Query(100, le=500),
     since: Optional[str] = None,
 ):
-    """获取交易历史"""
+    """Return trade history."""
     if store is None:
-        return {"error": "存储未初始化"}
+        return {"error": "Store is not initialized"}
     trades = store.get_trades(ticker, limit, since)
     if trades.empty:
         return {"trades": []}
@@ -123,45 +123,45 @@ async def get_trade_history(
 
 @router.get("/execution-summary")
 async def get_execution_summary():
-    """获取执行摘要"""
+    """Return execution summary."""
     if executor is None:
-        return {"error": "执行器未初始化"}
+        return {"error": "Executor is not initialized"}
     return executor.get_execution_summary()
 
 
 @router.get("/risk-status")
 async def get_risk_status():
-    """获取风控状态"""
+    """Return risk-control status."""
     if risk_manager is None:
-        return {"error": "风控未初始化"}
+        return {"error": "Risk manager is not initialized"}
     return risk_manager.get_status()
 
 
 # ============================================================
-# 仪表盘增强: Sharpe / 最大回撤 / 胜率
+# Dashboard extras: Sharpe / max drawdown / win rate
 # ============================================================
 @router.get("/dashboard")
 async def get_dashboard_metrics():
-    """获取实时仪表盘指标（含DB真实数据）"""
+    """Return live dashboard metrics (including DB-backed figures)."""
     if portfolio is None:
-        return {"error": "组合管理器未初始化"}
+        return {"error": "Portfolio manager is not initialized"}
 
     metrics = portfolio.get_metrics()
     value_history = getattr(portfolio, 'value_history', [])
 
-    # 计算 Sharpe Ratio
+    # Sharpe Ratio
     sharpe = _compute_sharpe(value_history)
 
-    # 计算最大回撤
+    # Max drawdown
     max_dd, max_dd_pct = _compute_max_drawdown(value_history)
 
-    # 计算胜率（从 trades 表真实数据）
+    # Win rate from the trades table
     win_rate, profit_factor = _compute_wr_pf()
 
-    # 计算 Calmar Ratio
+    # Calmar Ratio
     calmar = _compute_calmar(value_history, max_dd_pct)
 
-    # ★ 从 portfolio_snapshots 表读取真实快照计数
+    # Snapshot count from portfolio_snapshots
     snapshot_count = _get_snapshot_count()
 
     return {
@@ -178,7 +178,7 @@ async def get_dashboard_metrics():
 
 
 def _compute_sharpe(value_history, risk_free_rate=0.05):
-    """计算年化 Sharpe Ratio"""
+    """Compute annualized Sharpe Ratio."""
     if len(value_history) < 3:
         return 0.0
     values = [v for _, v in value_history]
@@ -190,7 +190,7 @@ def _compute_sharpe(value_history, risk_free_rate=0.05):
 
 
 def _compute_max_drawdown(value_history):
-    """计算最大回撤"""
+    """Compute maximum drawdown."""
     if len(value_history) < 2:
         return 0.0, 0.0
     values = np.array([v for _, v in value_history])
@@ -201,7 +201,7 @@ def _compute_max_drawdown(value_history):
 
 
 def _compute_wr_pf():
-    """计算胜率和盈利因子"""
+    """Compute win rate and profit factor."""
     if store is None:
         return 0.0, 0.0
     try:
@@ -209,7 +209,7 @@ def _compute_wr_pf():
         if trades.empty or len(trades) < 2:
             return 0.0, 0.0
 
-        # 按股票分组计算 P&L
+        # P&L grouped by ticker
         wins, losses = 0, 0
         total_profit, total_loss = 0.0, 0.0
         for ticker, group in trades.groupby('ticker'):
@@ -236,7 +236,7 @@ def _compute_wr_pf():
 
 
 def _compute_calmar(value_history, max_dd_pct):
-    """计算 Calmar Ratio"""
+    """Compute Calmar Ratio."""
     if len(value_history) < 3 or max_dd_pct == 0:
         return 0.0
     values = [v for _, v in value_history]
@@ -247,7 +247,7 @@ def _compute_calmar(value_history, max_dd_pct):
 
 
 def _get_snapshot_count() -> int:
-    """从 portfolio_snapshots 表读取真实快照计数"""
+    """Read snapshot count from the portfolio_snapshots table."""
     try:
         import sqlite3
         from pathlib import Path
@@ -263,11 +263,11 @@ def _get_snapshot_count() -> int:
 
 
 # ============================================================
-# 老虎实盘账户
+# Tiger live account
 # ============================================================
 @router.get("/tiger-account")
 async def get_tiger_account():
-    """查询老虎实盘账号状态（含实时持仓和账户信息）"""
+    """Query Tiger live-account status (positions and account info)."""
     from backend.data_engine.tiger_client import tiger_client
     result = {
         "connected": tiger_client.is_connected(),
@@ -284,7 +284,7 @@ async def get_tiger_account():
             status = tiger_client.get_status()
             result["status"] = status
             
-            # 使用启动时已同步的本地状态（不重复查询 Tiger API）
+            # Use local state already synced at startup (avoid extra Tiger API calls)
             result["position_count"] = len(portfolio.positions)
             result["positions"] = [
                 {
@@ -310,19 +310,19 @@ async def get_tiger_account():
 
 @router.post("/tiger-refresh")
 async def refresh_from_tiger():
-    """★ 实时刷新：强制从老虎拉取真实资产数据"""
+    """Force a live refresh from Tiger."""
     from backend.data_engine.tiger_client import tiger_client
     from configs.settings import settings
     
     if not tiger_client.is_connected():
         tiger_client.connect()
     if not tiger_client.is_connected():
-        return {"refreshed": False, "error": "Tiger 未连接"}
+        return {"refreshed": False, "error": "Tiger is not connected"}
     
-    # ★ 直接调用 Tiger SDK，指定实盘账户
+    # Call the Tiger SDK directly against the live account
     tiger_client.connect()
     try:
-        # 使用正确的实盘账户 (20874631) 而非模拟盘
+        # Use the live account (20874631), not the paper account
         real_account = settings.TIGER_ACCOUNT  # 20874631
         assets = tiger_client._trade_client.get_assets(account=real_account)
         
@@ -371,14 +371,14 @@ async def refresh_from_tiger():
 
 @router.post("/tiger-reconcile")
 async def reconcile_with_tiger():
-    """手动触发与老虎证券对账"""
+    """Manually trigger a reconciliation against Tiger Brokers."""
     result = portfolio.reconcile_with_tiger()
     return result
 
 
 @router.post("/tiger-fix-shorts")
 async def fix_short_positions():
-    """★ 买回老虎账户上所有负持仓（空头修复）"""
+    """Cover all negative (short) positions on the Tiger account."""
     from backend.data_engine.tiger_client import tiger_client
     
     if not tiger_client.is_connected():
@@ -386,7 +386,7 @@ async def fix_short_positions():
     if not tiger_client.is_connected():
         return {"fixed": False, "error": "Tiger not connected"}
     
-    # 强制重连获取最新数据
+    # Force reconnect to fetch latest data
     tiger_client.connect()
     positions = tiger_client.get_positions()
     
@@ -414,7 +414,7 @@ async def fix_short_positions():
                 "error": str(e), "status": "ERROR"
             })
     
-    # 重新同步本地状态
+    # Re-sync local state
     portfolio.sync_from_tiger(force=True)
     
     return {
@@ -430,15 +430,15 @@ async def fix_short_positions():
 # ============================================================
 
 class BreakerToggleRequest(BaseModel):
-    """断路器模式切换请求"""
-    mode: str  # "hard" 或 "warn"
+    """Circuit-breaker mode toggle request."""
+    mode: str  # "hard" or "warn"
 
 
 @risk_v2_router.get("/circuit_breaker")
 async def get_circuit_breaker_status():
-    """获取当前断路器状态（含 breaker_mode）"""
+    """Return current circuit-breaker status (including breaker_mode)."""
     if risk_manager is None:
-        return {"error": "风控未初始化"}
+        return {"error": "Risk manager is not initialized"}
     status = risk_manager.get_status()
     return {
         "circuit_breaker_triggered": status.get("circuit_breaker_triggered", False),
@@ -453,9 +453,9 @@ async def get_circuit_breaker_status():
 
 @risk_v2_router.post("/circuit_breaker/reset")
 async def reset_circuit_breaker():
-    """强制重置断路器并校准峰值"""
+    """Force-reset the circuit breaker and recalibrate peak value."""
     if risk_manager is None:
-        return {"error": "风控未初始化"}
+        return {"error": "Risk manager is not initialized"}
     try:
         risk_manager.force_reset_circuit()
         return {
@@ -471,11 +471,11 @@ async def reset_circuit_breaker():
 
 @risk_v2_router.post("/circuit_breaker/toggle")
 async def toggle_circuit_breaker(req: BreakerToggleRequest):
-    """切换断路器模式: hard / warn"""
+    """Toggle circuit-breaker mode: hard / warn."""
     if risk_manager is None:
-        return {"error": "风控未初始化"}
+        return {"error": "Risk manager is not initialized"}
     if req.mode not in ("hard", "warn"):
-        return {"error": f"无效模式: {req.mode}，仅支持 'hard' 或 'warn'"}
+        return {"error": f"Invalid mode: {req.mode}; only 'hard' or 'warn' is supported"}
     try:
         risk_manager.toggle_breaker_mode(req.mode)
         return {

@@ -1,7 +1,8 @@
 """
-Signal → Black-Litterman Views 转换器
-=====================================
-将模型推理输出的原始信号转为 Black-Litterman 模型所需的 views 格式。
+Signal → Black-Litterman Views converter
+========================================
+Convert raw model-inference signals into the views format required by
+the Black-Litterman model.
 """
 from typing import List, Dict
 
@@ -11,21 +12,21 @@ def signals_to_bl_views(signals: List[Dict]) -> List[Dict]:
 
     Args:
         signals: List of signal dicts, each containing:
-            - ticker (str): 股票代码
-            - signal (float): 信号值 ∈ [-1, 1]
-            - confidence (float): 置信度 ∈ [0, 1]
+            - ticker (str): stock ticker
+            - signal (float): signal value ∈ [-1, 1]
+            - confidence (float): confidence ∈ [0, 1]
 
     Returns:
         List of BL view dicts, each containing:
-            - ticker (str): 股票代码
-            - direction (str): "absolute" 绝对收益观点
-            - return_pct (float): 年化预期收益（小数）
-            - confidence (float): 置信度
+            - ticker (str): stock ticker
+            - direction (str): "absolute" absolute-return view
+            - return_pct (float): annualized expected return (decimal)
+            - confidence (float): confidence
 
     Rules:
-        - |signal| >= 0.3 → 生成 view
-        - 年化收益 = signal × 0.2（最大 ±20%）
-        - 过滤低于阈值的信号
+        - |signal| >= 0.3 → emit a view
+        - Annualized return = signal × 0.2 (max ±20%)
+        - Filter signals below the threshold
     """
     views: List[Dict] = []
 
@@ -34,11 +35,11 @@ def signals_to_bl_views(signals: List[Dict]) -> List[Dict]:
         signal_val: float = entry.get("signal", 0.0)
         confidence: float = entry.get("confidence", 0.5)
 
-        # 规则1: 信号强度需达到阈值（与管线 min_threshold 一致）
+        # Rule 1: signal strength must meet the threshold (aligned with pipeline min_threshold)
         if abs(signal_val) < 0.05:
             continue
 
-        # 规则2: 年化收益 = signal × 0.2（max ±20%）
+        # Rule 2: annualized return = signal × 0.2 (max ±20%)
         annualized_return: float = signal_val * 0.2
 
         # Clamp to [-0.20, 0.20]
@@ -51,7 +52,7 @@ def signals_to_bl_views(signals: List[Dict]) -> List[Dict]:
             "confidence": round(confidence, 4),
         })
 
-    # 按置信度降序排列
+    # Sort by confidence descending
     views.sort(key=lambda v: v["confidence"], reverse=True)
 
     return views

@@ -1,5 +1,5 @@
 """
-数据接口路由
+Market data API routes.
 """
 from typing import List
 from fastapi import APIRouter, Query
@@ -30,21 +30,21 @@ async def get_history(
     ticker: str,
     period: str = Query("1y", description="1d/5d/1mo/3mo/6mo/1y/2y/5y/10y"),
     interval: str = Query("1d", description="1m/5m/15m/30m/1h/1d/1wk/1mo"),
-    include_features: bool = Query(False, description="是否包含特征工程"),
+    include_features: bool = Query(False, description="Include engineered features"),
 ):
-    """获取历史K线数据"""
+    """Return historical OHLCV data."""
     df = market_data.get_historical_data(ticker, period, interval)
 
     if df.empty:
-        return {"error": f"无法获取 {ticker} 的数据"}
+        return {"error": f"Unable to fetch data for {ticker}"}
 
     if include_features:
         df = data_pipeline.process(df)
 
-    # 转前端友好格式
+    # Frontend-friendly records
     records = df.reset_index().to_dict(orient="records")
 
-    # 日期格式化
+    # Format timestamps
     for r in records:
         ts = r.get("timestamp")
         if hasattr(ts, "isoformat"):
@@ -65,20 +65,20 @@ async def get_history(
 
 @router.get("/quote/{ticker}")
 async def get_quote(ticker: str):
-    """获取实时报价"""
+    """Return a live quote."""
     quote = market_data.get_realtime_quote(ticker)
     if quote is None:
-        return {"error": f"无法获取 {ticker} 报价"}
+        return {"error": f"Unable to fetch quote for {ticker}"}
     return quote
 
 
 @router.get("/tickers")
 async def get_tickers():
-    """获取全量股票列表（5市场）"""
+    """Return the full ticker universe (5 markets)."""
     import json
     from pathlib import Path
 
-    # 直接从缓存文件读取，避免单例初始化时序问题
+    # Read cache file directly to avoid singleton-init timing issues
     cache_file = Path(__file__).parent.parent.parent / "backend" / "data" / "stock_universe.json"
 
     us, hk, sg, au, nz = [], [], [], [], []
@@ -114,7 +114,7 @@ async def get_tickers():
         except Exception as e:
             pass
 
-    # 兜底
+    # Fallback
     if not us:
         from configs.settings import settings
         us = settings.data_us_tickers_list
@@ -133,17 +133,17 @@ async def get_tickers():
 
 @router.get("/market-status")
 async def get_market_status():
-    """获取市场状态"""
+    """Return market status."""
     return market_data.get_market_status()
 
 
 @router.get("/stored-tickers")
 async def get_stored_tickers():
-    """获取已存储的 ticker"""
+    """Return tickers already stored locally."""
     return {"tickers": store.get_all_tickers()}
 
 
 @router.get("/storage-stats")
 async def get_storage_stats():
-    """获取存储统计"""
+    """Return storage statistics."""
     return store.get_storage_stats()

@@ -1,4 +1,4 @@
-"""AI 模型层 — 懒加载，torch 缺失时降级为 stub"""
+"""AI model layer — lazy-load; degrade to stubs if torch is missing."""
 
 import logging
 _lg = logging.getLogger(__name__)
@@ -10,7 +10,7 @@ _stub_cache: dict = {}
 def _try_import():
     global _STUB_MODE
     try:
-        import torch  # noqa: F401 — 检测 torch 是否可用
+        import torch  # noqa: F401 — probe whether torch is available
         from .predictor import TransformerPredictor
         from .rl_agent import TradingRLAgent
         from .sentiment import SentimentAnalyzer
@@ -32,7 +32,7 @@ def _try_import():
         }
     except ImportError as exc:
         _STUB_MODE = True
-        _lg.warning("torch 不可用 (%s)，AI 模型降级为 stub", exc)
+        _lg.warning("torch unavailable (%s); AI models degraded to stubs", exc)
         return {}
 
 
@@ -52,14 +52,14 @@ def __getattr__(name):
         return reg[name]
     if name.startswith("_"):
         raise AttributeError(name)
-    # stub: 返回一个占位类（缓存避免重复创建）
+    # stub: return a placeholder class (cached to avoid recreating)
     if name not in _stub_cache:
-        _lg.debug("AI 模型 %s 不可用 (torch 缺失)，返回 stub", name)
+        _lg.debug("AI model %s unavailable (torch missing); returning stub", name)
         _stub_cache[name] = type(name, (), {
             "__init__": lambda self, *a, **kw: None,
             "load": lambda self: False,
             "is_ready": lambda self: False,
-            "model": None,  # ★ GAT stub 必须暴露 .model 属性，防止 AttributeError
+            "model": None,  # GAT stub must expose .model to avoid AttributeError
             "predict_signal": lambda self, *a, **kw: {},
             "fuse_signals": lambda self, *a, **kw: {"decision": "hold", "strength": 0.0, "confidence": 0.0, "position_size": 0.0, "ensemble_score": 0.0, "details": {}},
             "analyze_and_trade": lambda self, *a, **kw: {},
