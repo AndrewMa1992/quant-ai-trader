@@ -4,6 +4,7 @@ import XmCard from '@/components/ui/XmCard.vue'
 import XmStatusDot from '@/components/ui/XmStatusDot.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import { useDataStore } from '@/stores/useDataStore'
+import type { BadgeVariant } from '@/types/ui'
 
 const dataStore = useDataStore()
 
@@ -30,7 +31,7 @@ function statusDot(status: string): 'green' | 'yellow' | 'red' {
   }
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string): BadgeVariant {
   switch ((status || '').toLowerCase()) {
     case 'success':
     case 'ok':
@@ -155,7 +156,7 @@ onMounted(() => {
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-sm font-mono font-semibold">{{ sync.sync_type }}</span>
-              <XmBadge :variant="statusBadge(sync.status) as any">{{ sync.status }}</XmBadge>
+              <XmBadge :variant="statusBadge(sync.status)">{{ sync.status }}</XmBadge>
             </div>
             <div class="flex items-center gap-4 mt-1 text-xs text-xm-text-tertiary flex-wrap">
               <span v-if="sync.last_sync_at">Last sync: {{ fmtTime(sync.last_sync_at) }}</span>

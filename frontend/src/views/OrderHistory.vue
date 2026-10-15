@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import { useDataStore } from '@/stores/useDataStore'
+import type { BadgeVariant } from '@/types/ui'
 
 const dataStore = useDataStore()
 
@@ -22,14 +23,14 @@ async function doSearch() {
   await dataStore.fetchOrders(params)
 }
 
-function sideBadge(side: string) {
+function sideBadge(side: string): BadgeVariant {
   const s = (side || '').toLowerCase()
   if (s === 'buy') return 'success'
   if (s === 'sell') return 'danger'
   return 'info'
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string): BadgeVariant {
   const s = (status || '').toLowerCase()
   if (s === 'filled') return 'success'
   if (s === 'rejected') return 'danger'
@@ -123,13 +124,13 @@ onMounted(() => {
             <td class="font-mono text-xs">{{ orderId(order) }}</td>
             <td class="font-mono font-semibold">{{ order.ticker }}</td>
             <td>
-              <XmBadge :variant="sideBadge(order.side) as any">{{ (order.side || '').toUpperCase() }}</XmBadge>
+              <XmBadge :variant="sideBadge(order.side)">{{ (order.side || '').toUpperCase() }}</XmBadge>
             </td>
             <td class="text-right font-mono">{{ order.quantity }}</td>
             <td class="text-right font-mono">{{ order.price ? '$' + order.price.toFixed(2) : '-' }}</td>
             <td class="text-xs">{{ order.order_type || order.strategy || '-' }}</td>
             <td>
-              <XmBadge :variant="statusBadge(order.status) as any">{{ order.status }}</XmBadge>
+              <XmBadge :variant="statusBadge(order.status)">{{ order.status }}</XmBadge>
             </td>
             <td class="text-xs text-xm-text-tertiary">{{ fmtDate(order.created_at || order.timestamp) }}</td>
           </tr>
