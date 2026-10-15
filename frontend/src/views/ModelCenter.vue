@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import XmCard from '@/components/ui/XmCard.vue'
 import XmBadge from '@/components/ui/XmBadge.vue'
 import XmStatusDot from '@/components/ui/XmStatusDot.vue'
 import ModelStatusCard from '@/components/model/ModelStatusCard.vue'
 import { useModelStore } from '@/stores/useModelStore'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 import type { RegisteredModel, ModelStatus } from '@/stores/useModelStore'
 
 const modelStore = useModelStore()
@@ -17,7 +18,18 @@ const currentRunId = ref('')
 const trainError = ref('')
 const loading = ref(false)
 
-let pollTimer: ReturnType<typeof setInterval> | undefined
+const trainingPoll = useVisibleInterval(() => {
+  const runId = currentRunId.value
+  if (!runId) return
+  void (async () => {
+    await modelStore.pollTrainingStatus(runId)
+    const status = modelStore.trainingRuns[runId]?.status
+    if (status === 'completed' || status === 'failed') {
+      trainingPoll.stop()
+      await refreshModels()
+    }
+  })()
+}, 2000)
 
 function inferType(name: string): string {
   const lower = name.toLowerCase()
@@ -96,10 +108,7 @@ const runStatus = computed(() => {
 })
 
 function clearPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = undefined
-  }
+  trainingPoll.stop()
 }
 
 async function refreshModels() {
@@ -118,9 +127,6 @@ onMounted(() => {
   refreshModels()
 })
 
-onUnmounted(() => {
-  clearPoll()
-})
 
 async function startTraining() {
   trainError.value = ''
@@ -141,14 +147,7 @@ async function startTraining() {
   }
 
   currentRunId.value = runId
-  pollTimer = setInterval(async () => {
-    await modelStore.pollTrainingStatus(runId)
-    const status = modelStore.trainingRuns[runId]?.status
-    if (status === 'completed' || status === 'failed') {
-      clearPoll()
-      await refreshModels()
-    }
-  }, 2000)
+  trainingPoll.start()
 }
 </script>
 
