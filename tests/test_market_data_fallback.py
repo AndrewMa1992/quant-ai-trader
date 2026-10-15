@@ -151,6 +151,69 @@ def test_record_daily_window_appends_jsonl(tmp_path):
     assert len(saved["log_returns"]) == 2
 
 
+def test_tiger_history_quota_keeps_the_quote_client():
+    from backend.data_engine.market_data import MarketDataEngine
+
+    class _Quote:
+        def __init__(self):
+            self.calls = 0
+
+        def get_bars(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                idx = pd.date_range("2024-01-01", periods=3, freq="B")
+                return pd.DataFrame(
+                    {
+                        "symbol": ["AAPL"] * 3,
+                        "time": [int(ts.timestamp() * 1000) for ts in idx],
+                        "open": [10, 11, 12],
+                        "high": [11, 12, 13],
+                        "low": [9, 10, 11],
+                        "close": [10.5, 11.5, 12.5],
+                        "volume": [100, 110, 120],
+                    }
+                )
+            raise RuntimeError(
+                "code=4 msg=4000:permission denied(access to 20 symbols, occupied symbols: [AAPL])"
+            )
+
+    engine = MarketDataEngine()
+    engine._tiger_quote = _Quote()
+    names = ["AAPL"] + [f"T{i}" for i in range(25)]
+    filled = engine._warm_from_tiger_batch(names, "2y", "1d")
+
+    assert filled == 1
+    assert getattr(engine, "_tiger_quote_failed", False) is False
+    assert engine._tiger_quote is not None
+
+
+def test_settled_us_history_does_not_call_china(monkeypatch):
+    from backend.data_engine.market_data import MarketDataEngine
+    import backend.data_engine.market_data as market_mod
+
+    engine = MarketDataEngine()
+    engine._us_history_settled = True
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("china feed should not be called")
+
+    monkeypatch.setattr(market_mod.china_data_adapter, "get_historical_data", _boom)
+    out = engine.get_historical_data("JPM", period="2y", interval="1d")
+    assert out.empty
+
+
+def test_order_quantity_stays_under_single_order_limit():
+    from trading_pipeline import TradingPipeline
+
+    cash = 698_715.16
+    nav = 1_006_881.12
+    price = 150.0
+    qty = TradingPipeline._order_quantity(cash, nav, 0.8, price, single_order_limit=0.02)
+
+    assert qty >= 1
+    assert (qty * price) / nav <= 0.02
+
+
 def test_signal_gets_close_and_return_score():
     from trading_pipeline import TradingPipeline
 
