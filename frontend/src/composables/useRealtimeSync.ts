@@ -19,7 +19,7 @@ let started = false
 let intentionalClose = false
 
 function wsUrl(): string {
-  const custom = import.meta.env.VITE_WS_URL as string | undefined
+  const custom = import.meta.env.VITE_WS_URL
   if (custom) return custom
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${window.location.host}/ws?room=tiger,market-data`

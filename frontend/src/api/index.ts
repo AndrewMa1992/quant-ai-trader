@@ -1,10 +1,40 @@
-/// <reference types="vite/client" />
 import axios from 'axios'
-import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 
-// ★ baseURL uses /api (vite proxy → localhost:8001)
+/** Error body returned by the gateway. FastAPI may put a string in `detail`. */
+interface ApiErrorBody {
+  message?: string
+  detail?: unknown
+  code?: string
+  details?: unknown
+}
+
+/** Parsed error attached by the response interceptor for callers. */
+export interface ParsedApiError {
+  status: number
+  message: string
+  code: string
+  details?: unknown
+}
+
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _startTime?: number
+  }
+  interface AxiosError {
+    parsedError?: ParsedApiError
+  }
+}
+
+// baseURL uses /api (vite proxy → localhost:8001)
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || '/api'
 const API_KEY: string = import.meta.env.VITE_API_KEY || 'dev-api-key-change-in-production'
+
+function errorMessage(data: ApiErrorBody | undefined, status: number): string {
+  const raw = data?.message ?? data?.detail
+  if (typeof raw === 'string' && raw) return raw
+  return `Request failed with status ${status}`
+}
 
 /** Create a pre-configured Axios instance for the QAT API. */
 const apiClient: AxiosInstance = axios.create({
@@ -19,26 +49,18 @@ const apiClient: AxiosInstance = axios.create({
 // ── Request Interceptor ─────────────────────────────────────
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Inject API key into every request
     config.headers.set('X-API-Key', API_KEY)
-
-    // Attach request start time for timing
-    ;(config as unknown as Record<string, unknown>)._startTime = Date.now()
-
+    config._startTime = Date.now()
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  },
+  (error: unknown) => Promise.reject(error),
 )
 
 // ── Response Interceptor ────────────────────────────────────
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // Log request duration in dev
     if (import.meta.env.DEV) {
-      const config = response.config as unknown as Record<string, unknown>
-      const startTime = config._startTime as number | undefined
+      const startTime = response.config._startTime
       if (startTime) {
         const duration = Date.now() - startTime
         console.debug(
@@ -48,11 +70,10 @@ apiClient.interceptors.response.use(
     }
     return response
   },
-  (error) => {
-    // Standardized error handling
+  (error: AxiosError<ApiErrorBody>) => {
     if (error.response) {
       const { status, data } = error.response
-      const message = data?.message || data?.detail || `Request failed with status ${status}`
+      const message = errorMessage(data, status)
 
       switch (status) {
         case 401:
@@ -76,7 +97,6 @@ apiClient.interceptors.response.use(
           console.error(`[API] Error (${status}): ${message}`)
       }
 
-      // Attach parsed error for upstream handling
       error.parsedError = {
         status,
         message,
@@ -94,7 +114,7 @@ apiClient.interceptors.response.use(
       console.error(`[API] Request setup error: ${error.message}`)
       error.parsedError = {
         status: 0,
-        message: error.message,
+        message: error.message || 'Request setup failed',
         code: 'REQUEST_ERROR',
       }
     }
@@ -102,6 +122,16 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+/** Message from an API failure, including interceptor-parsed bodies. */
+export function apiErrorMessage(error: unknown, fallback = 'Request failed'): string {
+  if (axios.isAxiosError(error)) {
+    if (error.parsedError?.message) return error.parsedError.message
+    if (error.message) return error.message
+  }
+  if (error instanceof Error && error.message) return error.message
+  return fallback
+}
 
 export default apiClient
 export { API_BASE_URL, API_KEY }

@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/useExecutionStore'
-import { wsStatus } from '@/composables/useRealtimeSync'
+import { lastTigerAt, wsStatus } from '@/composables/useRealtimeSync'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 const route = useRoute()
 const execStore = useExecutionStore()
 
 const currentTime = ref<string>('')
 
-let timer: ReturnType<typeof setInterval> | undefined
+function tickClock() {
+  currentTime.value = new Date().toLocaleTimeString('en-GB', { hour12: false })
+}
+
+const clock = useVisibleInterval(tickClock, 1000)
 
 onMounted(() => {
-  currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  timer = setInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  }, 1000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  tickClock()
+  clock.start()
 })
 
 const pageTitle = computed(() => {
@@ -31,6 +30,10 @@ const pageTitle = computed(() => {
     PortfolioOptimizer: 'Portfolio Optimizer',
     BacktestAnalysis: 'Backtest Analysis',
     ExecutionMonitor: 'Execution Monitor',
+    OrderHistory: 'Order History',
+    DataExplorer: 'Data Explorer',
+    DataSyncDashboard: 'Data Sync',
+    LogViewer: 'Server Logs',
   }
   return map[String(route.name)] ?? 'Quant AI Trader'
 })
@@ -44,6 +47,13 @@ const liveLabel = computed(() => {
   if (wsStatus.value === 'connected') return 'Tiger Live'
   if (wsStatus.value === 'connecting') return 'Connecting'
   return 'Offline'
+})
+
+const tigerClock = computed(() => {
+  if (!lastTigerAt.value) return ''
+  const parsed = new Date(lastTigerAt.value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleTimeString('en-GB', { hour12: false })
 })
 
 const liveDotClass = computed(() => {
@@ -75,6 +85,7 @@ const liveDotClass = computed(() => {
       <div class="flex items-center gap-2" :title="`WS ${wsStatus}`">
         <span class="w-2 h-2 rounded-full" :class="liveDotClass" />
         <span class="text-xs text-xm-text-secondary font-medium">{{ liveLabel }}</span>
+        <span v-if="tigerClock" class="text-xs text-xm-text-tertiary font-mono">{{ tigerClock }}</span>
       </div>
 
       <!-- Clock -->

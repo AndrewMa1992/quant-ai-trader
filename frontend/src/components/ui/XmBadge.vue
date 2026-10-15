@@ -1,9 +1,9 @@
 <script setup lang="ts">
-interface Props {
-  variant?: 'success' | 'warning' | 'danger' | 'info'
-}
+import type { BadgeVariant } from '@/types/ui'
 
-withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<{
+  variant?: BadgeVariant
+}>(), {
   variant: 'info',
 })
 </script>

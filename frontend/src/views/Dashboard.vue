@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -16,6 +16,8 @@ import { useExecutionStore } from '@/stores/useExecutionStore'
 import { useModelStore } from '@/stores/useModelStore'
 import { tradeApi } from '@/api/tradeApi'
 import { modelApi } from '@/api/modelApi'
+import { wsStatus } from '@/composables/useRealtimeSync'
+import { useVisibleInterval } from '@/composables/useVisibleInterval'
 
 use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -28,7 +30,15 @@ const navHistory = ref<number[]>([])
 /** SignalTrendChart expects { cycle, strength, decision } */
 const signalHistory = ref<Array<{ cycle: number; strength: number; decision: string }>>([])
 
-let refreshTimer: ReturnType<typeof setInterval> | undefined
+const refreshPoll = useVisibleInterval(() => {
+  // Positions, account, and orders already arrive on the websocket.
+  if (wsStatus.value !== 'connected') {
+    portfolioStore.fetchPositions()
+    portfolioStore.fetchTigerAccount()
+    execStore.fetchOrders()
+  }
+  fetchSignals()
+}, 30000)
 
 const rollbackLoading = ref(false)
 const toastMessage = ref('')
@@ -52,7 +62,7 @@ const canRollback = computed(() => {
 })
 
 async function handleRollback() {
-  if (!confirm('Roll back to the last stable version?')) return
+  if (!confirm('Roll back to the previous stable version?')) return
   rollbackLoading.value = true
   try {
     const result = await execStore.rollback()
@@ -62,7 +72,7 @@ async function handleRollback() {
       showToast('Rollback failed. Check the logs.')
     }
   } catch {
-    showToast('Rollback request failed. Try again later.')
+    showToast('Rollback request failed. Try again shortly.')
   } finally {
     rollbackLoading.value = false
   }
@@ -108,16 +118,7 @@ onMounted(async () => {
     fetchNavHistory(),
     fetchSignals(),
   ])
-  refreshTimer = setInterval(() => {
-    portfolioStore.fetchPositions()
-    portfolioStore.fetchTigerAccount()
-    execStore.fetchOrders()
-    fetchSignals()
-  }, 30000)
-})
-
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
+  refreshPoll.start()
 })
 
 async function fetchNavHistory(): Promise<void> {
@@ -230,7 +231,7 @@ const recentOrders = computed(() => execStore.orders.slice(0, 8))
       </div>
       <button
         :disabled="!canRollback || rollbackLoading"
-        :title="!canRollback ? 'Available only when markets are closed' : 'Roll back to the last stable version'"
+        :title="!canRollback ? 'Available only outside trading hours' : 'Roll back to the previous stable version'"
         class="flex-shrink-0 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-md active:scale-95"
         :style="{ backgroundColor: canRollback ? '#FF6700' : '#CCCCCC' }"
         @click="handleRollback"
@@ -242,7 +243,7 @@ const recentOrders = computed(() => execStore.orders.slice(0, 8))
           </svg>
           Rolling back...
         </span>
-        <span v-else>One-click rollback</span>
+        <span v-else>Roll back</span>
       </button>
     </div>
 

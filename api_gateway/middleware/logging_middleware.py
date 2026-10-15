@@ -32,16 +32,21 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())[:8]
         request.state.request_id = request_id
 
+        path = request.url.path
+        # Health and static assets are polled constantly. Skip their access
+        # lines unless the response is an error, so log files stay useful.
+        quiet = path in {"/health", "/health/live", "/favicon.ico"} or path.startswith("/assets/")
+
         # Get client IP (accounting for reverse proxies)
         client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
         if not client_ip:
             client_ip = request.client.host if request.client else "unknown"
 
-        # Log the incoming request
-        logger.info(
-            f"[{request_id}] {request.method} {request.url.path} "
-            f"from {client_ip} - {request.headers.get('User-Agent', 'unknown')[:80]}"
-        )
+        if not quiet:
+            logger.info(
+                f"[{request_id}] {request.method} {path} "
+                f"from {client_ip} - {request.headers.get('User-Agent', 'unknown')[:80]}"
+            )
 
         start_time = time.perf_counter()
 
@@ -54,14 +59,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
 
-        # Log the response
         status_code = response.status_code
-        log_level = "ERROR" if status_code >= 500 else "WARNING" if status_code >= 400 else "INFO"
-
-        logger.bind(name="request").log(
-            log_level,
-            f"[{request_id}] {request.method} {request.url.path} "
-            f"→ {status_code} ({elapsed_ms:.1f}ms)",
-        )
+        if not quiet or status_code >= 400:
+            log_level = "ERROR" if status_code >= 500 else "WARNING" if status_code >= 400 else "INFO"
+            logger.bind(name="request").log(
+                log_level,
+                f"[{request_id}] {request.method} {path} "
+                f"→ {status_code} ({elapsed_ms:.1f}ms)",
+            )
 
         return response
