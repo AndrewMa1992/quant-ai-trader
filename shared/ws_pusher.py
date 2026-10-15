@@ -4,10 +4,24 @@ WsPusher — push cycle / tiger snapshots to API gateway WS bridge.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Optional
 
 import httpx
 from loguru import logger
+
+
+def default_gateway_url() -> str:
+    """Gateway the execution service and pipeline should push live snapshots to.
+
+    Inside Docker this is http://api-gateway:8001 (QAT_GATEWAY_URL). On a single
+    host it follows QAT_API_PORT, default 8001.
+    """
+    explicit = os.getenv("QAT_GATEWAY_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    port = os.getenv("QAT_API_PORT", "8001").strip() or "8001"
+    return f"http://127.0.0.1:{port}"
 
 
 class WsPusher:
@@ -19,7 +33,7 @@ class WsPusher:
         enabled: bool = True,
         timeout: float = 3.0,
     ) -> None:
-        self.api_url: str = api_url.rstrip("/") if api_url else "http://127.0.0.1:8001"
+        self.api_url: str = api_url.rstrip("/") if api_url else default_gateway_url()
         self.enabled: bool = enabled
         self.timeout: float = timeout
         self._http: Optional[httpx.AsyncClient] = None

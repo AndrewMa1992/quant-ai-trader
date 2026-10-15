@@ -104,6 +104,8 @@ if [[ "$ok" == "1" ]]; then
   echo "  Status:   ${COMPOSE[*]} ps"
   echo "  Logs:     ${COMPOSE[*]} logs -f --tail=100"
   echo "  Stop:     ${COMPOSE[*]} down"
+  echo "  Pipeline: paper US loop every 5 min (container qat-trading-pipeline)"
+  echo "  Tiger:    mount certs/tiger_private_key.pem for live paper sync"
   echo "  Train:    python scripts/run_paper_train.py --quick --models gbdt"
   echo "============================================"
   exit 0
