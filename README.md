@@ -78,7 +78,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\windows_deploy.ps1 -OpenFirewall
 ```
 
-The public site listens on port 80 and forwards to the gateway. Port 8080 forwards to the frontend on 5180. RDP, firewall rules, and boot tasks are in [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md).
+The public site is `https://<host>/`. Port 443 terminates TLS and forwards to the gateway on `127.0.0.1:8001`. Port 80 redirects to HTTPS. The certificate is created on the server for that host (self-signed when the host is a bare IP) and is not committed. Health checks stay on `http://127.0.0.1:8001/health`. Port 8080 still forwards to the optional frontend on 5180. RDP, firewall rules, and boot tasks are in [DEPLOY_WINDOWS.md](./DEPLOY_WINDOWS.md).
 
 A Windows host that has run `scripts\windows_auto_deploy.ps1 -InstallTask` tracks GitHub `main`. Every two minutes it fetches `origin/main`. A new commit resets the checkout and redeploys the paper stack. `.env`, `certs\`, logs, and local market data are left in place.
 

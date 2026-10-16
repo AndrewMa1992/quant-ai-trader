@@ -1,7 +1,7 @@
 # Keep API gateway (+ optional :5180) alive so the UI stays reachable.
 # ASCII-only. No here-strings. Safe string concat (no nested `" escapes).
 # Children started via Win32_Process.Create to survive GHA orphan cleanup.
-# Primary public UI: http://<host>:8001/  (gateway SPA)
+# Primary public UI: https://<host>/  (TLS proxy :8443 -> gateway :8001)
 #   .\scripts\windows_frontend_watchdog.ps1 -InstallTask
 #   .\scripts\windows_frontend_watchdog.ps1 -Once
 
@@ -84,6 +84,33 @@ function Start-Gateway {
     Write-Log "started api-gateway :8001"
 }
 
+function Start-TlsProxy {
+    $py = Get-Python
+    if (-not $py) { Write-Log "python missing"; return }
+    $publicHost = $env:QAT_PUBLIC_HOST
+    if (-not $publicHost) { $publicHost = "43.160.194.146" }
+    $bat = Join-Path $pidDir "start_tls-proxy.bat"
+    $outLog = Join-Path $logDir "tls-proxy.out.log"
+    $errLog = Join-Path $logDir "tls-proxy.err.log"
+    $runLine = '"{0}" scripts\windows_tls_proxy.py --ensure-cert --public-host {1} >> "{2}" 2>> "{3}"' -f $py, $publicHost, $outLog, $errLog
+    $lines = @(
+        "@echo off",
+        ("set PYTHONPATH={0}" -f $RepoRoot),
+        ("set QAT_PROJECT_ROOT={0}" -f $RepoRoot),
+        ("set QAT_PUBLIC_HOST={0}" -f $publicHost),
+        ("cd /d {0}" -f $RepoRoot),
+        $runLine
+    )
+    Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
+    Start-DetachedBat $bat "windows_tls_proxy.py" | Out-Null
+    Write-Log "started tls-proxy :8443/:8081"
+}
+
+function Test-Listen([int]$Port) {
+    $c = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    return [bool]$c
+}
+
 function Start-Frontend5180 {
     $py = Get-Python
     if (-not $py) { return }
@@ -139,6 +166,13 @@ function Invoke-Check {
     } else {
         Write-Log "frontend :5180 OK"
     }
+
+    if (-not (Test-Listen 8443) -or -not (Test-Listen 8081)) {
+        Write-Log "tls-proxy down - restarting"
+        Start-TlsProxy
+    } else {
+        Write-Log "tls-proxy OK"
+    }
 }
 
 if ($InstallTask) {
@@ -161,7 +195,7 @@ if ($InstallTask) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 0)
     Register-ScheduledTask -TaskName "QAT-Frontend-Watchdog" -Action $action `
         -Trigger @($trigger, $onceTrig) -Principal $prin -Settings $settings `
-        -Description "QAT: keep gateway SPA (:8001) and optional :5180 alive" -Force | Out-Null
+        -Description "QAT: keep gateway SPA, HTTPS proxy, and optional :5180 alive" -Force | Out-Null
     Write-Log "Registered QAT-Frontend-Watchdog"
     Invoke-Check
     exit 0
