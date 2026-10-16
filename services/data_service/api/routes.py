@@ -14,7 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, timedelta, datetime
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
@@ -53,15 +53,18 @@ class BarsQuery(BaseModel):
 @router.get("/bars")
 async def get_daily_bars(
     ticker: str = Query(..., description="Ticker symbol"),
-    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    start_date: str | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
     end_date: str | None = Query(default=None, description="End date (YYYY-MM-DD)"),
 ) -> APIResponse:
     """Retrieve daily OHLCV bars for a ticker.
 
     Returns cached data from Parquet store. Falls back to yfinance if not cached.
+    When start_date is omitted, the last two years are returned.
     """
     log = get_logger(__name__)
     try:
+        if not start_date:
+            start_date = (date.today() - timedelta(days=730)).isoformat()
         s_date = date.fromisoformat(start_date)
         e_date = date.fromisoformat(end_date) if end_date else date.today()
 

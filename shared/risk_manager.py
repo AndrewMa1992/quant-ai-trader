@@ -663,9 +663,10 @@ class RiskManager:
             cost = price * buy_qty
             budget = spendable_cash(float(getattr(portfolio, "cash", 0) or 0))
             if cost > budget:
+                book_cash = float(getattr(portfolio, "cash", 0) or 0)
                 logger.warning(
-                    f"🚫 Skip short cover {ticker}: ${cost:,.2f} exceeds cash "
-                    f"${max(float(getattr(portfolio, 'cash', 0) or 0), 0):,.2f}"
+                    f"🚫 Skip short cover {ticker}: ${cost:,.2f} exceeds "
+                    f"spendable cash ${budget:,.2f} (book cash ${book_cash:,.2f})"
                 )
                 continue
 

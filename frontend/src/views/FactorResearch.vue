@@ -135,7 +135,8 @@ const corrData = computed<Array<[number, number, number]>>(() => {
   const data: Array<[number, number, number]> = []
   for (let i = 0; i < names.length; i++) {
     for (let j = 0; j < names.length; j++) {
-      const val = matrix[names[i]]?.[names[j]] ?? (i === j ? 1 : 0)
+      const raw = matrix[names[i]]?.[names[j]]
+      const val = typeof raw === 'number' && Number.isFinite(raw) ? raw : (i === j ? 1 : 0)
       data.push([j, i, parseFloat(val.toFixed(2))])
     }
   }

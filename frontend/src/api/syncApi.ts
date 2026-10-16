@@ -81,8 +81,9 @@ export const syncApi = {
   },
 
   async getBars(ticker: string, start?: string, end?: string) {
+    const startDate = start || new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const { data } = await apiClient.get('/v2/data/bars', {
-      params: { ticker, start_date: start, end_date: end },
+      params: { ticker, start_date: startDate, end_date: end },
     })
     return data.data ?? data
   },
