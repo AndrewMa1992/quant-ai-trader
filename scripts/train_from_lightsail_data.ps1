@@ -77,8 +77,10 @@ while ($true) {
 }
 
 $ErrorActionPreference = "Stop"
+if ($SkipRl) {
+    Write-Host "[ok] PPO is part of the nightly ensemble; -SkipRl is not applied"
+}
 $argsList = @("-Epochs", "$Epochs", "-Tickers", $Tickers, "-Branch", $Branch, "-SkipDownload")
-if ($SkipRl) { $argsList += "-SkipRl" }
 & powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\train_and_sync.ps1" @argsList
 if ($LASTEXITCODE -ne 0) { throw "train_and_sync failed" }
 
