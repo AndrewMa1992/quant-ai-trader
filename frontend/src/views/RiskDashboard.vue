@@ -20,7 +20,7 @@ const riskStore = useRiskStore()
 const DAILY_LOSS_LIMIT = 0.05
 const MAX_DRAWDOWN_LIMIT = 0.25
 
-const drawdownHistory = ref<number[]>([0])
+const drawdownHistory = ref<number[]>([])
 const dashboardData = ref<DashboardData>({})
 const portfolioData = ref<TradePortfolio | null>(null)
 const barraTicker = ref('SPY')
@@ -35,7 +35,8 @@ const portfolioValue = computed<number>(() => {
   if (fromPortfolio != null && Number(fromPortfolio) > 0) return Number(fromPortfolio)
   const fromDashboard = dashboardData.value.total_value
   if (fromDashboard != null && fromDashboard > 0) return fromDashboard
-  return 1_000_000
+  const asset = Number(dashboardData.value.total_asset ?? 0)
+  return asset > 0 ? asset : 0
 })
 
 const var95 = computed<number>(() => {
@@ -46,8 +47,9 @@ const var95 = computed<number>(() => {
 })
 
 const historicalMaxDrawdown = computed<number>(() => {
-  const dd = dashboardData.value.max_drawdown_pct
-  return dd != null ? Math.abs(dd) : MAX_DRAWDOWN_LIMIT
+  const dd = dashboardData.value.max_drawdown ?? dashboardData.value.max_drawdown_pct
+  if (dd != null) return Math.abs(Number(dd))
+  return Math.abs(currentDrawdown.value)
 })
 
 const resetLoading = ref(false)
@@ -68,17 +70,17 @@ async function fetchAllData(): Promise<void> {
   ])
 
   try {
-    const positions = portfolioData.value?.positions ?? []
+    const positions = (portfolioData.value?.positions ?? []).filter(
+      (p) => Math.abs(Number(p.market_value) || 0) > 0 && p.ticker,
+    )
     if (positions.length > 0) {
+      const gross = positions.reduce((s, p) => s + Math.abs(Number(p.market_value) || 0), 0)
       const tickers = positions.map((p) => p.ticker)
-      const totalAlloc = positions.reduce((s, p) => s + (p.allocation || 0), 0) || 1
-      const weights = positions.map((p) => (p.allocation || 0) / totalAlloc)
+      const weights = positions.map((p) => Math.abs(Number(p.market_value) || 0) / gross)
       await riskStore.fetchVaR(tickers, weights)
-    } else {
-      await riskStore.fetchVaR(['AAPL', 'MSFT'], [0.5, 0.5])
     }
   } catch {
-    await riskStore.fetchVaR(['AAPL', 'MSFT'], [0.5, 0.5])
+    // leave VaR empty when the book has no market values
   }
 }
 
@@ -112,7 +114,7 @@ async function loadBarra(): Promise<void> {
 }
 
 const drawdownChartOption = computed(() => {
-  const data = drawdownHistory.value.length > 0 ? drawdownHistory.value : [0]
+  const data = drawdownHistory.value
   return {
     grid: { top: 8, right: 16, bottom: 4, left: 50 },
     tooltip: {

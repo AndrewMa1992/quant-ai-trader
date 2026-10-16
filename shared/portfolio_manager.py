@@ -240,12 +240,11 @@ class PortfolioManager:
                 result["tiger_total"] = tiger_total
                 return result
 
-            # Overwrite local state from Tiger.
+            # Broker cash, including a negative balance. Buying power is
+            # margin and must not be stored as cash.
             self.positions.clear()
             self.avg_costs.clear()
-            self.cash = tiger_cash if tiger_cash > self._ZERO_NAV_EPS else (
-                tiger_bp if tiger_bp > self._ZERO_NAV_EPS else tiger_cash
-            )
+            self.cash = tiger_cash
 
             # ── initial_capital anchoring ──────────────────────
             if tiger_total > 0:

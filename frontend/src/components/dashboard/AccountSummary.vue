@@ -51,7 +51,7 @@ const kpiCards = computed(() => [
   },
 ])
 
-const sparkData = computed(() => props.navHistory.length > 0 ? props.navHistory : [100, 102, 101, 103, 105])
+const sparkData = computed(() => props.navHistory)
 
 function fmtCurrency(v: number): string {
   const abs = Math.abs(v)

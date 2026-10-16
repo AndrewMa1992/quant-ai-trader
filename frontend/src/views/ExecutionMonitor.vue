@@ -134,7 +134,7 @@ function mapOrder(t: Record<string, unknown>): OrderRow {
     filled,
     price,
     value: Number(t.value ?? qty * price),
-    status: String(t.status ?? 'unknown').toLowerCase(),
+    status: String(t.status ?? 'unknown').replace(/^orderstatus\./i, '').toLowerCase(),
     timestamp: String(t.timestamp ?? t.created_at ?? ''),
     algo: String(t.algo ?? t.strategy ?? 'TWAP'),
     slices,

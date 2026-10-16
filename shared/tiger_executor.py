@@ -128,6 +128,7 @@ class TigerExecutor:
         self.portfolio = portfolio
         self.risk = risk
         self.tiger = tiger_bridge
+        self.block_buys: bool = False
 
         self.filled_orders: List[Dict[str, Any]] = []
 
@@ -188,8 +189,13 @@ class TigerExecutor:
             logger.debug(f"TigerExecutor: zero quantity for {ticker}")
             return None
 
-        # ── HK / SG lot rounding (buys only) ───────────────────
+        from shared.no_leverage import cap_buy_quantity
+
+        # ── Cash-only buys; sells cannot open a short ─────────
         if decision_upper == "BUY":
+            if self.block_buys:
+                logger.info(f"no-leverage: buys blocked, skip {ticker}")
+                return None
             rounded: float = _round_lot(ticker, quantity, "buy")
             if rounded <= 0.0:
                 logger.debug(
@@ -199,18 +205,25 @@ class TigerExecutor:
             if rounded != quantity:
                 logger.info(f"📐 {ticker} lot-size aligned: {int(quantity)} → {int(rounded)} shares")
                 quantity = rounded
-            # Lot may exceed cash — trim to affordable whole lots
-            max_cash = float(getattr(self.risk, "cash", self.portfolio.cash)) * float(
-                getattr(self.risk, "MAX_CASH_USAGE", 0.95)
-            )
-            if quantity * price > max_cash:
-                lot = _get_lot_size(ticker)
-                afford = int(max_cash / price)
-                if lot > 1:
-                    afford = (afford // lot) * lot
-                if afford <= 0:
-                    return None
-                quantity = float(afford)
+            book_cash = float(getattr(self.portfolio, "cash", 0) or 0)
+            quantity = cap_buy_quantity(quantity, price, book_cash)
+            lot = _get_lot_size(ticker)
+            if lot > 1:
+                quantity = float(int(quantity) // lot * lot)
+            if int(quantity) < 1:
+                logger.info(
+                    f"no-leverage: skip BUY {ticker} — cash ${book_cash:,.2f} cannot fund it"
+                )
+                return None
+            quantity = float(int(quantity))
+        else:
+            held = float(self.portfolio.positions.get(ticker, 0) or 0)
+            if held <= 0:
+                logger.info(f"no-leverage: skip SELL {ticker} — no long shares")
+                return None
+            quantity = min(float(quantity), held)
+            if quantity <= 0:
+                return None
 
         # ── Risk check ─────────────────────────────────────────
         side_key: str = "buy" if decision_upper == "BUY" else "sell"
@@ -307,6 +320,7 @@ class TigerExecutor:
         target_weights: Dict[str, float],
         prices: Dict[str, float],
         current_positions: Optional[Dict[str, float]] = None,
+        block_buys: bool = False,
     ) -> List[Dict[str, Any]]:
         """Execute a portfolio rebalance given target weights.
 
@@ -324,6 +338,8 @@ class TigerExecutor:
         if not target_weights:
             return []
 
+        from shared.no_leverage import cap_buy_quantity
+
         positions: Dict[str, float] = (
             dict(current_positions)
             if current_positions is not None
@@ -331,6 +347,10 @@ class TigerExecutor:
         )
         total_value: float = self.portfolio.total_value
         orders: List[Dict[str, Any]] = []
+        self.block_buys = bool(block_buys) or self.block_buys
+        remaining_cash = 0.0 if self.block_buys else max(
+            0.0, float(getattr(self.portfolio, "cash", 0) or 0)
+        )
 
         for ticker, target_weight in target_weights.items():
             try:
@@ -350,6 +370,13 @@ class TigerExecutor:
                 target_value: float = abs(diff) * total_value
                 quantity: float = target_value / price
                 if diff > 0:
+                    if self.block_buys or remaining_cash <= 0:
+                        logger.info(f"no-leverage: skip rebalance BUY {ticker}")
+                        continue
+                    quantity = cap_buy_quantity(quantity, price, remaining_cash)
+                    if int(quantity) < 1:
+                        continue
+                    remaining_cash = max(0.0, remaining_cash - quantity * price)
                     order = self.execute_signal(
                         ticker=ticker,
                         decision="BUY",
@@ -360,8 +387,11 @@ class TigerExecutor:
                         quantity=quantity,
                     )
                 else:
-                    # Cap sell to holdings
-                    quantity = min(quantity, current_shares)
+                    long_shares = max(current_shares, 0.0)
+                    if long_shares <= 0:
+                        logger.info(f"no-leverage: skip rebalance SELL {ticker} — no long")
+                        continue
+                    quantity = min(quantity, long_shares)
                     order = self.execute_signal(
                         ticker=ticker,
                         decision="SELL",
@@ -410,6 +440,16 @@ class TigerExecutor:
                     f"TigerExecutor: Tiger offline — falling back to paper for {ticker}"
                 )
                 return self._execute_paper(ticker, side, quantity, price, strategy)
+
+            if side.upper() == "BUY" and self.block_buys:
+                logger.info(f"no-leverage: buys blocked, skip live BUY {ticker}")
+                return None
+            held = float(self.portfolio.positions.get(ticker, 0) or 0)
+            if side.upper() == "SELL" and held <= 0:
+                logger.info(f"no-leverage: skip live SELL {ticker} — no long shares")
+                return None
+            if side.upper() == "SELL":
+                quantity = min(float(quantity), held)
 
             qty_int: int = int(quantity)
             if qty_int <= 0:
@@ -472,10 +512,10 @@ class TigerExecutor:
         price: float,
         strategy: str,
     ) -> Optional[Dict[str, Any]]:
-        """Paper fill: optionally route to Tiger paper account, always update local book.
+        """Paper fill on cash only.
 
-        When ``QAT_TIGER_PAPER_TRADING=true`` and Tiger is connected, place a real
-        paper-account order then mirror into PortfolioManager. Otherwise local sim only.
+        A buy the cash cannot pay is not sent to Tiger and is not filled locally.
+        A sell larger than the long position is cut back; a short is not opened.
         """
         tiger_order_id = None
         try:
@@ -485,42 +525,52 @@ class TigerExecutor:
         except Exception:
             use_tiger_paper = False
 
+        from shared.no_leverage import cap_buy_quantity
+
+        side_u = side.upper()
+        broker_cash: Optional[float] = None
+        if self.tiger is not None and hasattr(self.tiger, "get_account_info"):
+            try:
+                acct = self.tiger.get_account_info()
+                if isinstance(acct, dict) and acct.get("cash") is not None:
+                    broker_cash = float(acct.get("cash") or 0)
+            except Exception:
+                broker_cash = None
+
+        if side_u == "BUY":
+            if self.block_buys:
+                logger.info(f"no-leverage: buys blocked, skip paper BUY {ticker}")
+                return None
+            books = [float(getattr(self.portfolio, "cash", 0) or 0)]
+            if broker_cash is not None:
+                books.append(broker_cash)
+            quantity = cap_buy_quantity(float(quantity), float(price), min(books))
+            if int(quantity) < 1:
+                logger.info(
+                    f"no-leverage: skip BUY {ticker} — cash ${min(books):,.2f} "
+                    f"cannot fund it (buying power is not used)"
+                )
+                return None
+            quantity = float(int(quantity))
+        elif side_u == "SELL":
+            held = float(self.portfolio.positions.get(ticker, 0) or 0)
+            if held <= 0:
+                logger.info(f"no-leverage: skip SELL {ticker} — would open a short")
+                return None
+            quantity = min(float(quantity), held)
+            if int(quantity) < 1:
+                return None
+            quantity = float(int(quantity))
+
         if use_tiger_paper and self.tiger is not None:
             try:
-                # Skip broker submit when Tiger paper has no buying power —
-                # still fill locally so US paper book can trade.
-                tiger_cash_ok = True
-                try:
-                    if hasattr(self.tiger, "get_account_info"):
-                        acct = self.tiger.get_account_info()
-                        if acct is not None:
-                            tc = float(acct.get("cash", 0) or 0)
-                            tv = float(
-                                acct.get("total_value", 0)
-                                or acct.get("nav", 0)
-                                or acct.get("net_liquidation", 0)
-                                or 0
-                            )
-                            bp = float(
-                                acct.get("buying_power", 0)
-                                or acct.get("available_funds", 0)
-                                or 0
-                            )
-                            if max(tc, tv, bp) <= 1.0 and side.upper() == "BUY":
-                                tiger_cash_ok = False
-                                logger.info(
-                                    f"Tiger paper cash/NAV/BP≈0 — skip broker BUY for {ticker}, local sim only"
-                                )
-                except Exception:
-                    tiger_cash_ok = True
-
                 connected = False
                 if hasattr(self.tiger, "is_connected"):
                     connected = bool(self.tiger.is_connected())
                 elif hasattr(self.tiger, "connect"):
                     connected = True
-                if tiger_cash_ok and (connected or hasattr(self.tiger, "place_order")):
-                    qty_int = max(1, int(quantity))
+                if connected or hasattr(self.tiger, "place_order"):
+                    qty_int = int(quantity)
                     order_result = None
                     if hasattr(self.tiger, "place_order"):
                         # Limit + outside_rth/FULL so the fill shows in the Tiger app

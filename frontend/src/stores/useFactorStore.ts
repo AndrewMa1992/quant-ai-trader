@@ -9,6 +9,7 @@ export const useFactorStore = defineStore('factor', () => {
   const loading = ref(false)
   const error = ref('')
 
+  const icById = ref<Record<string, { ic_mean: number; ic_std: number; ir: number }>>({})
   const icData = ref<ICAnalysis | null>(null)
   const correlationMatrix = ref<Record<string, Record<string, number>>>({})
   const redundantPairs = ref<{ factor_1: string; factor_2: string; correlation: number }[]>([])
@@ -26,6 +27,32 @@ export const useFactorStore = defineStore('factor', () => {
       error.value = e instanceof Error ? e.message : 'Failed to fetch factors'
     } finally {
       loading.value = false
+    }
+  }
+
+  async function fetchICSummary() {
+    try {
+      const data = await factorApi.getICSummary()
+      const rows = (data?.factors ?? []) as Array<Record<string, unknown>>
+      const next: Record<string, { ic_mean: number; ic_std: number; ir: number }> = {}
+      for (const row of rows) {
+        const id = String(row.id ?? '')
+        if (!id) continue
+        next[id] = {
+          ic_mean: Number(row.ic_mean ?? 0),
+          ic_std: Number(row.ic_std ?? 0),
+          ir: Number(row.ir ?? 0),
+        }
+        const match = factors.value.find((f) => f.id === id)
+        if (match) {
+          match.ic_mean = next[id].ic_mean
+          match.ic_std = next[id].ic_std
+          match.ir = next[id].ir
+        }
+      }
+      icById.value = next
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'IC summary failed'
     }
   }
 
@@ -62,8 +89,8 @@ export const useFactorStore = defineStore('factor', () => {
   }
 
   return {
-    factors, categories, loading, error,
+    factors, categories, loading, error, icById,
     icData, correlationMatrix, redundantPairs, decayData, icLoading,
-    fetchFactors, fetchIC, fetchCorrelation, fetchDecay,
+    fetchFactors, fetchICSummary, fetchIC, fetchCorrelation, fetchDecay,
   }
 })

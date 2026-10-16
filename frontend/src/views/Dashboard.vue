@@ -14,7 +14,7 @@ import { usePortfolioStore } from '@/stores/usePortfolioStore'
 import { useRiskStore } from '@/stores/useRiskStore'
 import { useExecutionStore } from '@/stores/useExecutionStore'
 import { useModelStore } from '@/stores/useModelStore'
-import { tradeApi } from '@/api/tradeApi'
+import { tradeApi, type DashboardData } from '@/api/tradeApi'
 import { modelApi } from '@/api/modelApi'
 import { wsStatus } from '@/composables/useRealtimeSync'
 import { useVisibleInterval } from '@/composables/useVisibleInterval'
@@ -27,6 +27,8 @@ const execStore = useExecutionStore()
 const modelStore = useModelStore()
 
 const navHistory = ref<number[]>([])
+const navDates = ref<string[]>([])
+const dashboardData = ref<DashboardData>({})
 /** SignalTrendChart expects { cycle, strength, decision } */
 const signalHistory = ref<Array<{ cycle: number; strength: number; decision: string }>>([])
 
@@ -80,6 +82,20 @@ async function handleRollback() {
 
 async function fetchSignals() {
   try {
+    const stored = await tradeApi.getStoredSignals(40)
+    if (stored.length > 0) {
+      signalHistory.value = stored.slice().reverse().map((s, i) => ({
+        cycle: i + 1,
+        strength: Number(s.strength ?? 0),
+        decision: Number(s.direction) > 0 ? 'buy' : Number(s.direction) < 0 ? 'sell' : 'hold',
+      }))
+      return
+    }
+  } catch {
+    // fall through to the inference service
+  }
+
+  try {
     await modelStore.fetchAllSignals()
     const signals = modelStore.signals
     if (signals.length > 0) {
@@ -123,19 +139,24 @@ onMounted(async () => {
 
 async function fetchNavHistory(): Promise<void> {
   try {
-    const result = await tradeApi.getPortfolioHistory(90)
-    if (result.history && result.history.length > 0) {
-      navHistory.value = result.history.map((p) => p.nav)
+    const dash = await tradeApi.getDashboard()
+    dashboardData.value = dash
+    const snaps = (dash.nav_snapshots ?? []).filter((p) => Number(p.nav) > 0)
+    if (snaps.length > 0) {
+      navDates.value = snaps.map((p) => String(p.date))
+      navHistory.value = snaps.map((p) => Number(p.nav))
       return
     }
   } catch {
-    // fallback
+    // portfolio history is the next source
   }
 
   try {
-    const portfolio = await tradeApi.getPortfolio()
-    if (portfolio.value_history && portfolio.value_history.length > 0) {
-      navHistory.value = portfolio.value_history.map((v) => v.value)
+    const result = await tradeApi.getPortfolioHistory(90)
+    const points = (result.history ?? []).filter((p) => p.nav > 0)
+    if (points.length > 0) {
+      navDates.value = points.map((p) => p.date)
+      navHistory.value = points.map((p) => p.nav)
       return
     }
   } catch {
@@ -143,6 +164,7 @@ async function fetchNavHistory(): Promise<void> {
   }
 
   navHistory.value = []
+  navDates.value = []
 }
 
 const navChartOption = computed(() => ({
@@ -156,7 +178,9 @@ const navChartOption = computed(() => ({
   xAxis: {
     type: 'category' as const,
     show: false,
-    data: navHistory.value.map((_, i) => i),
+    data: navDates.value.length === navHistory.value.length
+      ? navDates.value
+      : navHistory.value.map((_, i) => i),
   },
   yAxis: {
     type: 'value' as const,
@@ -184,10 +208,10 @@ const navChartOption = computed(() => ({
 }))
 
 const nav = computed(() => portfolioStore.summary?.total_market_value ?? 0)
-const dailyPnl = computed(() => riskStore.dailyPnl)
-const dailyPnlPct = computed(() => riskStore.dailyPnlPct)
-const drawdown = computed(() => riskStore.currentDrawdown)
-const sharpe = computed(() => parseFloat(String(riskStore.varData?.sharpe_ratio ?? 0)))
+const dailyPnl = computed(() => Number(dashboardData.value.pnl ?? riskStore.dailyPnl ?? 0))
+const dailyPnlPct = computed(() => Number(dashboardData.value.pnl_pct ?? riskStore.dailyPnlPct ?? 0))
+const drawdown = computed(() => Number(dashboardData.value.max_drawdown ?? riskStore.currentDrawdown ?? 0))
+const sharpe = computed(() => Number(dashboardData.value.sharpe_ratio ?? 0))
 
 const positionCount = computed(() => portfolioStore.positions?.length ?? 0)
 const alertCount = computed(() => execStore.alerts.length)
@@ -272,7 +296,7 @@ const recentOrders = computed(() => execStore.orders.slice(0, 8))
             <span class="text-sm font-mono font-semibold">${{ cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">
-            <span class="text-sm text-xm-text-secondary">Buying Power</span>
+            <span class="text-sm text-xm-text-secondary">Broker Buying Power</span>
             <span class="text-sm font-mono font-semibold">${{ buyingPower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-xm-border-light">

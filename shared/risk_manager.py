@@ -400,11 +400,14 @@ class RiskManager:
         if tiger_account is None:
             return False
 
-        leverage: float = float(tiger_account.get("leverage", 1.0))
-        if leverage > 1.001:
+        from shared.no_leverage import account_is_levered
+
+        if account_is_levered(tiger_account):
+            cash = float(tiger_account.get("cash", 0) or 0)
+            leverage = float(tiger_account.get("leverage", 1.0) or 1.0)
             logger.warning(
-                f"🚫 Leverage hard rule blocked: Tiger leverage {leverage:.4f} > 1.0 | "
-                f"must unwind leverage before trading"
+                f"🚫 Leverage hard rule: cash ${cash:,.2f}, leverage {leverage:.4f} | "
+                f"new buys blocked until the account is back to cash"
             )
             return True
         return False
@@ -655,6 +658,17 @@ class RiskManager:
                 logger.warning(f"⚠️ fix_short: {ticker} has no valid price, skipping")
                 continue
 
+            from shared.no_leverage import spendable_cash
+
+            cost = price * buy_qty
+            budget = spendable_cash(float(getattr(portfolio, "cash", 0) or 0))
+            if cost > budget:
+                logger.warning(
+                    f"🚫 Skip short cover {ticker}: ${cost:,.2f} exceeds cash "
+                    f"${max(float(getattr(portfolio, 'cash', 0) or 0), 0):,.2f}"
+                )
+                continue
+
             logger.warning(
                 f"🔧 Covering short: {ticker} | local {shares:.2f} shares → buy {buy_qty:.2f} shares"
             )
@@ -676,15 +690,15 @@ class RiskManager:
             except Exception as exc:
                 logger.error(f"  ❌ Tiger cover failed {ticker}: {exc}")
 
-            # Update local state.
-            portfolio.execute_trade(
+            trade = portfolio.execute_trade(
                 ticker=ticker,
                 side="buy",
                 price=price,
                 quantity=buy_qty,
                 strategy="short_fix",
             )
-            fixed += 1
+            if trade:
+                fixed += 1
 
         if fixed > 0:
             logger.info(f"✅ Short-position repair complete: {fixed} names")

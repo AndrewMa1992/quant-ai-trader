@@ -70,6 +70,8 @@ export const riskApi = {
   /** GET /api/v2/risk/drawdown-history — full drawdown timeline */
   async getDrawdownHistory(): Promise<{ drawdown_history: Array<{ date: string; drawdown: number }> }> {
     const { data } = await apiClient.get(`${BASE}/drawdown-history`)
-    return data
+    const payload = data?.data ?? data ?? {}
+    const series = payload.drawdown_history ?? payload.drawdown_series ?? []
+    return { drawdown_history: Array.isArray(series) ? series : [] }
   },
 }

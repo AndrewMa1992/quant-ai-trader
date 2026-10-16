@@ -67,7 +67,12 @@ async def portfolio_history(
             return APIResponse(
                 success=True,
                 message="No portfolio history available",
-                data={"nav_history": [], "cumulative_returns": [], "count": 0},
+                data={
+                    "nav_history": [],
+                    "history": [],
+                    "cumulative_returns": [],
+                    "count": 0,
+                },
             )
 
         # Reverse to chronological order
@@ -101,12 +106,14 @@ async def portfolio_history(
         else:
             sharpe = 0.0
 
+        history = _history_points(nav_history)
         return APIResponse(
             success=True,
             message=f"Portfolio history: {len(rows)} days, "
             f"return={total_return:.2%}, sharpe={sharpe}",
             data={
                 "nav_history": nav_history,
+                "history": history,
                 "cumulative_returns": cumulative_returns,
                 "count": len(rows),
                 "summary": {
@@ -127,15 +134,55 @@ async def portfolio_history(
             return APIResponse(
                 success=True,
                 message="No portfolio history available",
-                data={"nav_history": [], "cumulative_returns": [], "count": 0},
+                data={
+                    "nav_history": [],
+                    "history": [],
+                    "cumulative_returns": [],
+                    "count": 0,
+                },
             )
         log.exception(f"Failed to retrieve portfolio history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _peak_date(dates: list[str], drawdowns, days: int) -> str | None:
+    """Date of the worst drawdown inside the trailing window."""
+    window = np.asarray(drawdowns, dtype=float)[-days:]
+    if len(window) == 0 or len(dates) == 0:
+        return None
+    finite = np.where(np.isfinite(window), window, -np.inf)
+    max_idx = int(np.argmax(finite))
+    idx = len(dates) - len(window) + max_idx
+    if 0 <= idx < len(dates):
+        return dates[idx]
+    return None
+
+
+def _history_points(nav_history: list[dict]) -> list[dict]:
+    """Chart rows with cumulative return and drawdown from the NAV path."""
+    start = next((float(p["nav"]) for p in nav_history if float(p["nav"]) > 0), 0.0)
+    peak = 0.0
+    points: list[dict] = []
+    for point in nav_history:
+        nav = float(point["nav"])
+        if nav > peak:
+            peak = nav
+        drawdown = (peak - nav) / peak if peak > 0 and nav >= 0 else 0.0
+        cumulative = (nav / start - 1.0) if start > 0 and nav > 0 else 0.0
+        points.append(
+            {
+                "date": point["date"],
+                "nav": nav,
+                "cumulative_return": round(cumulative, 6),
+                "drawdown_from_peak": round(drawdown, 6),
+            }
+        )
+    return points
+
+
 @router.get("/yearly-returns")
 async def yearly_returns(
-    year: int = Query(default=2025, ge=2000, le=2100, description="Calendar year"),
+    year: int | None = Query(default=None, ge=2000, le=2100, description="Calendar year"),
 ) -> APIResponse:
     """Get annual return aggregation for a specific year.
 
@@ -146,6 +193,8 @@ async def yearly_returns(
         Annual return, monthly breakdown, and trading-day count.
     """
     log = get_logger(__name__)
+    if year is None:
+        year = date.today().year
     try:
         start_dt = date(year, 1, 1)
         end_dt = date(year, 12, 31)
@@ -169,26 +218,25 @@ async def yearly_returns(
             return APIResponse(
                 success=True,
                 message=f"No data for year {year}",
-                data={"year": year, "annual_return": None, "monthly_returns": {}},
+                data={"year": year, "annual_return": None, "monthly_returns": {}, "returns": []},
             )
 
-        # Compute annual return from first to last NAV
-        first_nav = _safe_float(rows[0][1])
-        last_nav = _safe_float(rows[-1][1])
+        positive = [row for row in rows if _safe_float(row[1]) > 0]
+        first_nav = _safe_float(positive[0][1]) if positive else 0.0
+        last_nav = _safe_float(positive[-1][1]) if positive else 0.0
         annual_return = (
             round((last_nav - first_nav) / first_nav, 6) if first_nav > 0 else 0.0
         )
 
-        # Monthly breakdown
+        # Monthly return from the first and last positive NAV in each month.
+        by_month: dict[str, list[float]] = {}
+        for row in positive:
+            dt = row[0] if isinstance(row[0], date) else datetime.strptime(str(row[0])[:10], "%Y-%m-%d").date()
+            by_month.setdefault(dt.strftime("%Y-%m"), []).append(_safe_float(row[1]))
         monthly_returns: dict[str, float] = {}
-        for row in rows:
-            dt = row[0] if isinstance(row[0], date) else datetime.strptime(str(row[0]), "%Y-%m-%d").date()
-            month_key = dt.strftime("%Y-%m")
-            if month_key not in monthly_returns:
-                monthly_returns[month_key] = _safe_float(row[2], 0.0)
-            else:
-                # Compound within month
-                monthly_returns[month_key] = (1 + monthly_returns[month_key]) * (1 + _safe_float(row[2], 0.0)) - 1
+        for month_key, navs in by_month.items():
+            if navs and navs[0] > 0:
+                monthly_returns[month_key] = round(navs[-1] / navs[0] - 1.0, 6)
 
         return APIResponse(
             success=True,
@@ -198,6 +246,10 @@ async def yearly_returns(
                 "annual_return": annual_return,
                 "trading_days": len(rows),
                 "monthly_returns": monthly_returns,
+                "returns": [
+                    {"year": month_key, "return": value}
+                    for month_key, value in monthly_returns.items()
+                ],
             },
         )
     except Exception as e:
@@ -238,7 +290,12 @@ async def drawdown_history(
             return APIResponse(
                 success=True,
                 message="No portfolio data for drawdown analysis",
-                data={"drawdown_series": [], "max_drawdown": 0.0, "current_drawdown": 0.0},
+                data={
+                    "drawdown_series": [],
+                    "drawdown_history": [],
+                    "max_drawdown": 0.0,
+                    "current_drawdown": 0.0,
+                },
             )
 
         # Compute drawdowns
@@ -249,7 +306,9 @@ async def drawdown_history(
         ]
 
         peak = np.maximum.accumulate(nav_values)
-        drawdowns = (peak - nav_values) / peak
+        safe_peak = np.where(peak > 0, peak, 1.0)
+        drawdowns = np.where(peak > 0, (peak - nav_values) / safe_peak, 0.0)
+        drawdowns = np.nan_to_num(drawdowns, nan=0.0, posinf=0.0, neginf=0.0)
 
         drawdown_series: list[dict] = []
         for i in range(len(dates)):
@@ -262,19 +321,18 @@ async def drawdown_history(
 
         # Take last `days` entries
         drawdown_series = drawdown_series[-days:]
+        window = drawdowns[-days:] if len(drawdowns) else np.asarray([0.0])
 
-        max_dd = round(float(np.max(drawdowns[-days:])), 6) if len(drawdowns) > 0 else 0.0
+        max_dd = round(float(np.max(window)), 6) if len(window) > 0 else 0.0
         current_dd = round(float(drawdowns[-1]), 6) if len(drawdowns) > 0 else 0.0
-
-        # Dates for max drawdown
-        max_idx = int(np.argmax(drawdowns[-days:]))
-        peak_date = dates[-(days - max_idx)] if max_idx < len(drawdown_series) else None
+        peak_date = _peak_date(dates, drawdowns, days)
 
         return APIResponse(
             success=True,
             message=f"Drawdown history: max={max_dd:.2%}, current={current_dd:.2%}",
             data={
                 "drawdown_series": drawdown_series,
+                "drawdown_history": drawdown_series,
                 "max_drawdown": max_dd,
                 "current_drawdown": current_dd,
                 "max_drawdown_date": peak_date,

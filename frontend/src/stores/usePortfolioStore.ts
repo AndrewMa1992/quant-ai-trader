@@ -104,8 +104,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
       if (summary.value) {
         summary.value = {
           ...summary.value,
-          cash: cashAmt || summary.value.cash,
-          total_market_value: navAmt || summary.value.total_market_value,
+          cash: Number.isFinite(cashAmt) ? cashAmt : summary.value.cash,
+          total_market_value: navAmt > 0 ? navAmt : summary.value.total_market_value,
           buying_power: bpAmt,
         }
       } else {

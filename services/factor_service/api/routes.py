@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -21,8 +20,6 @@ from pydantic import BaseModel, Field
 from configs.factor_registry import FACTOR_REGISTRY, get_all_factor_ids, get_factor_by_id
 from services.factor_service.config import factor_config
 from services.factor_service.engine.factor_engine import FactorEngine
-from services.factor_service.evaluation.ic_analysis import ICAnalyzer
-from services.factor_service.evaluation.correlation import FactorCorrelation
 from services.factor_service.evaluation.decay import DecayAnalyzer
 from services.factor_service.evaluation.stratification import StratificationAnalyzer
 from services.factor_service.evaluation.fama_macbeth import FamaMacBeth
@@ -100,30 +97,44 @@ async def get_factor(name: str) -> APIResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/ic-summary")
+async def get_ic_summary(
+    limit: int = Query(default=40, ge=1, le=113, description="Max factors to score"),
+) -> APIResponse:
+    """Rank factors by IC computed on stored daily bars."""
+    log = get_logger(__name__)
+    try:
+        from services.factor_service.evaluation.live_panel import ic_summary, load_ohlcv
+
+        names = list(load_ohlcv().keys())
+        rows = ic_summary(limit=limit)
+        return APIResponse(
+            success=True,
+            message=f"IC summary for {len(rows)} factors on {len(names)} stored names",
+            data={"factors": rows, "tickers": names, "count": len(rows)},
+        )
+    except Exception as e:
+        log.exception(f"IC summary failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/ic-analysis")
 async def get_ic_analysis(
     factor_name: str = Query(..., description="Factor ID"),
     window: int = Query(default=252, description="Rolling IC window"),
 ) -> APIResponse:
-    """Get IC analysis for a factor."""
+    """Rank IC for one factor, from stored daily bars."""
     log = get_logger(__name__)
     try:
-        analyzer = ICAnalyzer(rolling_window=window)
-        # Generate synthetic data for demonstration when real data unavailable
-        import numpy as np
-        np.random.seed(42)
-        dates = pd.date_range("2022-01-01", periods=756, freq="B")
-        factor_values = pd.Series(np.random.randn(756).cumsum() * 0.01 + 0.0005, index=dates)
-        forward_returns = pd.Series(np.random.randn(756).cumsum() * 0.01, index=dates)
+        from services.factor_service.evaluation.live_panel import ic_series
 
-        ic_result = analyzer.compute_ic(factor_values, forward_returns)
-
+        ic_result = ic_series(factor_name)
+        ic_result["rolling_window"] = window
         return APIResponse(
             success=True,
             message=f"IC analysis for {factor_name}",
             data={
                 "factor_name": factor_name,
-                "rolling_window": window,
                 **ic_result,
             },
         )
@@ -136,28 +147,37 @@ async def get_ic_analysis(
 async def get_correlation(
     factor_names: str = Query(default="", description="Comma-separated factor IDs"),
 ) -> APIResponse:
-    """Compute pairwise factor correlation matrix."""
+    """Pairwise correlation of factors computed on stored bars."""
     log = get_logger(__name__)
     try:
+        from services.factor_service.evaluation.correlation import FactorCorrelation
+        from services.factor_service.evaluation.live_panel import correlation_matrix
+
         names = [n.strip() for n in factor_names.split(",") if n.strip()]
         if not names:
-            names = get_all_factor_ids()[:20]
+            names = get_all_factor_ids()[:12]
+
+        panel, used = correlation_matrix(names)
+        if panel.empty:
+            return APIResponse(
+                success=True,
+                message="No stored bars for a correlation matrix",
+                data={
+                    "factors": [],
+                    "correlation_matrix": {},
+                    "redundant_pairs": [],
+                    "threshold": factor_config.CORRELATION_THRESHOLD,
+                },
+            )
 
         corr = FactorCorrelation(threshold=factor_config.CORRELATION_THRESHOLD)
-        # Generate synthetic data
-        import numpy as np
-        np.random.seed(42)
-        n = 252
-        data = {name: np.random.randn(n) for name in names}
-        df = pd.DataFrame(data)
-
-        matrix, redundant_pairs = corr.compute_correlation_matrix(df)
+        matrix, redundant_pairs = corr.compute_correlation_matrix(panel)
 
         return APIResponse(
             success=True,
-            message=f"Correlation matrix for {len(names)} factors",
+            message=f"Correlation matrix for {len(used)} factors",
             data={
-                "factors": names,
+                "factors": used,
                 "correlation_matrix": matrix.to_dict(),
                 "redundant_pairs": redundant_pairs,
                 "threshold": factor_config.CORRELATION_THRESHOLD,
@@ -173,18 +193,21 @@ async def get_decay(
     factor_name: str = Query(..., description="Factor ID"),
     max_lags: int = Query(default=20, description="Maximum lag periods"),
 ) -> APIResponse:
-    """Get factor IC decay analysis."""
+    """IC decay for one factor, from stored daily bars."""
     log = get_logger(__name__)
     try:
+        from services.factor_service.evaluation.live_panel import mean_factor_and_returns
+
         decay = DecayAnalyzer(max_lags=max_lags)
+        factor_values, returns = mean_factor_and_returns(factor_name)
+        if factor_values.empty or returns.empty:
+            return APIResponse(
+                success=True,
+                message=f"No stored bars for decay of {factor_name}",
+                data={"factor_name": factor_name, "half_life": None, "decay_curve": []},
+            )
 
-        import numpy as np
-        np.random.seed(42)
-        dates = pd.date_range("2022-01-01", periods=756, freq="B")
-        factor_values = pd.Series(np.random.randn(756).cumsum() * 0.01, index=dates)
-        returns = pd.Series(np.random.randn(756).cumsum() * 0.01, index=dates)
-
-        result = decay.analyze(factor_values, returns)
+        result = decay.analyze(factor_values.dropna(), returns.reindex(factor_values.index).fillna(0))
 
         return APIResponse(
             success=True,
@@ -201,39 +224,47 @@ async def get_decay(
 
 @router.post("/compute")
 async def compute_factors(req: ComputeRequest) -> APIResponse:
-    """Compute factors for given tickers and return results."""
+    """Compute factors on stored daily bars for the requested tickers."""
     log = get_logger(__name__)
     try:
+        from services.factor_service.evaluation.live_panel import load_ohlcv, resolve_factor_id
+
         engine = _get_engine()
-        factor_names = req.factor_names if req.factor_names else None
+        stored = load_ohlcv(max_names=24)
+        requested = [t.strip().upper() for t in req.tickers if t.strip()] or list(stored.keys())
+        dfs = {ticker: stored[ticker] for ticker in requested if ticker in stored}
+        if not dfs:
+            # Try the stored names as-is (HK tickers keep their suffix).
+            for ticker in req.tickers:
+                frame = stored.get(ticker) or stored.get(ticker.strip())
+                if frame is not None:
+                    dfs[ticker] = frame
+        if not dfs:
+            return APIResponse(
+                success=True,
+                message="No stored bars for the requested tickers",
+                data={"tickers": [], "factor_count": 0, "available_factors": get_all_factor_ids()},
+            )
 
-        # Generate sample data for demonstration
-        import numpy as np
-        np.random.seed(42)
-        dates = pd.date_range(req.start_date or "2023-01-01", periods=252, freq="B")
-        tickers = req.tickers or ["AAPL", "MSFT", "GOOGL"]
+        factor_ids = None
+        if req.factor_names:
+            factor_ids = [resolve_factor_id(name) or name for name in req.factor_names]
 
-        dfs = {}
-        for ticker in tickers:
-            df = pd.DataFrame({
-                "open": np.cumsum(np.random.randn(252) * 0.5) + 150,
-                "high": np.cumsum(np.random.randn(252) * 0.5) + 152,
-                "low": np.cumsum(np.random.randn(252) * 0.5) + 148,
-                "close": np.cumsum(np.random.randn(252) * 0.5) + 150,
-                "adj_close": np.cumsum(np.random.randn(252) * 0.5) + 150,
-                "volume": np.random.randint(1000000, 50000000, 252),
-            }, index=dates)
-            dfs[ticker] = df
-
-        results = engine.compute_all_multi(dfs, factor_names)
+        results = engine.compute_all_multi(dfs, factor_ids)
+        sample = next(iter(results.values())) if results else None
+        factor_count = 0
+        if sample is not None:
+            base_cols = {"open", "high", "low", "close", "adj_close", "volume"}
+            factor_count = len([c for c in sample.columns if str(c) not in base_cols])
+        index = sample.index if sample is not None and len(sample.index) else []
 
         return APIResponse(
             success=True,
-            message=f"Computed factors for {len(tickers)} tickers",
+            message=f"Computed factors for {len(dfs)} stored tickers",
             data={
-                "tickers": tickers,
-                "factor_count": len(results.get(list(results.keys())[0], {}).columns) if results else 0,
-                "date_range": [str(dates[0].date()), str(dates[-1].date())],
+                "tickers": list(dfs.keys()),
+                "factor_count": factor_count,
+                "date_range": [str(index[0].date()), str(index[-1].date())] if len(index) else [],
                 "available_factors": get_all_factor_ids(),
             },
         )

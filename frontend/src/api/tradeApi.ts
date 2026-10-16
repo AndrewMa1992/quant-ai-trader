@@ -99,8 +99,28 @@ export const tradeApi = {
   /** GET /api/v2/risk/portfolio-history — NAV history with returns & drawdown */
   async getPortfolioHistory(days = 90): Promise<{ history: PortfolioHistoryPoint[] }> {
     const { data } = await apiClient.get('/v2/risk/portfolio-history', { params: { days } })
-    const history = data?.data?.history ?? data?.history ?? data?.data ?? []
-    return { history: Array.isArray(history) ? history : [] }
+    const payload = data?.data ?? data ?? {}
+    const raw = Array.isArray(payload)
+      ? payload
+      : (payload.history ?? payload.nav_history ?? [])
+    const cumByDate = new Map<string, number>()
+    for (const row of payload.cumulative_returns ?? []) {
+      if (row?.date != null) cumByDate.set(String(row.date), Number(row.cumulative_return ?? 0))
+    }
+    const history = (Array.isArray(raw) ? raw : []).map((p: Record<string, unknown>) => ({
+      date: String(p.date ?? ''),
+      nav: Number(p.nav ?? 0),
+      cumulative_return: Number(p.cumulative_return ?? cumByDate.get(String(p.date)) ?? 0),
+      drawdown_from_peak: Number(p.drawdown_from_peak ?? p.drawdown ?? 0),
+    }))
+    return { history }
+  },
+
+  /** GET /api/v2/risk/signals — signals already written by the paper cycle */
+  async getStoredSignals(limit = 40): Promise<Array<{ strength: number; direction: number; ticker: string }>> {
+    const { data } = await apiClient.get('/v2/risk/signals', { params: { limit } })
+    const rows = data?.data?.signals ?? data?.signals ?? []
+    return Array.isArray(rows) ? rows : []
   },
 
   /** GET /api/v2/dashboard — real-time dashboard metrics with Sharpe, max DD, win rate */
@@ -123,6 +143,10 @@ export interface DashboardData {
   win_rate?: number
   profit_factor?: number
   calmar_ratio?: number
+  pnl?: number
+  pnl_pct?: number
+  total_asset?: number
+  nav_snapshots?: Array<{ date: string; nav: number }>
   snapshot_count?: number
   timestamp?: string
   [key: string]: unknown

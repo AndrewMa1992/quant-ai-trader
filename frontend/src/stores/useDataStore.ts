@@ -46,7 +46,7 @@ export const useDataStore = defineStore('dataStore', () => {
       side: String(o.side || o.action || ''),
       quantity: Number(o.quantity || 0),
       price: Number(o.price || o.avg_fill_price || 0),
-      status: String(o.status || 'SUBMITTED'),
+      status: String(o.status || 'SUBMITTED').replace(/^orderstatus\./i, ''),
       order_type: String(o.order_type || 'MKT'),
       created_at: String(o.submitted_at || o.created_at || ''),
       updated_at: String(o.updated_at || o.filled_at || ''),
