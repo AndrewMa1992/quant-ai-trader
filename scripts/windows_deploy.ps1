@@ -191,7 +191,7 @@ try {
     if ($LASTEXITCODE -eq 0) { $sb3Ok = $true }
 } catch { }
 if (-not $sb3Ok) {
-    & $PythonExe -m pip install "gymnasium>=0.29" "stable-baselines3>=2.2"
+    & $PythonExe -m pip install --upgrade-strategy only-if-needed "gymnasium>=0.29" "stable-baselines3>=2.2"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[warn] stable-baselines3 install failed - rl_v2.zip will not load"
     } else {
@@ -199,6 +199,23 @@ if (-not $sb3Ok) {
     }
 } else {
     Write-Host "[ok] stable-baselines3 present"
+}
+
+# A CUDA torch wheel cannot load on this CPU host and leaves inference stuck.
+$torchCuda = ""
+try {
+    $torchCuda = (& $PythonExe -c "import torch; print(torch.version.cuda or '')").Trim()
+} catch {
+    $torchCuda = "missing"
+}
+if ($torchCuda) {
+    Write-Host "[..] restoring CPU torch (cuda marker: $torchCuda)"
+    & $PythonExe -m pip install --upgrade "torch" --index-url https://download.pytorch.org/whl/cpu
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[warn] CPU torch restore failed"
+    } else {
+        Write-Host "[ok] CPU torch restored"
+    }
 }
 
 $hasNode = $false
