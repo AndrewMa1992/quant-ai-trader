@@ -146,6 +146,18 @@ if (-not $ok) {
 }
 
 Write-Log "[ok] CD complete - gateway healthy"
+Write-Log "[..] local HTTPS proxy"
+try {
+    $tlsOut = & python scripts\windows_tls_proxy.py --check 2>&1
+    $tlsOut | ForEach-Object { Write-Log ("{0}" -f $_) }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "[ERR] local HTTPS proxy check failed"
+        exit 1
+    }
+} catch {
+    Write-Log ("[ERR] HTTPS proxy check: {0}" -f $_.Exception.Message)
+    exit 1
+}
 
 # Non-fatal Tiger SDK probe so CD logs show connect vs silent zeros
 Write-Log "[..] tiger SDK probe"

@@ -1,5 +1,5 @@
 # Quant AI Trader - Windows Server paper deploy (ASCII-only for PS 5.1)
-# DeployScriptVersion: 8
+# DeployScriptVersion: 9
 # Services start hidden (no cmd.exe popup per process). Logs: logs\*.log
 # Usage:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -24,7 +24,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
 
 Write-Host "============================================"
 Write-Host "  Quant AI Trader - Windows Paper Deploy"
-Write-Host "  DeployScriptVersion: 8"
+Write-Host "  DeployScriptVersion: 9"
 Write-Host "  Root: $Root"
 Write-Host "============================================"
 
@@ -113,7 +113,7 @@ $env:PYTHONPATH = $Root
 $env:QAT_PROJECT_ROOT = $Root
 
 if ($OpenFirewall) {
-    $ports = @(8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180)
+    $ports = @(80, 443, 8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180)
     foreach ($p in $ports) {
         $rule = "QAT-Port-$p"
         if (-not (Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue)) {
@@ -348,16 +348,83 @@ function Set-QatPortProxy([int]$ListenPort, [int]$ConnectPort) {
     }
 }
 
-Set-QatPortProxy 80 8001
+function Ensure-QatFirewallPort([int]$Port) {
+    $rule = "QAT-Port-$Port"
+    try {
+        if (Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue) {
+            Write-Host "[ok] Firewall already allows TCP $Port"
+            return
+        }
+        New-NetFirewallRule -DisplayName $rule -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
+        Write-Host "[ok] Firewall opened TCP $Port"
+    } catch {
+        Write-Host "[warn] Could not open firewall port $Port (run as Admin)"
+    }
+}
+
+function Get-QatPublicHost {
+    if ($env:QAT_PUBLIC_HOST -and $env:QAT_PUBLIC_HOST.Trim()) {
+        return $env:QAT_PUBLIC_HOST.Trim()
+    }
+    try {
+        $ip = (Invoke-WebRequest -Uri "http://metadata.tencentyun.com/latest/meta-data/public-ipv4" -UseBasicParsing -TimeoutSec 3).Content.Trim()
+        if ($ip -match '^\d{1,3}(\.\d{1,3}){3}$') { return $ip }
+    } catch { }
+    return "43.160.194.146"
+}
+
+function Start-TlsProxy {
+    $publicHost = Get-QatPublicHost
+    Write-Host "[..] HTTPS proxy for $publicHost"
+    $logOut = Join-Path $Root "logs\tls-proxy.out.log"
+    $logErr = Join-Path $Root "logs\tls-proxy.err.log"
+    $bat = Join-Path $pidDir "start_tls-proxy.bat"
+    $runLine = '"{0}" scripts\windows_tls_proxy.py --ensure-cert --public-host {1} >> "{2}" 2>> "{3}"' -f $PythonExe, $publicHost, $logOut, $logErr
+    $lines = @(
+        "@echo off",
+        ("set PYTHONPATH={0}" -f $Root),
+        ("set QAT_PROJECT_ROOT={0}" -f $Root),
+        ("set QAT_PUBLIC_HOST={0}" -f $publicHost),
+        ("cd /d {0}" -f $Root),
+        $runLine
+    )
+    Set-Content -Path $bat -Value ($lines -join "`r`n") -Encoding ASCII
+    $pidVal = Start-QatHiddenBat -BatPath $bat -WorkingDirectory $Root -CommandMatch "windows_tls_proxy.py"
+    if (-not $pidVal) {
+        $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", $bat) `
+            -WorkingDirectory $Root -PassThru -WindowStyle Hidden
+        if ($p) { $pidVal = $p.Id }
+    }
+    Set-Content (Join-Path $pidDir "tls-proxy.pid") $pidVal
+    Write-Host "[ok] tls-proxy       :8443/:8081  PID $pidVal (hidden)"
+    $tlsOk = $false
+    for ($n = 0; $n -lt 10; $n++) {
+        & $PythonExe scripts\windows_tls_proxy.py --check
+        if ($LASTEXITCODE -eq 0) { $tlsOk = $true; break }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $tlsOk) {
+        Write-Host "[ERR] HTTPS proxy failed - see logs\tls-proxy.err.log"
+        if (Test-Path $logErr) { Get-Content $logErr -Tail 40 }
+        exit 1
+    }
+}
+
+Start-TlsProxy
+Ensure-QatFirewallPort 80
+Ensure-QatFirewallPort 443
+Set-QatPortProxy 443 8443
+Set-QatPortProxy 80 8081
 Set-QatPortProxy 8080 5180
 
 Write-Host ""
 Write-Host "============================================"
 Write-Host "  Deployed (PAPER mode)"
-Write-Host "  API:      http://127.0.0.1:8001/health"
+Write-Host "  API:      http://127.0.0.1:8001/health  (internal)"
 Write-Host "  Frontend: http://127.0.0.1:5180  (optional local UI)"
-Write-Host "  Public UI: http://<host>/  (port 80 -> gateway :8001)"
-Write-Host "  Public frontend: http://<host>:8080/  (port 8080 -> :5180)"
+Write-Host "  Public UI: https://<host>/  (port 443 -> TLS :8443 -> gateway :8001)"
+Write-Host "  HTTP :80 redirects to HTTPS"
+Write-Host "  Optional UI: http://<host>:8080/  (port 8080 -> :5180)"
 Write-Host "  If UI shows 502: gateway is down - check logs above"
 Write-Host "  Stop:     .\scripts\windows_stop.ps1"
 Write-Host "============================================"

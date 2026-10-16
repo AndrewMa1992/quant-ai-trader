@@ -29,6 +29,7 @@ $patterns = @(
     "uvicorn services.risk_service.main:app",
     "uvicorn services.execution_service.main:app",
     "windows_frontend_server.py",
+    "windows_tls_proxy.py",
     "run_pipeline.py",
     "trading_pipeline.py"
 )
@@ -46,7 +47,7 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
     }
 }
 
-$ports = 8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180
+$ports = 8001, 8011, 8012, 8013, 8014, 8015, 8016, 5180, 8443, 8081
 foreach ($port in $ports) {
     try {
         $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue

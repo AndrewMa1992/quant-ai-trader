@@ -118,7 +118,7 @@ Parameter descriptions:
 
 | Parameter | Effect |
 |------|------|
-| `-OpenFirewall` | Open Windows Firewall for 8001/5180 and related ports (requires Administrator) |
+| `-OpenFirewall` | Open Windows Firewall for 80/443/8001/5180 and related ports (requires Administrator) |
 | `-SkipInstall` | Skip pip/npm install (subsequent starts) |
 | `-SkipFrontend` | Start backend only |
 
@@ -131,7 +131,9 @@ Inside the local RDP session:
 - API: http://127.0.0.1:8001/health  
 - Frontend: http://127.0.0.1:5180  
 
-From an external browser:
+From an external browser the Windows host serves the dashboard on HTTPS. Port 443 terminates TLS in `scripts/windows_tls_proxy.py` and forwards to the gateway. Port 80 answers with a redirect to HTTPS. A bare IP uses a self-signed certificate generated on the server under `certs\tls\` (browsers warn until you continue). Internal checks stay on `http://127.0.0.1:8001/health`.
+
+The optional Lightsail UI, when used, is still:
 
 - http://3.106.139.233:5180  
 - http://3.106.139.233:8001/health  
