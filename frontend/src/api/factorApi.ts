@@ -29,6 +29,11 @@ export interface ICAnalysis {
 }
 
 export const factorApi = {
+  async getICSummary() {
+    const { data } = await apiClient.get(`${BASE}/ic-summary`)
+    return data.data ?? data
+  },
+
   async listFactors(category?: string) {
     const { data } = await apiClient.get(`${BASE}/factors`, { params: { category } })
     return data.data ?? data

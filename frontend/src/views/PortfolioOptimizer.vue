@@ -50,7 +50,7 @@ async function fetchPositionsAndPortfolio(): Promise<void> {
       portfolioMetrics.value = {
         totalValue,
         totalPnl: portfolioStore.totalPnl,
-        cash: 0,
+        cash: Number(portfolioStore.summary?.cash ?? 0),
       }
       holdings.value = portfolioStore.positions.map((p) => ({
         ticker: p.ticker,

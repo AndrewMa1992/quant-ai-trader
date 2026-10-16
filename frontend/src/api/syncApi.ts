@@ -40,7 +40,10 @@ export const syncApi = {
     try {
       const data = await executionApi.getTradeLogs()
       const orders = (data?.orders ?? data ?? []) as OrderRecord[]
-      let filtered = Array.isArray(orders) ? orders : []
+      let filtered = (Array.isArray(orders) ? orders : []).map((o) => ({
+        ...o,
+        status: String(o.status || '').replace(/^orderstatus\./i, '').toLowerCase(),
+      }))
       if (params?.ticker) {
         const t = params.ticker.toUpperCase()
         filtered = filtered.filter((o) => String(o.ticker || '').toUpperCase() === t)

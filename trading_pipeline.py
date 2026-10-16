@@ -458,10 +458,14 @@ class TradingPipeline:
             except Exception as e:
                 logger.warning(f"Leverage check error: {e}")
 
-        # ── P0-3: Leverage blocks buys ────────────────────────
-        if leverage_blocked:
-            logger.error("🚫 Tiger account leverage too high — skipping all buys")
-            return None
+        # Already levered: keep the cycle so sells of existing longs can
+        # raise cash. New buys are refused downstream.
+        self._block_buys = bool(leverage_blocked)
+        if self._block_buys:
+            logger.error(
+                "🚫 Account is on margin — new buys blocked; "
+                "sells of existing long positions still run"
+            )
 
         # ── 6. P1-2: Daily trade cap ──────────────────────────
         if self.risk_manager.check_daily_limit():
@@ -1464,10 +1468,13 @@ class TradingPipeline:
 
             # Delegate to TigerExecutor.execute_rebalance
             current_positions: Dict[str, float] = dict(self.portfolio.positions)
+            block_buys = bool(getattr(self, "_block_buys", False))
+            self.executor.block_buys = block_buys
             orders: List[Dict] = self.executor.execute_rebalance(
                 target_weights=target_weights,
                 prices=prices,
                 current_positions=current_positions,
+                block_buys=block_buys,
             )
 
             # Count non-rejected trades

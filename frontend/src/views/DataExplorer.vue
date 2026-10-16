@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CandlestickChart, LineChart, BarChart } from 'echarts/charts'
@@ -64,6 +64,10 @@ async function searchTicker() {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  void searchTicker()
+})
 
 function fmtNum(v: unknown) {
   if (v === null || v === undefined) return '-'

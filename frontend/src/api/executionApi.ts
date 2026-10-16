@@ -76,12 +76,34 @@ export interface YearlyReturn {
 export const analysisApi = {
   async getPortfolioHistory(): Promise<PortfolioHistoryPoint[]> {
     const { data } = await apiClient.get('/v2/risk/portfolio-history')
-    return data.data ?? data?.history ?? []
+    const payload = data?.data ?? {}
+    const raw = payload.nav_history ?? payload.history ?? (Array.isArray(payload) ? payload : [])
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter((p: { nav?: number }) => Number(p.nav) > 0)
+      .map((p: { date?: string; nav?: number; benchmark?: number }) => ({
+        date: String(p.date ?? ''),
+        nav: Number(p.nav ?? 0),
+        benchmark: Number(p.benchmark ?? p.nav ?? 0),
+      }))
   },
 
   async getYearlyReturns(): Promise<YearlyReturn[]> {
-    const { data } = await apiClient.get('/v2/risk/yearly-returns')
-    return data.data ?? []
+    const year = new Date().getFullYear()
+    const { data } = await apiClient.get('/v2/risk/yearly-returns', { params: { year } })
+    const payload = data?.data ?? {}
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload.returns) && payload.returns.length > 0) {
+      return payload.returns.map((row: { year?: string; return?: number }) => ({
+        year: String(row.year ?? year),
+        return: Number(row.return ?? 0),
+      }))
+    }
+    const monthly = payload.monthly_returns ?? {}
+    return Object.entries(monthly).map(([key, value]) => ({
+      year: key,
+      return: Number(value),
+    }))
   },
 }
 

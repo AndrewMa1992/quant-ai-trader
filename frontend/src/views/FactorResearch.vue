@@ -16,28 +16,45 @@ use([BarChart, HeatmapChart, LineChart, GridComponent, TooltipComponent, VisualM
 const factorStore = useFactorStore()
 
 interface FactorRow {
+  id: string
   name: string
   category: string
-  icMean: number
-  icStd: number
-  ir: number
+  icMean: number | null
+  icStd: number | null
+  ir: number | null
+  hasIc: boolean
   rank: number
 }
 
 const factors = computed<FactorRow[]>(() => {
-  const raw = [...factorStore.factors]
-  const sorted = raw.sort((a, b) => (b.ic_mean ?? 0) - (a.ic_mean ?? 0))
-  return sorted.map((f, i) => ({
-    name: f.name,
-    category: f.category,
-    icMean: f.ic_mean ?? 0,
-    icStd: f.ic_std ?? 0,
-    ir: f.ir ?? 0,
-    rank: i + 1,
-  }))
+  const scored = factorStore.factors.map((f) => {
+    const ic = factorStore.icById[f.id]
+    const hasIc = ic != null || f.ic_mean != null
+    return {
+      id: f.id,
+      name: f.name,
+      category: f.category,
+      icMean: hasIc ? Number(ic?.ic_mean ?? f.ic_mean ?? 0) : null,
+      icStd: hasIc ? Number(ic?.ic_std ?? f.ic_std ?? 0) : null,
+      ir: hasIc ? Number(ic?.ir ?? f.ir ?? 0) : null,
+      hasIc,
+      rank: 0,
+    }
+  })
+  scored.sort((a, b) => {
+    if (a.hasIc !== b.hasIc) return a.hasIc ? -1 : 1
+    return Math.abs(b.icMean ?? 0) - Math.abs(a.icMean ?? 0)
+  })
+  return scored.map((f, i) => ({ ...f, rank: i + 1 }))
 })
 
+const rankedFactors = computed(() => factors.value.filter((f) => f.hasIc))
+
 const selectedFactor = ref<string | null>(null)
+const selectedLabel = computed(() => {
+  const row = factors.value.find((f) => f.id === selectedFactor.value)
+  return row?.name ?? selectedFactor.value ?? ''
+})
 const detailLoading = ref(false)
 const loading = ref(false)
 const noData = computed(() => !loading.value && factorStore.factors.length === 0)
@@ -52,9 +69,10 @@ onMounted(async () => {
   loading.value = true
   try {
     await factorStore.fetchFactors()
+    await factorStore.fetchICSummary()
     if (factorStore.factors.length > 0) {
-      const names = factorStore.factors.slice(0, 20).map((f) => f.name)
-      await factorStore.fetchCorrelation(names)
+      const ids = factorStore.factors.slice(0, 12).map((f) => f.id)
+      await factorStore.fetchCorrelation(ids)
     }
   } catch {
     // store error already set
@@ -92,16 +110,16 @@ const icChartOption = computed(() => ({
   },
   yAxis: {
     type: 'category' as const,
-    data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map((f) => f.name),
+    data: rankedFactors.value.map((f) => f.name),
     axisLabel: { fontSize: 10, color: '#666666' },
     inverse: true,
   },
   series: [
     {
       type: 'bar',
-      data: [...factors.value].sort((a, b) => b.icMean - a.icMean).map((f) => ({
-        value: f.icMean,
-        itemStyle: { color: f.icMean >= 0 ? '#16A34A' : '#DC2626', borderRadius: [0, 3, 3, 0] },
+      data: rankedFactors.value.map((f) => ({
+        value: f.icMean ?? 0,
+        itemStyle: { color: (f.icMean ?? 0) >= 0 ? '#16A34A' : '#DC2626', borderRadius: [0, 3, 3, 0] },
       })),
       barWidth: 14,
     },
@@ -167,6 +185,9 @@ const heatmapOption = computed(() => ({
       <div v-else-if="noData" class="flex items-center justify-center h-[340px] text-xm-text-tertiary text-sm">
         No factor data available. Run data sync first.
       </div>
+      <div v-else-if="rankedFactors.length === 0" class="flex items-center justify-center h-[340px] text-xm-text-tertiary text-sm">
+        Stored bars did not produce an IC for these factors yet.
+      </div>
       <VChart v-else :option="icChartOption" style="height: 340px" autoresize />
     </XmCard>
 
@@ -192,25 +213,25 @@ const heatmapOption = computed(() => ({
             v-for="f in factors"
             :key="f.name"
             class="cursor-pointer"
-            :class="{ 'bg-xm-primary-light/50': selectedFactor === f.name }"
-            @click="selectFactor(f.name)"
+            :class="{ 'bg-xm-primary-light/50': selectedFactor === f.id }"
+            @click="selectFactor(f.id)"
           >
             <td class="text-xm-text-tertiary">{{ f.rank }}</td>
             <td class="font-mono text-xs font-semibold">{{ f.name }}</td>
             <td><XmBadge variant="info">{{ f.category }}</XmBadge></td>
-            <td class="text-right font-mono" :class="f.icMean >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
-              {{ f.icMean >= 0 ? '+' : '' }}{{ f.icMean.toFixed(3) }}
+            <td class="text-right font-mono" :class="(f.icMean ?? 0) >= 0 ? 'xm-pnl-positive' : 'xm-pnl-negative'">
+              {{ f.icMean == null ? '—' : `${f.icMean >= 0 ? '+' : ''}${f.icMean.toFixed(3)}` }}
             </td>
-            <td class="text-right font-mono text-xm-text-secondary">{{ f.icStd.toFixed(3) }}</td>
+            <td class="text-right font-mono text-xm-text-secondary">{{ f.icStd == null ? '—' : f.icStd.toFixed(3) }}</td>
             <td
               class="text-right font-mono font-semibold"
-              :class="f.ir >= 0.3 ? 'text-profit' : 'text-xm-text-secondary'"
+              :class="(f.ir ?? 0) >= 0.3 ? 'text-profit' : 'text-xm-text-secondary'"
             >
-              {{ f.ir.toFixed(3) }}
+              {{ f.ir == null ? '—' : f.ir.toFixed(3) }}
             </td>
             <td>
-              <XmBadge :variant="f.ir >= 0.3 ? 'success' : f.ir >= 0.1 ? 'warning' : 'danger'">
-                {{ f.ir >= 0.3 ? 'Strong' : f.ir >= 0.1 ? 'Moderate' : 'Weak' }}
+              <XmBadge :variant="(f.ir ?? 0) >= 0.3 ? 'success' : (f.ir ?? 0) >= 0.1 ? 'warning' : 'danger'">
+                {{ f.hasIc ? ((f.ir ?? 0) >= 0.3 ? 'Strong' : (f.ir ?? 0) >= 0.1 ? 'Moderate' : 'Weak') : '—' }}
               </XmBadge>
             </td>
           </tr>
@@ -219,19 +240,19 @@ const heatmapOption = computed(() => ({
     </XmCard>
 
     <div v-if="selectedFactor" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <XmCard :title="`IC Series — ${selectedFactor}`">
+      <XmCard :title="`IC Series — ${selectedLabel}`">
         <div v-if="detailLoading" class="text-center py-10 text-xm-text-tertiary text-sm">Loading IC...</div>
         <ICRankChart
           v-else-if="icSeries.length > 0"
           :data="icSeries"
-          :title="`${selectedFactor} IC`"
+          :title="`${selectedLabel} IC`"
         />
         <div v-else class="text-center py-10 text-xm-text-tertiary text-sm">
           No IC series for this factor.
         </div>
       </XmCard>
 
-      <XmCard :title="`Decay Curve — ${selectedFactor}`">
+      <XmCard :title="`Decay Curve — ${selectedLabel}`">
         <div v-if="detailLoading" class="text-center py-10 text-xm-text-tertiary text-sm">Loading decay...</div>
         <DecayCurve
           v-else
