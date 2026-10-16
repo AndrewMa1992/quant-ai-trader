@@ -70,12 +70,13 @@ class GBDTInference:
             return np.zeros(len(X))
 
         X_arr = X.values.astype(np.float32)
-
-        if hasattr(self.model, "predict"):
-            raw = self.model.predict(X_arr, predict_disable_shape_check=True)
-        else:
-            raw = np.zeros(len(X_arr))
-
+        predict = getattr(self.model, "predict", None)
+        if predict is None:
+            return np.zeros(len(X_arr))
+        try:
+            raw = predict(X_arr, predict_disable_shape_check=True)
+        except TypeError:
+            raw = predict(X_arr)
         return np.array(raw).ravel()
 
     def predict_direction_prob(self, X: pd.DataFrame) -> dict[str, np.ndarray]:

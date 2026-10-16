@@ -9,7 +9,7 @@
 
 param(
     [string]$RepoRoot = "",
-    [string]$Branch = "cursor/quant-upgrade-a75f",
+    [string]$Branch = "main",
     [string]$DailyAt = "03:00",
     [int]$Epochs = 40,
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
@@ -98,7 +98,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 
 Register-ScheduledTask -TaskName "QAT-Local-TrainSync" -Action $action -Trigger $trigger `
     -Principal $prin -Settings $settings `
-    -Description "QAT: daily GPU train from Lightsail data + push models for AutoCD" -Force | Out-Null
+    -Description "QAT: daily GPU train, then push data/models to main" -Force | Out-Null
 
 Write-Host "[ok] Scheduled task: QAT-Local-TrainSync"
 Write-Host "     Daily at $DailyAt | Branch=$Branch | Epochs=$Epochs | SkipRl=$SkipRl"

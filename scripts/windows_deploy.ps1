@@ -135,7 +135,7 @@ if (-not $SkipInstall) {
         "numpy>=1.26" "pandas>=2.2" "scipy>=1.12" "pyarrow>=15" `
         "aiosqlite>=0.20" "sqlalchemy[asyncio]>=2.0" "alembic>=1.13" `
         "redis>=5.0" "httpx>=0.27" "loguru>=0.7" "pydantic>=2" "pydantic-settings>=2" `
-        "python-dotenv>=1.0" "scikit-learn>=1.4" "joblib>=1.3" "yfinance>=0.2" `
+        "python-dotenv>=1.0" "scikit-learn>=1.4" "joblib>=1.3" "lightgbm>=4.3" "yfinance>=0.2" `
         "tigeropen>=3.5.8"
     try {
         & $PythonExe -m pip install "torch" --index-url https://download.pytorch.org/whl/cpu
@@ -162,6 +162,24 @@ if (-not $tigeropenOk) {
     }
 } else {
     Write-Host "[ok] tigeropen present"
+}
+
+# GBDT checkpoints are LightGBM boosters. SkipInstall used to leave them unloadable.
+Write-Host "[..] ensuring lightgbm..."
+$lgbmOk = $false
+try {
+    & $PythonExe -c "import lightgbm; print(getattr(lightgbm, '__version__', 'ok'))"
+    if ($LASTEXITCODE -eq 0) { $lgbmOk = $true }
+} catch { }
+if (-not $lgbmOk) {
+    & $PythonExe -m pip install "lightgbm>=4.3"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[warn] lightgbm install failed - gbdt_v2.joblib will not load"
+    } else {
+        Write-Host "[ok] lightgbm installed"
+    }
+} else {
+    Write-Host "[ok] lightgbm present"
 }
 
 $hasNode = $false

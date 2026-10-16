@@ -39,7 +39,7 @@ if ($RestartRemote) {
     if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
         throw "ssh not found for -RestartRemote"
     }
-    $cmd = "powershell -ExecutionPolicy Bypass -File C:\quant-ai-trader\scripts\windows_cd_deploy.ps1 -Branch cursor/quant-upgrade-a75f -Force"
+    $cmd = "powershell -ExecutionPolicy Bypass -File C:\quant-ai-trader\scripts\windows_cd_deploy.ps1 -Branch main -Force"
     & ssh "${User}@${HostIp}" $cmd
 }
 

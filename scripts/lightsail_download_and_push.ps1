@@ -8,7 +8,7 @@
 
 param(
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
-    [string]$Branch = "cursor/quant-upgrade-a75f",
+    [string]$Branch = "main",
     [string]$RepoRoot = "C:\quant-ai-trader",
     [switch]$ForceDownload,
     [switch]$NoPush

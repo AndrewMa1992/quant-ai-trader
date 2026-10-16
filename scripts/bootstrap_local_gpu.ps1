@@ -6,7 +6,7 @@
 
 param(
     [string]$RepoRoot = "",
-    [string]$Branch = "cursor/quant-upgrade-a75f",
+    [string]$Branch = "main",
     [string]$RepoUrl = "https://github.com/AndrewMa1992/quant-ai-trader.git",
     [string]$DailyAt = "03:00",
     [int]$Epochs = 40,
@@ -129,6 +129,6 @@ if ($LASTEXITCODE -ne 0) { throw "install_local_train_autostart failed" }
 
 Write-Host ""
 Write-Host "[ok] Bootstrap done."
-Write-Host "  Daily task: QAT-Local-TrainSync at $DailyAt (from Lightsail data)"
-Write-Host "  Lightsail should run: install_lightsail_data_autostart.ps1 (~01:00)"
-Write-Host "  Lightsail AutoCD will pull models within ~10 minutes after push."
+Write-Host "  Daily task: QAT-Local-TrainSync at $DailyAt"
+Write-Host "  Training data: data/daily on origin/main, or -UseLocalDownload for Yahoo on this PC"
+Write-Host "  Paper server QAT-Auto-Deploy reloads data/models from main within about 2 minutes"

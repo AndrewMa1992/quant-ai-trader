@@ -1,5 +1,5 @@
 # Pull GitHub main and redeploy the paper stack when it changes.
-# DeployScriptVersion: 1
+# DeployScriptVersion: 2
 # ASCII-only for Windows PowerShell 5.1.
 #
 #   .\scripts\windows_auto_deploy.ps1 -InstallTask
@@ -149,9 +149,46 @@ try {
                 Write-Log "[ok] already current $remote"
             } else {
                 Write-Log "[..] update $deployed -> $remote"
+                $modelOnly = $false
+                if ($deployed) {
+                    $names = & $GitExe -c "safe.directory=$RepoRoot" -C $RepoRoot diff --name-only $deployed $remote 2>$null
+                    $list = @($names | Where-Object { $_ -and "$_".Trim() })
+                    if ($list.Count -gt 0) {
+                        $modelOnly = $true
+                        foreach ($f in $list) {
+                            if ("$f".Trim() -notmatch '^data/models/') { $modelOnly = $false; break }
+                        }
+                    }
+                }
                 if ((Invoke-Git $GitExe @("checkout", "-f", "-B", $Branch, "origin/$Branch")) -ne 0) {
                     Write-Log "[ERR] git checkout failed"
                     $exitCode = 1
+                } elseif ($modelOnly) {
+                    Write-Log "[..] model-only update: keep the stack up and reload checkpoints"
+                    $reloaded = $false
+                    try {
+                        $headers = @{ "X-API-Key" = "dev-api-key-change-in-production" }
+                        $r = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:8001/api/v2/infer/predict/hot-reload" -Headers $headers -TimeoutSec 60
+                        Write-Log ("[ok] infer hot-reload {0}" -f ($r | ConvertTo-Json -Compress))
+                        $reloaded = $true
+                    } catch {
+                        Write-Log ("[warn] infer hot-reload failed, full redeploy: {0}" -f $_.Exception.Message)
+                    }
+                    if ($reloaded) {
+                        Set-Content -Path $shaFile -Value $remote -Encoding ASCII
+                        Write-Log "[ok] deployed $remote (models only; paper loop reloads data/models)"
+                    } else {
+                        $deploy = Join-Path $RepoRoot "scripts\windows_cd_deploy.ps1"
+                        Write-Log "[..] windows_cd_deploy -Branch $Branch"
+                        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $deploy -Branch $Branch
+                        $exitCode = $LASTEXITCODE
+                        if ($exitCode -ne 0) {
+                            Write-Log "[ERR] deploy exit $exitCode - will retry"
+                        } else {
+                            Set-Content -Path $shaFile -Value $remote -Encoding ASCII
+                            Write-Log "[ok] deployed $remote"
+                        }
+                    }
                 } else {
                     $deploy = Join-Path $RepoRoot "scripts\windows_cd_deploy.ps1"
                     Write-Log "[..] windows_cd_deploy -Branch $Branch"
