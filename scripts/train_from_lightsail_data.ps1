@@ -9,7 +9,7 @@
 param(
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
     [int]$Epochs = 40,
-    [string]$Branch = "cursor/quant-upgrade-a75f",
+    [string]$Branch = "main",
     [int]$WaitForDataMinutes = 90,
     [int]$PollSeconds = 120,
     [int]$MinParquetFiles = 5,
@@ -44,11 +44,16 @@ function Get-ParquetCount {
     return @(Get-ChildItem "data\daily\*.parquet" -ErrorAction SilentlyContinue).Count
 }
 
+if ($Branch -eq "cursor/quant-upgrade-a75f") {
+    Write-Host "[ok] retired branch cursor/quant-upgrade-a75f -> main (paper server tracks main)"
+    $Branch = "main"
+}
+
 $GitExe = Resolve-Git
 $deadline = (Get-Date).AddMinutes([Math]::Max(0, $WaitForDataMinutes))
 $attempt = 0
 
-Write-Host "[..] waiting for Lightsail data/daily on origin/$Branch (up to $WaitForDataMinutes min)"
+Write-Host "[..] waiting for data/daily on origin/$Branch (up to $WaitForDataMinutes min)"
 while ($true) {
     $attempt++
     Write-Host "[..] attempt $attempt — fetch + hard reset origin/$Branch"

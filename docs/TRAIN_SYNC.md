@@ -1,39 +1,30 @@
-# Local GPU train → automatic sync to Lightsail
+# Local GPU train → paper server inference
 
-## Fully automated daily loop (recommended)
+The paper server does not train. It tracks GitHub `main`, loads `data/models/`, and trades. The RTX 3060 PC trains and pushes those checkpoints.
 
 ```
-01:00  Lightsail  QAT-Data-Download   → download Yahoo via Sydney → push data/daily
-03:00  GPU PC     QAT-Local-TrainSync → pull data → CUDA train → push data/models
-~10m   Lightsail  QAT-Paper-AutoCD    → pull models → hot-reload paper stack
+03:00  GPU PC        QAT-Local-TrainSync → pull main → CUDA train → push data/models to main
+~2 min paper server QAT-Auto-Deploy     → model-only commits reload checkpoints, no retrain
 ```
+
+`data/daily/*.parquet` already on `main` is the training set. If Yahoo works on the GPU PC, install with `-UseLocalDownload` instead of waiting for a data push. An older scheduled task that still passes `-Branch cursor/quant-upgrade-a75f` is redirected to `main`.
 
 ### One-time setup
 
-**1) Lightsail (Admin PowerShell)**
+**1) Paper server**
 
-```powershell
-cd C:\quant-ai-trader
-git fetch origin
-git reset --hard origin/cursor/quant-upgrade-a75f
-
-# Paper boot + AutoCD every 10 min + daily data download at 01:00
-.\scripts\windows_install_autostart.ps1 -Branch cursor/quant-upgrade-a75f -EnableDataDownload -DataDailyAt "01:00"
-
-# Or data task only:
-# .\scripts\install_lightsail_data_autostart.ps1 -DailyAt "01:00" -ForceDownload
-```
+`QAT-Auto-Deploy` already polls `origin/main`. A commit that only touches `data/models/` checks out the new files and hot-reloads inference. The paper loop reloads the same files on its next cycle. Code changes still do a full redeploy.
 
 **2) RTX 3060 PC (Admin PowerShell)**
 
 ```powershell
 cd C:\Quant_Trader
 git fetch origin
-git reset --hard origin/cursor/quant-upgrade-a75f
+git reset --hard origin/main
 
 .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -SkipRl
-# or:
-# .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -WaitForDataMinutes 90
+# or, when this PC should download bars itself:
+# .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -UseLocalDownload
 ```
 
 Keep the GPU PC **logged in** around 03:00. **Screen lock (Win+L) is fine** — the Interactive task still runs. **Sleep/hibernate** is the problem; the task uses `WakeToRun` + `StartWhenAvailable`. Also set Windows: *Settings → System → Power → Sleep → Never* (or only after the train window).
@@ -46,16 +37,13 @@ Get-ScheduledTask -TaskName QAT-* | Format-Table TaskName, State
 
 Logs:
 
-- Lightsail: `C:\quant-ai-trader\logs\data-download-*.log`, `logs\cd-deploy.log`
+- Paper server: `C:\quant-ai-trader\logs\auto-deploy.log`
 - GPU: `C:\Quant_Trader\logs\gpu-train-*.log`
 
 ### Manual run (same scripts the tasks call)
 
 ```powershell
-# Lightsail
-.\scripts\lightsail_download_and_push.ps1 -ForceDownload
-
-# GPU
+# GPU (uses data/daily from origin/main)
 .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl
 ```
 
@@ -89,7 +77,7 @@ Logs:
 
 ---
 
-## Verify on Lightsail
+## Verify on the paper server
 
 ```powershell
 Get-ChildItem C:\quant-ai-trader\data\models

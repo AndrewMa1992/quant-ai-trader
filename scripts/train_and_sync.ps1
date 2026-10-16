@@ -14,7 +14,7 @@
 param(
     [string]$Tickers = "AAPL,MSFT,GOOGL,AMZN,NVDA,META,TSLA,SPY,QQQ,IWM",
     [int]$Epochs = 40,
-    [string]$Branch = "cursor/quant-upgrade-a75f",
+    [string]$Branch = "main",
     [switch]$SkipRl,
     [switch]$SkipTrain,
     [switch]$SkipDownload,
@@ -60,6 +60,11 @@ function Invoke-Git {
     return $LASTEXITCODE
 }
 
+if ($Branch -eq "cursor/quant-upgrade-a75f") {
+    Write-Host "[ok] retired branch cursor/quant-upgrade-a75f -> main (paper server tracks main)"
+    $Branch = "main"
+}
+
 $GitExe = Resolve-Git
 Ensure-GitIdentity -GitExe $GitExe
 $PythonExe = "python"
@@ -68,7 +73,7 @@ if (Test-Path "C:\Program Files\Python312\python.exe") {
 }
 
 Write-Host "============================================"
-Write-Host "  QAT Train + Sync to Lightsail (via Git)"
+Write-Host "  QAT Train + Sync to paper server (via Git main)"
 Write-Host "  Branch: $Branch"
 Write-Host "============================================"
 
@@ -99,9 +104,16 @@ if ($NoPush) {
     exit 0
 }
 
-# Commit local models FIRST (do not pull before commit — that can wipe trained weights).
-Write-Host "[..] stage + commit data/models"
-Invoke-Git checkout $Branch | Out-Null
+# Keep the new weights aside, then publish them on top of origin/$Branch.
+# A hard checkout would otherwise replace data\models with the previous commit.
+Write-Host "[..] stage trained weights, then commit on origin/$Branch"
+$stage = Join-Path $env:TEMP "qat-models-stage"
+if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stage | Out-Null
+Copy-Item -Path (Join-Path $modelsDir "*") -Destination $stage -Force
+if ((Invoke-Git fetch origin) -ne 0) { throw "git fetch failed" }
+if ((Invoke-Git checkout -f -B $Branch "origin/$Branch") -ne 0) { throw "git checkout origin/$Branch failed" }
+Copy-Item -Path (Join-Path $stage "*") -Destination $modelsDir -Force
 Invoke-Git add -f -- "data/models/" | Out-Null
 
 $status = & $GitExe status --porcelain "data/models"
@@ -114,15 +126,11 @@ $msg = "chore: update trained models $(Get-Date -Format 'yyyy-MM-dd HH:mm') [ski
 $code = Invoke-Git commit -m $msg
 if ($code -ne 0) { throw "git commit failed" }
 
-Write-Host "[..] pull --rebase then push origin/$Branch"
-$code = Invoke-Git fetch origin
-if ($code -ne 0) { throw "git fetch failed" }
-$code = Invoke-Git pull --rebase origin $Branch
-if ($code -ne 0) { throw "git pull --rebase failed" }
+Write-Host "[..] push origin/$Branch"
 $code = Invoke-Git push origin $Branch
 if ($code -ne 0) { throw "git push failed" }
 
 Write-Host ""
-Write-Host "[ok] Pushed. Lightsail QAT-Paper-AutoCD will pull within ~10 minutes"
-Write-Host "     and restart paper stack with new checkpoints."
-Write-Host "     Force sooner on server: .\scripts\windows_cd_deploy.ps1 -Branch $Branch -Force"
+Write-Host "[ok] Pushed data/models to origin/$Branch"
+Write-Host "     The paper server QAT-Auto-Deploy pulls main within about 2 minutes"
+Write-Host "     and reloads checkpoints without retraining."

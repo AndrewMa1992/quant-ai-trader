@@ -224,12 +224,14 @@ async def hot_reload_models() -> APIResponse:
                 data={"success": True, "reloaded": reloaded, "message": str(result)},
             )
 
-        # Fallback: try reloading via load_models()
         load_result = engine.load_models()
+        reloaded = 0
+        if isinstance(load_result, dict):
+            reloaded = sum(1 for ok in load_result.values() if ok)
         return APIResponse(
             success=True,
-            message=f"Re-initialized models via load_models()",
-            data={"success": True, "reloaded": 0, "message": str(load_result)},
+            message=f"Reloaded {reloaded} local checkpoint(s)",
+            data={"success": True, "reloaded": reloaded, "models": load_result},
         )
     except Exception as e:
         return APIResponse(

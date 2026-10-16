@@ -106,6 +106,8 @@ class TradingPipeline:
             self.inference_engine: InferenceEngine = InferenceEngine()
             load_status = self.inference_engine.load_models()
             loaded_count = sum(1 for v in load_status.values() if v)
+            from services.model_infer_service.checkpoints import checkpoint_mtime
+            self._checkpoint_mtime = checkpoint_mtime()
             logger.info(f"  ✅ InferenceEngine ready ({loaded_count}/{len(load_status)} models loaded)")
         else:
             self.inference_engine = None  # type: ignore[assignment]
@@ -983,11 +985,15 @@ class TradingPipeline:
             logger.warning("  Step 3: InferenceEngine stub — returning HOLD for all tickers")
             return []
 
-        # Hot-reload models every ~50 cycles; fail-soft if checkpoints are stale
+        # GPU train pushes data/models to main. Reload when those files change.
         try:
+            from services.model_infer_service.checkpoints import checkpoint_mtime
             max_age = int(getattr(self.config, "MODEL_MAX_AGE_DAYS", 14))
-            if self.cycle_count > 0 and self.cycle_count % 50 == 0:
+            stamp = checkpoint_mtime()
+            if stamp > float(getattr(self, "_checkpoint_mtime", 0.0)) + 1.0:
                 self.inference_engine.load_models()
+                self._checkpoint_mtime = stamp
+                logger.info("  Step 3: reloaded checkpoints from data/models")
             stale = self._models_are_stale(max_age_days=max_age)
             if stale:
                 logger.warning(
