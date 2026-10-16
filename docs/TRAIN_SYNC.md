@@ -3,11 +3,13 @@
 The paper server does not train. It tracks GitHub `main`, loads `data/models/`, and trades. The RTX 3060 PC trains and pushes those checkpoints.
 
 ```
-03:00  GPU PC        QAT-Local-TrainSync → pull main → CUDA train → push data/models to main
+03:00  GPU PC        QAT-Local-TrainSync → pull main → CUDA train (GBDT, Transformer, TCN, TFT, PPO) → push data/models to main
 ~2 min paper server QAT-Auto-Deploy     → model-only commits reload checkpoints, no retrain
 ```
 
-`data/daily/*.parquet` already on `main` is the training set. If Yahoo works on the GPU PC, install with `-UseLocalDownload` instead of waiting for a data push. An older scheduled task that still passes `-Branch cursor/quant-upgrade-a75f` is redirected to `main`.
+`data/daily/*.parquet` already on `main` is the training set. If Yahoo works on the GPU PC, install with `-UseLocalDownload` instead of waiting for a data push. An older scheduled task that still passes `-Branch cursor/quant-upgrade-a75f` or `-SkipRl` is redirected: it trains on `main` and includes PPO.
+
+PPO actions are cash-only. Buy opens a long from flat cash. Sell closes that long. The agent does not open shorts. The paper server installs `stable-baselines3` and loads `data/models/rl_v2.zip` after the GPU PC pushes it.
 
 ### One-time setup
 
@@ -22,9 +24,9 @@ cd C:\Quant_Trader
 git fetch origin
 git reset --hard origin/main
 
-.\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -SkipRl
+.\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40
 # or, when this PC should download bars itself:
-# .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -UseLocalDownload
+# .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -UseLocalDownload
 ```
 
 Keep the GPU PC **logged in** around 03:00. **Screen lock (Win+L) is fine** — the Interactive task still runs. **Sleep/hibernate** is the problem; the task uses `WakeToRun` + `StartWhenAvailable`. Also set Windows: *Settings → System → Power → Sleep → Never* (or only after the train window).
@@ -44,7 +46,7 @@ Logs:
 
 ```powershell
 # GPU (uses data/daily from origin/main)
-.\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl
+.\scripts\train_from_lightsail_data.ps1 -Epochs 40
 ```
 
 ---
@@ -52,7 +54,7 @@ Logs:
 ## Option B — GPU downloads itself (when Yahoo works at home)
 
 ```powershell
-.\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -SkipRl -UseLocalDownload
+.\scripts\install_local_train_autostart.ps1 -DailyAt "02:30" -Epochs 40 -UseLocalDownload
 ```
 
 ---

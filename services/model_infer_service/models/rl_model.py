@@ -17,6 +17,7 @@ from loguru import logger
 
 from services.model_infer_service.config import infer_config
 from services.model_infer_service.models.preprocess import align_features
+from services.model_train_service.trainers.rl_actions import apply_position
 
 
 class RLInference:
@@ -182,10 +183,7 @@ class RLInference:
                 action, _ = self.model.predict(obs, deterministic=True)
                 a = int(action) if not hasattr(action, "__len__") else int(np.asarray(action).ravel()[0])
                 out[i] = action_map.get(a, 0.0)
-                if a == 1:
-                    position = 1.0
-                elif a == 2:
-                    position = -1.0
+                position = apply_position(position, a)
 
             return out
         except Exception as e:

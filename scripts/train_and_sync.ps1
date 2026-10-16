@@ -77,9 +77,15 @@ Write-Host "  QAT Train + Sync to paper server (via Git main)"
 Write-Host "  Branch: $Branch"
 Write-Host "============================================"
 
+if ($SkipRl) {
+    Write-Host "[ok] PPO is part of the nightly ensemble; -SkipRl is not applied"
+}
+
 if (-not $SkipTrain) {
+    Write-Host "[..] sync code to origin/$Branch before training"
+    if ((Invoke-Git fetch origin) -ne 0) { throw "git fetch failed" }
+    if ((Invoke-Git checkout -f -B $Branch "origin/$Branch") -ne 0) { throw "git checkout origin/$Branch failed" }
     $trainArgs = @("scripts\train_gpu_local.py", "--tickers", $Tickers, "--epochs", "$Epochs")
-    if ($SkipRl) { $trainArgs += "--skip-rl" }
     if ($SkipDownload) { $trainArgs += "--skip-download" }
     if ($ForceDownload) { $trainArgs += "--force-download" }
     & $PythonExe @trainArgs
