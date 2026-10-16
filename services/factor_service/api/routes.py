@@ -171,7 +171,8 @@ async def get_correlation(
             )
 
         corr = FactorCorrelation(threshold=factor_config.CORRELATION_THRESHOLD)
-        matrix, redundant_pairs = corr.compute_correlation_matrix(panel)
+        matrix, redundant_pairs = corr.compute_correlation_matrix(panel.fillna(0.0))
+        matrix = matrix.fillna(0.0)
 
         return APIResponse(
             success=True,
