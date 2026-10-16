@@ -106,4 +106,4 @@ if ($code -ne 0) { throw "git push failed" }
 
 Write-Host ""
 Write-Host "[ok] Pushed data/daily. GPU scheduled task will train automatically."
-Write-Host "  Manual: .\scripts\train_from_lightsail_data.ps1 -Epochs 40 -SkipRl"
+Write-Host "  Manual: .\scripts\train_from_lightsail_data.ps1 -Epochs 40"

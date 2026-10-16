@@ -14,6 +14,7 @@ import pandas as pd
 from loguru import logger
 
 from services.model_train_service.config import train_config
+from services.model_train_service.trainers.rl_actions import apply_position
 from services.model_train_service.trainers.trainer_base import TrainerBase
 
 # Try importing gym and SB3 at module level for graceful fallback
@@ -79,7 +80,7 @@ class TradingEnv(gym.Env if HAS_GYM else object):
     ) -> tuple[np.ndarray, dict]:
         super().reset(seed=seed)
         self.current_step = self.window
-        self.position = 0  # -1=short, 0=flat, 1=long
+        self.position = 0.0  # 0=flat, 1=long
         self.cash = self.initial_cash
         self.portfolio_value = self.initial_cash
         obs = self._get_obs()
@@ -88,11 +89,8 @@ class TradingEnv(gym.Env if HAS_GYM else object):
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         prev_value = self.portfolio_value
 
-        # Execute action
-        if action == 1 and self.position <= 0:  # Buy
-            self.position = 1
-        elif action == 2 and self.position >= 0:  # Sell
-            self.position = -1
+        # Buy from cash, or sell the long. Never open a short.
+        self.position = apply_position(self.position, int(action))
 
         # Price movement
         price_change = self.data[self.current_step, 0]  # First column = price return

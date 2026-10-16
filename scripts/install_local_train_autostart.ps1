@@ -2,7 +2,7 @@
 # DeployScriptVersion: 3
 #
 #   .\scripts\install_local_train_autostart.ps1
-#   .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -SkipRl -RunNow
+#   .\scripts\install_local_train_autostart.ps1 -DailyAt "03:00" -Epochs 40 -RunNow
 #
 # Creates: QAT-Local-TrainSync
 # Expects Lightsail QAT-Data-Download (~01:00) and QAT-Paper-AutoCD already running.
@@ -45,7 +45,10 @@ $logs = Join-Path $RepoRoot "logs"
 if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }
 $wrapper = Join-Path $RepoRoot "scripts\_run_gpu_train_logged.ps1"
 
-$skipRlFlag = if ($SkipRl) { "-SkipRl" } else { "" }
+if ($SkipRl) {
+    Write-Host "[ok] -SkipRl ignored; the scheduled task trains PPO with the other models"
+}
+$skipRlFlag = ""
 if ($UseLocalDownload) {
     $inner = @"
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path `$Root 'scripts\train_and_sync.ps1') ``

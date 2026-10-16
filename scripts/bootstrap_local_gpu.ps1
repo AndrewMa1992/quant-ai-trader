@@ -2,7 +2,7 @@
 # DeployScriptVersion: 3
 # Run as Administrator on the RTX 3060 machine:
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -SkipRl -RunNow
+#   .\scripts\bootstrap_local_gpu.ps1 -RepoRoot C:\Quant_Trader -DailyAt "03:00" -Epochs 40 -RunNow
 
 param(
     [string]$RepoRoot = "",
@@ -121,7 +121,9 @@ $argsList = @(
     "-Epochs", "$Epochs",
     "-WaitForDataMinutes", "$WaitForDataMinutes"
 )
-if ($SkipRl) { $argsList += "-SkipRl" }
+if ($SkipRl) {
+    Write-Host "[ok] -SkipRl ignored; the scheduled task trains PPO with the other models"
+}
 if ($RunNow) { $argsList += "-RunNow" }
 
 & powershell @argsList

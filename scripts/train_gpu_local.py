@@ -211,6 +211,23 @@ def download_tickers(tickers: list[str], years: int = 3, force: bool = False) ->
 
 
 
+def _ensure_rl_packages() -> None:
+    """Install the PPO stack on the GPU PC when the nightly job needs it."""
+    try:
+        import gymnasium  # noqa: F401
+        import stable_baselines3  # noqa: F401
+        return
+    except ImportError:
+        pass
+    import subprocess
+    import sys
+
+    print("[..] pip install gymnasium stable-baselines3")
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "gymnasium>=0.29", "stable-baselines3>=2.2"]
+    )
+
+
 def train_all(tickers: list[str], epochs: int, device: str, skip_rl: bool) -> dict:
     from services.model_train_service.config import train_config
     from services.model_train_service.data_loader import create_dataset
@@ -269,11 +286,14 @@ def train_all(tickers: list[str], epochs: int, device: str, skip_rl: bool) -> di
     results["tft"] = metrics
     print(f"[ok] tft -> {metrics}")
 
-    # 5) PPO RL (optional — slower)
+    # 5) PPO. Cash-only long/flat. The nightly job always runs this.
     if not skip_rl:
+        _ensure_rl_packages()
         print(f"[..] train RL PPO on {device}")
-        from services.model_train_service.trainers.rl_trainer import RLTrainer
+        from services.model_train_service.trainers.rl_trainer import HAS_GYM, HAS_SB3, RLTrainer
 
+        if not HAS_GYM or not HAS_SB3:
+            raise SystemExit("PPO training needs gymnasium and stable-baselines3")
         rl = RLTrainer(device=device, algo="PPO")
         metrics = rl.fit(features, target, total_timesteps=min(train_config.RL_TIMESTEPS, 100_000))
         rl.save(str(save_dir / "rl_v2.zip"))
