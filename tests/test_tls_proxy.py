@@ -4,6 +4,7 @@ import socket
 import ssl
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -112,6 +113,71 @@ def test_https_tunnel_and_redirect(tmp_path):
             raise AssertionError("expected 301")
         except urllib.error.HTTPError as exc:
             assert exc.headers.get("Location") == "https://203.0.113.10/orders"
+    finally:
+        proxy.stop()
+        server.shutdown()
+
+
+def test_prepare_accepted_replaces_short_timeout():
+    sock = socket.socket()
+    try:
+        sock.settimeout(0.5)
+        tls.prepare_accepted(sock)
+        assert sock.gettimeout() == tls.HANDSHAKE_TIMEOUT
+    finally:
+        sock.close()
+
+
+def test_slow_client_hello_survives_inherited_timeout(tmp_path, monkeypatch):
+    """Windows copies the listen timeout onto accepted sockets.
+
+    A 0.5s inherited timeout used to close the connection before the
+    ClientHello arrived, so the public peer saw EOF and no certificate.
+    """
+    real_accept = socket.socket.accept
+
+    def accept_inherits_short_timeout(self):
+        client, addr = real_accept(self)
+        client.settimeout(0.5)
+        return client, addr
+
+    monkeypatch.setattr(socket.socket, "accept", accept_inherits_short_timeout)
+
+    backend_port = _free_port()
+    server = ThreadingHTTPServer(("127.0.0.1", backend_port), _Backend)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    cert_dir = tmp_path / "tls"
+    cert_path, key_path = tls.ensure_cert(cert_dir, "127.0.0.1")
+    tls_port = _free_port()
+    redirect_port = _free_port()
+    proxy = tls.TlsProxy(
+        certfile=cert_path,
+        keyfile=key_path,
+        backend=("127.0.0.1", backend_port),
+        tls_port=tls_port,
+        redirect_port=redirect_port,
+        public_host="203.0.113.10",
+    )
+    proxy.start()
+    try:
+        raw = socket.create_connection(("127.0.0.1", tls_port), timeout=5)
+        time.sleep(1.2)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        secure = ctx.wrap_socket(raw, server_hostname="127.0.0.1")
+        try:
+            assert secure.getpeercert(binary_form=True)
+            secure.sendall(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+            data = b""
+            while True:
+                chunk = secure.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+            assert b"ok /health" in data
+        finally:
+            secure.close()
     finally:
         proxy.stop()
         server.shutdown()
