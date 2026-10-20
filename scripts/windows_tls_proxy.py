@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import os
+import select
 import shutil
 import socket
 import ssl
@@ -31,6 +32,11 @@ TLS_PORT = 8443
 REDIRECT_PORT = 8081
 BACKEND = ("127.0.0.1", 8001)
 LISTEN = "127.0.0.1"
+# Budget for the TLS handshake and the HTTP redirect request. This must stay
+# well above a public round trip. A short timeout on the listening socket is
+# copied onto accepted sockets on Windows and aborts the handshake before a
+# ServerHello is written.
+HANDSHAKE_TIMEOUT = 30.0
 
 
 def _is_ip(value: str) -> bool:
@@ -242,6 +248,11 @@ def ensure_cert(cert_dir: Path, public_host: str) -> tuple[Path, Path]:
     return cert_path, key_path
 
 
+def prepare_accepted(client: socket.socket) -> None:
+    """Replace any inherited listen timeout before the handshake starts."""
+    client.settimeout(HANDSHAKE_TIMEOUT)
+
+
 def _pipe(src: socket.socket, dst: socket.socket) -> None:
     try:
         while True:
@@ -344,12 +355,10 @@ class TlsProxy:
         tls_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         tls_sock.bind((self.listen_host, self.tls_port))
         tls_sock.listen(64)
-        tls_sock.settimeout(0.5)
         redir_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         redir_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         redir_sock.bind((self.listen_host, self.redirect_port))
         redir_sock.listen(64)
-        redir_sock.settimeout(0.5)
         self._socks = [tls_sock, redir_sock]
         self._threads = [
             threading.Thread(target=self._accept_tls, args=(tls_sock, ctx), daemon=True),
@@ -374,17 +383,36 @@ class TlsProxy:
         for thread in self._threads:
             thread.join(timeout=2)
 
-    def _accept_tls(self, sock: socket.socket, ctx: ssl.SSLContext) -> None:
+    def _take_client(self, sock: socket.socket) -> socket.socket | None:
+        """Accept one client, or return None when this listener must stop.
+
+        select() waits so the listening socket can stay blocking. A timeout on
+        that socket would be inherited by every accepted client on Windows.
+        """
         while not self._stop.is_set():
             try:
-                client, _ = sock.accept()
-            except socket.timeout:
+                readable, _, _ = select.select([sock], [], [], 0.5)
+            except (OSError, ValueError):
+                return None
+            if not readable:
                 continue
+            try:
+                client, _addr = sock.accept()
             except OSError:
+                return None
+            prepare_accepted(client)
+            return client
+        return None
+
+    def _accept_tls(self, sock: socket.socket, ctx: ssl.SSLContext) -> None:
+        while not self._stop.is_set():
+            client = self._take_client(sock)
+            if client is None:
                 break
             try:
                 secure = ctx.wrap_socket(client, server_side=True)
-            except Exception:
+            except Exception as exc:
+                print("[warn] TLS handshake failed: %s" % exc, file=sys.stderr)
                 try:
                     client.close()
                 except Exception:
@@ -394,11 +422,8 @@ class TlsProxy:
 
     def _accept_redirect(self, sock: socket.socket) -> None:
         while not self._stop.is_set():
-            try:
-                client, _ = sock.accept()
-            except socket.timeout:
-                continue
-            except OSError:
+            client = self._take_client(sock)
+            if client is None:
                 break
             threading.Thread(
                 target=_handle_redirect,
@@ -410,6 +435,55 @@ class TlsProxy:
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
         return None
+
+
+def _check_redirect(redirect_port: int) -> bool:
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        opener.open("http://127.0.0.1:%d/" % redirect_port, timeout=8)
+        print("[ERR] redirect did not return 301")
+        return False
+    except urllib.error.HTTPError as exc:
+        loc = exc.headers.get("Location", "")
+        if exc.code == 301 and loc.startswith("https://"):
+            print("[ok] redirect %s %s" % (exc.code, loc))
+            return True
+        print("[ERR] redirect %s %s" % (exc.code, loc))
+        return False
+    except Exception as exc:
+        print("[ERR] redirect %s" % exc)
+        return False
+
+
+def check_handshake(tls_port: int = TLS_PORT, redirect_port: int = REDIRECT_PORT) -> int:
+    """Prove the terminator presents a certificate. Do not require the gateway."""
+    failed = False
+    ctx = ssl._create_unverified_context()
+    raw = None
+    try:
+        raw = socket.create_connection(("127.0.0.1", tls_port), timeout=8)
+        secure = ctx.wrap_socket(raw, server_hostname="127.0.0.1")
+        try:
+            cert = secure.getpeercert(binary_form=True)
+        finally:
+            secure.close()
+        if cert:
+            print("[ok] tls handshake :%d" % tls_port)
+        else:
+            print("[ERR] tls handshake :%d returned no certificate" % tls_port)
+            failed = True
+    except Exception as exc:
+        print("[ERR] tls handshake :%d %s" % (tls_port, exc))
+        failed = True
+    finally:
+        if raw is not None:
+            try:
+                raw.close()
+            except Exception:
+                pass
+    if not _check_redirect(redirect_port):
+        failed = True
+    return 1 if failed else 0
 
 
 def check_local(tls_port: int = TLS_PORT, redirect_port: int = REDIRECT_PORT) -> int:
@@ -425,20 +499,7 @@ def check_local(tls_port: int = TLS_PORT, redirect_port: int = REDIRECT_PORT) ->
         print("[ERR] tls %s %s" % (url, exc))
         failed = True
 
-    opener = urllib.request.build_opener(_NoRedirect)
-    try:
-        opener.open("http://127.0.0.1:%d/" % redirect_port, timeout=8)
-        print("[ERR] redirect did not return 301")
-        failed = True
-    except urllib.error.HTTPError as exc:
-        loc = exc.headers.get("Location", "")
-        if exc.code == 301 and loc.startswith("https://"):
-            print("[ok] redirect %s %s" % (exc.code, loc))
-        else:
-            print("[ERR] redirect %s %s" % (exc.code, loc))
-            failed = True
-    except Exception as exc:
-        print("[ERR] redirect %s" % exc)
+    if not _check_redirect(redirect_port):
         failed = True
     return 1 if failed else 0
 
@@ -453,8 +514,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend-port", type=int, default=BACKEND[1])
     parser.add_argument("--ensure-cert", action="store_true")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--check-handshake",
+        action="store_true",
+        help="Verify the certificate and the HTTP redirect without calling the gateway",
+    )
     args = parser.parse_args(argv)
 
+    if args.check_handshake:
+        return check_handshake(args.tls_port, args.redirect_port)
     if args.check:
         return check_local(args.tls_port, args.redirect_port)
 

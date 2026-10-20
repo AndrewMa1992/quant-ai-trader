@@ -84,6 +84,25 @@ function Start-Gateway {
     Write-Log "started api-gateway :8001"
 }
 
+function Stop-TlsProxy {
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
+        $cl = $_.CommandLine
+        if ($cl -and $cl -like "*windows_tls_proxy.py*") {
+            try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch { }
+            Write-Log ("stopped tls-proxy pid={0}" -f $_.ProcessId)
+        }
+    }
+    foreach ($port in @(8443, 8081)) {
+        $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+        foreach ($c in $conns) {
+            if ($c.OwningProcess -le 4) { continue }
+            try { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } catch { }
+            Write-Log ("freed port {0} pid={1}" -f $port, $c.OwningProcess)
+        }
+    }
+    Start-Sleep -Seconds 1
+}
+
 function Start-TlsProxy {
     $py = Get-Python
     if (-not $py) { Write-Log "python missing"; return }
@@ -109,6 +128,37 @@ function Start-TlsProxy {
 function Test-Listen([int]$Port) {
     $c = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     return [bool]$c
+}
+
+function Test-TlsProxy([string]$Mode) {
+    $py = Get-Python
+    if (-not $py) {
+        Write-Log "python missing"
+        return $false
+    }
+    & $py (Join-Path $RepoRoot "scripts\windows_tls_proxy.py") $Mode
+    if ($LASTEXITCODE -eq 0) { return $true }
+    Write-Log ("tls proxy {0} failed exit={1}" -f $Mode, $LASTEXITCODE)
+    return $false
+}
+
+function Test-QatPortProxy([int]$ListenPort, [int]$ConnectPort) {
+    $out = netsh interface portproxy show v4tov4 2>$null | Out-String
+    $pattern = "0\.0\.0\.0\s+$ListenPort\s+127\.0\.0\.1\s+$ConnectPort"
+    return ($out -match $pattern)
+}
+
+function Repair-QatPortProxy {
+    param([int]$ListenPort, [int]$ConnectPort)
+    if (Test-QatPortProxy -ListenPort $ListenPort -ConnectPort $ConnectPort) { return }
+    Write-Log ("portproxy {0} is not 127.0.0.1:{1} - repairing" -f $ListenPort, $ConnectPort)
+    netsh interface portproxy delete v4tov4 listenport=$ListenPort listenaddress=0.0.0.0 | Out-Null
+    netsh interface portproxy add v4tov4 listenport=$ListenPort listenaddress=0.0.0.0 connectport=$ConnectPort connectaddress=127.0.0.1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Log ("portproxy {0} -> 127.0.0.1:{1}" -f $ListenPort, $ConnectPort)
+    } else {
+        Write-Log ("portproxy {0} repair failed" -f $ListenPort)
+    }
 }
 
 function Start-Frontend5180 {
@@ -167,9 +217,24 @@ function Invoke-Check {
         Write-Log "frontend :5180 OK"
     }
 
-    if (-not (Test-Listen 8443) -or -not (Test-Listen 8081)) {
-        Write-Log "tls-proxy down - restarting"
+    Repair-QatPortProxy -ListenPort 443 -ConnectPort 8443
+    Repair-QatPortProxy -ListenPort 80 -ConnectPort 8081
+
+    $listenOk = (Test-Listen 8443) -and (Test-Listen 8081)
+    $handOk = $false
+    if ($listenOk) {
+        $handOk = Test-TlsProxy "--check-handshake"
+    }
+    if (-not $listenOk -or -not $handOk) {
+        Write-Log "tls-proxy handshake failed - restarting"
+        Stop-TlsProxy
         Start-TlsProxy
+        Start-Sleep -Seconds 5
+        if (Test-TlsProxy "--check-handshake") {
+            Write-Log "tls-proxy handshake OK"
+        } else {
+            Write-Log "tls-proxy still failing after restart"
+        }
     } else {
         Write-Log "tls-proxy OK"
     }
